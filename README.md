@@ -45,7 +45,7 @@ The easiest way to install and get updates.
 
 ---
 
-## Feature Spotlight
+## Godot Interoperability Features
 
 **Dock Navigation (WindowNav)**
 Seamlessly switch between docks using `Ctrl+{h,j,k,l}`.
@@ -65,7 +65,7 @@ You can modify the default mapping to make it easier to use. See [Configuration]
 **Documentation**
 *   `gd`: **Lookup Symbol** (Go to Definition).
 *   `K`: **Show Documentation** (Show documentation for the symbol under the cursor).
-![Native Documentation](media/doc.gif)
+![Native Documentation](media/docs.gif)
 
 
 ---
