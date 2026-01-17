@@ -1,0 +1,25 @@
+name: VirusTotal Scan
+
+on:
+  push:
+    paths:
+      - 'addons/godot_vim/bin/**'
+  workflow_dispatch:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: VirusTotal Scan
+        uses: crazy-max/ghaction-virustotal@v4
+        with:
+          vt_api_key: ${{ secrets.VT_API_KEY }}
+          files: |
+            addons/godot_vim/bin/linux/libgodot_vim.so
+            addons/godot_vim/bin/win64/godot_vim.dll
+            addons/godot_vim/bin/macos/libgodot_vim.dylib
+          update_release_body: false
+          github_token: ${{ secrets.GITHUB_TOKEN }}

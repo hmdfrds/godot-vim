@@ -1,210 +1,119 @@
 # GodotVim
 
-**Vim keybindings for Godot's built-in script editor.**
+<p align="center">
+  <img src="icon.png" alt="GodotVim Logo" width="128" height="128" />
+</p>
+
+<p align="center">
+  <b>Vim keybindings for Godot's built-in script editor.</b>
+</p>
+
+<p align="center">
+  <a href="https://godotengine.org/asset-library/asset/4666">
+    <img src="https://img.shields.io/badge/Godot%20Asset%20Lib-4.5%2B-478cbf?logo=godot-engine&logoColor=white" alt="Godot Asset Library">
+  </a>
+  <a href="https://github.com/hmdfrds/godot-vim/actions/workflows/scan.yml">
+    <img src="https://github.com/hmdfrds/godot-vim/actions/workflows/scan.yml/badge.svg" alt="VirusTotal Scan">
+  </a>
+  <img src="https://img.shields.io/github/license/hmdfrds/godot-vim" alt="License">
+</p>
+
 
 ---
 
 ## Installation
 
-### Godot Asset Library (Recommended)
-1. Open Godot Editor → **AssetLib** tab
-2. Search for **"GodotVim"**
-3. Click **Download** → **Install**
-4. Enable in **Project → Project Settings → Plugins**
-5. **Restart the editor** for the plugin to load
+### 1. Godot Asset Library (Recommended)
+The easiest way to install and get updates.
 
-### Manual Installation
-1. Download the [latest release](https://github.com/hmdfrds/godot-vim/releases)
-2. Extract `addons/godot_vim` into your project's `addons/` folder
-3. Enable in **Project → Project Settings → Plugins**
-4. **Restart the editor** for the plugin to load
+1.  Open your Godot project.
+2.  Click the **AssetLib** tab at the top.
+3.  Search for **"GodotVim"** or [click here to view on the web](https://godotengine.org/asset-library/asset/4666).
+4.  Click **Download**, then **Install**.
+5.  Go to **Project → Project Settings → Plugins** and enable **GodotVim**.
+6.  **Restart the Editor** (Required for the plugin to fully load).
+
 
 ---
 
-## Modes
+## Features
 
-| Mode | Enter | Description |
-|------|-------|-------------|
-| **Normal** | `Esc` | Navigation and commands |
-| **Insert** | `i`, `a`, `o`, `O`, `I`, `A` | Text editing |
-| **Visual** | `v` | Character selection |
-| **Visual Line** | `V` | Line selection |
-| **Visual Block** | `Ctrl+v` | Rectangular selection |
-| **Replace** | `R` | Overwrite text |
-| **Command** | `:` | Ex commands |
+*   **Full Modal Editing**: Normal, Insert, Visual, Visual Line, Visual Block, and Replace modes.
+*   **Clipboard Integration**: Yank/Paste syncs with system clipboard (configurable).
+*   **Command Bar**: Functional Ex-command line for substitutions (`:%s/foo/bar/g`) and more.
+*   **Configurable**: Customize cursor colors for each mode via Project Settings.
 
 ---
 
-## Motions
+## Feature Spotlight
 
-### Basic Movement
-`h` `j` `k` `l` — Left, Down, Up, Right
+**Dock Navigation (WindowNav)**
+Seamlessly switch between docks using `Ctrl+{h,j,k,l}`.
+*   **Navigate**: `j`/`k` to move vertically, `h`/`l` to collapse/expand.
+*   **Search**: Press `/` to search within the dock.
+*   **Actions**: `Enter` to open file, `Esc` to return to editor.
+![Dock Navigation](media/dock_nav.gif)
 
-### Word Movement
-| Motion | Description |
-|--------|-------------|
-| `w` / `W` | Next word / WORD |
-| `b` / `B` | Previous word / WORD |
-| `e` / `E` | End of word / WORD |
-| `ge` | End of previous word |
+**Visual Configuration**
+Customize Vim experience directly in Godot's Project Settings. See [Configuration](#configuration) section for more details.
 
-### Line Movement
-| Motion | Description |
-|--------|-------------|
-| `0` | Start of line |
-| `^` | First non-blank |
-| `$` | End of line |
 
-### Document Movement
-| Motion | Description |
-|--------|-------------|
-| `gg` | First line |
-| `G` | Last line |
-| `{count}G` | Go to line |
-| `{` / `}` | Paragraph up/down |
-| `%` | Matching bracket |
+**Debug Integration**
+Set breakpoints and step through code without leaving keyboard control.
+You can modify the default mapping to make it easier to use. See [Configuration](#configuration) section for more details.
+![Debug with mappings](media/debug.gif)
 
-### Character Find
-`f{char}` `F{char}` `t{char}` `T{char}` — Find forward/backward, to/till
-
-### Scrolling
-| Key | Description |
-|-----|-------------|
-| `Ctrl+d` / `Ctrl+u` | Half page down/up |
-| `Ctrl+f` / `Ctrl+b` | Full page down/up |
-| `zz` / `zt` / `zb` | Center/Top/Bottom cursor |
+**Documentation**
+*   `gd`: **Lookup Symbol** (Go to Definition).
+*   `K`: **Show Documentation** (Show documentation for the symbol under the cursor).
+![Native Documentation](media/doc.gif)
 
 ---
 
-## Operators
+## Recommended Mappings
 
-Operators combine with motions: `{operator}{motion}`
+GodotVim includes built-in preset mappings (disabled by default). Enable them in **Project Settings → GodotVim → Mappings**. It will appear on the right side dock right of the History tab.
 
-| Operator | Description |
-|----------|-------------|
-| `d` | Delete |
-| `c` | Change (delete + insert) |
-| `y` | Yank (copy) |
-| `>` / `<` | Indent / Outdent |
-| `gu` / `gU` | Lowercase / Uppercase |
-| `gq` | Format |
-| `J` | Join lines |
+> [!NOTE]
+> Mappings starting with `:` do not need `<CR>` at the end. Use `<Space>e` → `:FileSystem`, not `:FileSystem<CR>`.
 
-**Examples:** `dw` (delete word), `ci"` (change inside quotes), `>}` (indent paragraph)
-
----
-
-## Text Objects
-
-Use with operators: `{operator}{a/i}{object}`
-
-| Object | Inner (`i`) | Around (`a`) |
-|--------|-------------|--------------|
-| `w` | Word | Word + space |
-| `"` `'` `` ` `` | Inside quotes | Include quotes |
-| `(` `)` | Inside parens | Include parens |
-| `{` `}` | Inside braces | Include braces |
-| `[` `]` | Inside brackets | Include brackets |
-| `<` `>` | Inside angles | Include angles |
-
-**Examples:** `ciw` (change word), `da"` (delete around quotes), `yi(` (yank inside parens)
-
----
-
-## Registers & Clipboard
-
-| Key | Description |
-|-----|-------------|
-| `"{reg}` | Use register for next operation |
-| `"*` `"+` | System clipboard |
-| `""` | Default register |
-
-Enable auto-clipboard in settings to sync yank/delete with system clipboard.
-
----
-
-## Macros
-
-| Key | Description |
-|-----|-------------|
-| `q{a-z}` | Start recording to register |
-| `q` | Stop recording |
-| `@{a-z}` | Play macro |
-| `@@` | Repeat last macro |
-
----
-
-## Marks
-
-| Key | Description |
-|-----|-------------|
-| `m{a-z}` | Set local mark |
-| `'{a-z}` | Jump to mark (line) |
-| `` `{a-z} `` | Jump to mark (exact position) |
-
----
-
-## Search
-
-| Key | Description |
-|-----|-------------|
-| `/pattern` | Search forward |
-| `?pattern` | Search backward |
-| `n` / `N` | Next / Previous match |
-| `*` / `#` | Search word under cursor |
-
----
-
-## Ex Commands
-
-| Command | Description |
-|---------|-------------|
-| `:w` | Save |
-| `:q` | Close tab |
-| `:wq` | Save and close |
-| `:e {file}` | Open file |
-| `:{range}s/old/new/g` | Substitute |
+*   **Insert Mode Escapes**: `jj`, `jk`, `kj` → `<Esc>`
+*   **Leader Mappings** (Space key):
+    *   `<Space>1` - `<Space>9` → Switch to tab 1-9
+    *   `<Space>e` → Jump to FileSystem
+    *   `<Space>db` → Toggle Breakpoint
+    *   `<Space>dc` → Continue
+    *   `<Space>dn` → Next
+    *   `<Space>di` → Step In
+    *   `<Space>do` → Step Out
+    *   `<Space>dp` → Pause
 
 ---
 
 ## Configuration
 
-All settings are in **Project → Project Settings → GodotVim**:
+Customize GodotVim in **Project → Project Settings → GodotVim**. Note that **most settings require a restart** to take effect.
 
-### General
-- **Enabled** — Toggle Vim mode
-- **Log Level** — Error/Warn/Info/Debug
-
-### Cursor Colors
-- Per-mode cursor colors (Normal, Insert, Visual)
-- Toggle mode-based coloring
-
-### Behavior
-- **Scroll Offset** — Lines to keep visible above/below cursor
-- **Highlight Current Line** — Enable line highlighting
-
-### Clipboard
-- **Yank to Clipboard** — Auto-copy yanks to system clipboard
-- **Delete to Clipboard** — Auto-copy deletes to system clipboard
-
-### Key Mappings
-Custom mappings per mode:
-- `imap` — Insert mode (e.g., `jj` → `<Esc>`)
-- `nmap` — Normal mode
-- `vmap` — Visual mode
-- `cmap` — Command mode
-
-**Key Passthrough** — Keys that bypass Vim (e.g., `Ctrl+S` for save)
+*   **General**: Enable/Disable plugin, Set Log Level.
+*   **Editor**:
+    *   **Scroll Offset**: Lines to keep visible above/below cursor.
+    *   **Line Number Mode**: Absolute, Relative, or Hybrid.
+    *   **Is Keyword**: Characters considered part of a word (e.g., `@,48-57,_,192-255`).
+    *   **Command Line**: Shows current **Mode** and Ex-command bar.
+    *   **Key Passthrough**: List of keys to bypass Vim.
+*   **Cursor**: Customize colors for Normal, Insert, and Visual modes.
+*   **Clipboard**: Toggle auto-copy to system clipboard.
+*   **Mapping**: Enable/Disable mappings and set Timeout Length.
 
 ---
 
-## Requirements
+## Limitations
 
-- **Godot 4.5+**
-- **Platforms:** Linux, Windows, macOS (Intel + Apple Silicon)
+*   **:w**: Does not sync with Godot editor (external changes not picked up). Please use `Ctrl+S` / `Cmd+S` to save.
+*   **:q**: Does not close Godot tabs reliably. Please use `Ctrl+W` / `Cmd+W` to close the current tab.
+*   **Floating Window**: Dock navigation doesn't work correctly when the Script Editor is floating (detached).
+
 
 ---
 
-## License
-
-MIT License — see [LICENSE](LICENSE)
+MIT License

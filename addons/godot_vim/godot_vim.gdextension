@@ -4,9 +4,9 @@ compatibility_minimum = "4.5"
 reloadable = true
 
 [libraries]
-linux.debug.x86_64 = "res://addons/godot_vim/bin/libgodot_vim.so"
-linux.release.x86_64 = "res://addons/godot_vim/bin/libgodot_vim.so"
-windows.debug.x86_64 = "res://addons/godot_vim/bin/godot_vim.dll"
-windows.release.x86_64 = "res://addons/godot_vim/bin/godot_vim.dll"
-macos.debug.universal = "res://addons/godot_vim/bin/libgodot_vim.dylib"
-macos.release.universal = "res://addons/godot_vim/bin/libgodot_vim.dylib"
+linux.debug.x86_64 = "res://addons/godot_vim/bin/linux/libgodot_vim.so"
+linux.release.x86_64 = "res://addons/godot_vim/bin/linux/libgodot_vim.so"
+windows.debug.x86_64 = "res://addons/godot_vim/bin/win64/godot_vim.dll"
+windows.release.x86_64 = "res://addons/godot_vim/bin/win64/godot_vim.dll"
+macos.debug.universal = "res://addons/godot_vim/bin/macos/libgodot_vim.dylib"
+macos.release.universal = "res://addons/godot_vim/bin/macos/libgodot_vim.dylib"
