@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://godotengine.org/asset-library/asset/4666">
-    <img src="https://img.shields.io/badge/Godot%20Asset%20Lib-4.5%2B-478cbf?logo=godot-engine&logoColor=white" alt="Godot Asset Library">
+    <img src="https://img.shields.io/badge/Godot%20Asset%20Lib-4.2%2B-478cbf?logo=godot-engine&logoColor=white" alt="Godot Asset Library">
   </a>
   <a href="https://github.com/hmdfrds/godot-vim/actions/workflows/scan.yml">
     <img src="https://github.com/hmdfrds/godot-vim/actions/workflows/scan.yml/badge.svg" alt="VirusTotal Scan">
@@ -39,9 +39,9 @@ The easiest way to install and get updates.
 ## Features
 
 *   **Full Modal Editing**: Normal, Insert, Visual, Visual Line, Visual Block, and Replace modes.
-*   **Clipboard Integration**: Yank/Paste syncs with system clipboard (configurable).
 *   **Command Bar**: Functional Ex-command line for substitutions (`:%s/foo/bar/g`) and more.
-*   **Configurable**: Customize cursor colors for each mode via Project Settings.
+*   **Configurable**: Customize your experience (cursor colors, mappings, etc.) via Project Settings.
+
 
 ---
 
@@ -57,7 +57,6 @@ Seamlessly switch between docks using `Ctrl+{h,j,k,l}`.
 **Visual Configuration**
 Customize Vim experience directly in Godot's Project Settings. See [Configuration](#configuration) section for more details.
 
-
 **Debug Integration**
 Set breakpoints and step through code without leaving keyboard control.
 You can modify the default mapping to make it easier to use. See [Configuration](#configuration) section for more details.
@@ -67,6 +66,7 @@ You can modify the default mapping to make it easier to use. See [Configuration]
 *   `gd`: **Lookup Symbol** (Go to Definition).
 *   `K`: **Show Documentation** (Show documentation for the symbol under the cursor).
 ![Native Documentation](media/doc.gif)
+
 
 ---
 
@@ -88,6 +88,7 @@ GodotVim includes built-in preset mappings (disabled by default). Enable them in
     *   `<Space>do` → Step Out
     *   `<Space>dp` → Pause
 
+
 ---
 
 ## Configuration
@@ -104,6 +105,7 @@ Customize GodotVim in **Project → Project Settings → GodotVim**. Note that *
 *   **Cursor**: Customize colors for Normal, Insert, and Visual modes.
 *   **Clipboard**: Toggle auto-copy to system clipboard.
 *   **Mapping**: Enable/Disable mappings and set Timeout Length.
+
 
 ---
 
