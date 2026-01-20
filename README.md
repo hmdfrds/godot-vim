@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="https://godotengine.org/asset-library/asset/4666">
-    <img src="https://img.shields.io/badge/Godot%20Asset%20Lib-4.2%2B-478cbf?logo=godot-engine&logoColor=white" alt="Godot Asset Library">
+    <img src="https://img.shields.io/badge/Godot%20Asset%20Lib-4.5%2B-478cbf?logo=godot-engine&logoColor=white" alt="Godot Asset Library">
   </a>
   <a href="https://github.com/hmdfrds/godot-vim/actions/workflows/scan.yml">
     <img src="https://github.com/hmdfrds/godot-vim/actions/workflows/scan.yml/badge.svg" alt="VirusTotal Scan">
