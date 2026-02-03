@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <b>Vim keybindings for Godot's built-in script editor.</b>
+  <b>Vim emulation for Godot's built-in script editor.</b>
 </p>
 
 <p align="center">
@@ -23,97 +23,187 @@
 
 ## Installation
 
-### 1. Godot Asset Library (Recommended)
-The easiest way to install and get updates.
-
-1.  Open your Godot project.
-2.  Click the **AssetLib** tab at the top.
-3.  Search for **"GodotVim"** or [click here to view on the web](https://godotengine.org/asset-library/asset/4666).
-4.  Click **Download**, then **Install**.
-5.  Go to **Project → Project Settings → Plugins** and enable **GodotVim**.
-6.  **Restart the Editor** (Required for the plugin to fully load).
+### Godot Asset Library (Recommended)
+1. Open your Godot project → **AssetLib** tab
+2. Search **"GodotVim"** → **Download** → **Install**
+3. **Project → Project Settings → Plugins** → Enable **GodotVim**
+4. **Restart the Editor** (required for full initialization)
 
 
 ---
 
-## Features
+## Core Vim Features
 
-*   **Full Modal Editing**: Normal, Insert, Visual, Visual Line, Visual Block, and Replace modes.
-*   **Command Bar**: Functional Ex-command line for substitutions (`:%s/foo/bar/g`) and more.
-*   **Configurable**: Customize your experience (cursor colors, mappings, etc.) via Project Settings.
+### Modal Editing
+| Mode | Description |
+|------|-------------|
+| **Normal** | Default navigation and command mode |
+| **Insert** | Text input with full editor shortcuts |
+| **Visual** | Character-wise selection (`v`) |
+| **Visual Line** | Line-wise selection (`V`) |
+| **Visual Block** | Rectangular selection (`Ctrl-V`) |
+| **Replace** | Overwrite mode (`R`) |
+| **Insert Normal** | One-shot normal command (`Ctrl-O`) |
+
+### Motions (50+)
+| Category | Keys |
+|----------|------|
+| **Character** | `h` `j` `k` `l` |
+| **Word** | `w` `b` `e` `ge` (word), `W` `B` `E` `gE` (WORD) |
+| **Line** | `0` `^` `$` `g_` `\|` (go to column) |
+| **Screen Line** | `gj` `gk` `g0` `g^` `g$` `gm` `gM` |
+| **Document** | `gg` `G` `{count}G` `{n}%` |
+| **Find** | `f{c}` `F{c}` `t{c}` `T{c}` `;` `,` |
+| **Search** | `/` `?` `n` `N` `*` `#` `gn` `gN` |
+| **Paragraph/Sentence** | `{` `}` `(` `)` |
+| **Brackets** | `%` `[(` `])` `[{` `]}` `[[` `]]` `[]` `][` |
+| **Scroll** | `Ctrl-D` `Ctrl-U` `Ctrl-F` `Ctrl-B` `Ctrl-E` `Ctrl-Y` |
+| **Center** | `zz` `zt` `zb` |
+
+### Operators
+| Key | Operation |
+|-----|-----------|
+| `d` | Delete |
+| `c` | Change (delete + insert) |
+| `y` | Yank (copy) |
+| `>` `<` | Indent / Unindent |
+| `=` | Auto-indent |
+| `gu` `gU` | Lowercase / Uppercase |
+| `g~` | Toggle case |
+| `J` | Join lines |
+
+### Text Objects
+| Inner | Around | Object |
+|-------|--------|--------|
+| `iw` | `aw` | word |
+| `iW` | `aW` | WORD |
+| `i"` | `a"` | double quotes |
+| `i'` | `a'` | single quotes |
+| `` i` `` | `` a` `` | backticks |
+| `i(` `i)` `ib` | `a(` `a)` `ab` | parentheses |
+| `i{` `i}` `iB` | `a{` `a}` `aB` | braces |
+| `i[` `i]` | `a[` `a]` | brackets |
+
+### Registers & Macros
+- **Named registers**: `"a` - `"z` (append with `"A` - `"Z`)
+- **Numbered registers**: `"0` - `"9` (yank/delete history)
+- **Special registers**: `""` (default), `"_` (black hole), `"+` `"*` (system clipboard)
+- **Macro recording**: `q{a-z}` to record, `q` to stop, `@{a-z}` to play, `@@` to repeat
+
+### Marks & Jumps
+- **Local marks**: `'a` - `'z` (line), `` `a `` - `` `z `` (exact position)
+- **Global marks**: `'A` - `'Z` (cross-file, preserved)
+- **Jump list**: `Ctrl-O` (older) / `Ctrl-I` (newer)
+- **Last visual**: `gv` (reselect last visual selection)
+
+### Ex Commands
+| Command | Description |
+|---------|-------------|
+| `:w` `:save` | Save current file (syncs with Godot) |
+| `:q` `:close` | Close current tab |
+| `:bn` `:bp` | Next/previous buffer |
+| `:b{n}` | Go to buffer N |
+| `:{n}` `:go` | Go to line / byte |
+| `:%s/old/new/g` | Substitution (with regex) |
+| `:{range}y` `:{range}d` | Yank / delete range |
+| `:reg` | List registers |
+
+### Other Features
+- **Dot repeat** (`.`) - Repeat last change
+- **Undo/Redo** (`u` / `Ctrl-R`)
+- **Number increment/decrement** (`Ctrl-A` / `Ctrl-X`)
+- **Code folding** (`zo` `zc` `za` `zM` `zR`)
 
 
 ---
 
-## Godot Interoperability Features
+## Godot Integration
 
-**Dock Navigation (WindowNav)**
-Seamlessly switch between docks using `Ctrl+{h,j,k,l}`.
-*   **Navigate**: `j`/`k` to move vertically, `h`/`l` to collapse/expand.
-*   **Search**: Press `/` to search within the dock.
-*   **Actions**: `Enter` to open file, `Esc` to return to editor.
+### Dock Navigation
+Switch between Godot docks seamlessly with keyboard shortcuts.
+
+| Mapping | Action |
+|---------|--------|
+| `Ctrl-H/J/K/L` | Navigate between docks |
+| `<Space>e` | FileSystem dock |
+| `<Space>o` | Scene dock |
+| `<Space>i` | Inspector dock |
+| `<Space>s` | Script editor |
+| `` <Space>` `` | Output panel |
+| `<Space>2` `<Space>3` | 2D / 3D editor |
+
 ![Dock Navigation](media/dock_nav.gif)
 
-**Visual Configuration**
-Customize Vim experience directly in Godot's Project Settings. See [Configuration](#configuration) section for more details.
+### Scene Control
+| Mapping | Command | Action |
+|---------|---------|--------|
+| `<Space>r` | `:run` | Run main scene (F5) |
+| `<Space>R` | `:runcurrent` | Run current scene (F6) |
+| `<Space>S` | `:stop` | Stop running scene |
 
-**Debug Integration**
-Set breakpoints and step through code without leaving keyboard control.
-You can modify the default mapping to make it easier to use. See [Configuration](#configuration) section for more details.
+### Debugging
+| Mapping | Command | Action |
+|---------|---------|--------|
+| `<Space>db` | `:GodotBreakpoint` | Toggle breakpoint |
+| `<Space>dc` | `:GodotContinue` | Continue execution |
+| `<Space>dn` | `:GodotNext` | Step over |
+| `<Space>di` | `:GodotStepIn` | Step into |
+| `<Space>do` | `:GodotStepOut` | Step out |
+| `<Space>dp` | `:GodotPause` | Pause execution |
+
 ![Debug with mappings](media/debug.gif)
 
-**Documentation**
-*   `gd`: **Lookup Symbol** (Go to Definition).
-*   `K`: **Show Documentation** (Show documentation for the symbol under the cursor).
+### Code Intelligence
+| Key | Action |
+|-----|--------|
+| `gd` | Go to definition |
+| `K` | Show documentation |
+
 ![Native Documentation](media/docs.gif)
 
-
----
-
-## Recommended Mappings
-
-GodotVim includes built-in preset mappings (disabled by default). Enable them in **Project Settings → GodotVim → Mappings**. It will appear on the right side dock right of the History tab.
-
-> [!NOTE]
-> Mappings starting with `:` do not need `<CR>` at the end. Use `<Space>e` → `:FileSystem`, not `:FileSystem<CR>`.
-
-*   **Insert Mode Escapes**: `jj`, `jk`, `kj` → `<Esc>`
-*   **Leader Mappings** (Space key):
-    *   `<Space>1` - `<Space>9` → Switch to tab 1-9
-    *   `<Space>e` → Jump to FileSystem
-    *   `<Space>db` → Toggle Breakpoint
-    *   `<Space>dc` → Continue
-    *   `<Space>dn` → Next
-    *   `<Space>di` → Step In
-    *   `<Space>do` → Step Out
-    *   `<Space>dp` → Pause
+### Editor State
+| Mapping | Command | Action |
+|---------|---------|--------|
+| `<Space>z` | `:zen` | Enable distraction-free mode |
+| `<Space>Z` | `:unzen` | Disable distraction-free mode |
+| — | `:restart` | Restart editor |
 
 
 ---
 
 ## Configuration
 
-Customize GodotVim in **Project → Project Settings → GodotVim**. Note that **most settings require a restart** to take effect.
+Access settings via **Editor → Editor Settings → Plugins → GodotVim**:
 
-*   **General**: Enable/Disable plugin, Set Log Level.
-*   **Editor**:
-    *   **Scroll Offset**: Lines to keep visible above/below cursor.
-    *   **Line Number Mode**: Absolute, Relative, or Hybrid.
-    *   **Is Keyword**: Characters considered part of a word (e.g., `@,48-57,_,192-255`).
-    *   **Command Line**: Shows current **Mode** and Ex-command bar.
-    *   **Key Passthrough**: List of keys to bypass Vim.
-*   **Cursor**: Customize colors for Normal, Insert, and Visual modes.
-*   **Clipboard**: Toggle auto-copy to system clipboard.
-*   **Mapping**: Enable/Disable mappings and set Timeout Length.
+| Section | Settings |
+|---------|----------|
+| **General** | Enable/disable plugin, log level |
+| **Editor** | Scroll offset, line numbers (absolute/relative/hybrid), iskeyword, key passthrough |
+| **Cursor** | Colors for Normal, Insert, Visual modes |
+| **Clipboard** | Auto-copy to system clipboard |
+| **Mapping** | Enable/disable mappings, timeout length |
+
+### Mappings Panel
+Customize all mappings in the dedicated Mappings dock (right of History tab). Recommended mappings are pre-configured. 
+
+**Insert Mode Escapes** (disabled by default):
+- `jj`, `jk`, `kj` → `<Esc>`
+
+**Buffer Navigation** (enabled by default):
+- `<Space>n` / `<Space>p` → Next / Previous buffer
+- `<Space>1` - `<Space>9` → Jump to buffer 1-9
+
+> [!NOTE]
+> Mappings using `:Command` syntax don't require `<CR>`.  
+> Example: `<Space>e` → `:FileSystem` (not `:FileSystem<CR>`)
 
 
 ---
 
-## Limitations
 
-*   **:w**: Does not sync with Godot editor (external changes not picked up). Please use `Ctrl+S` / `Cmd+S` to save.
-*   **:q**: Does not close Godot tabs reliably. Please use `Ctrl+W` / `Cmd+W` to close the current tab.
-*   **Floating Window**: Dock navigation doesn't work correctly when the Script Editor is floating (detached).
+## Known Limitations
+
+- **Floating Script Editor**: Dock navigation may not work correctly when the Script Editor is detached/floating.
 
 
 ---
