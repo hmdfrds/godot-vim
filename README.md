@@ -25,7 +25,7 @@
 
 ### Godot Asset Library (Recommended)
 1. Open your Godot project → **AssetLib** tab
-2. Search **"(GodotVim)[https://godotengine.org/asset-library/asset/4666]"** → **Download** → **Install**
+2. Search **"[GodotVim](https://godotengine.org/asset-library/asset/4666)"** → **Download** → **Install**
 3. **Project → Project Settings → Plugins** → Enable **GodotVim**
 4. **Restart the Editor** (required for full initialization)
 
