@@ -1,0 +1,32 @@
+[package]
+name = "godot-vim"
+version = "0.8.13"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+godot = { git = "https://github.com/godot-rust/gdext", tag = "v0.4.5" }
+vim-core = { path = "../vim-core" }
+thiserror = "2.0"
+lru = "0.16"
+log = "0.4.29"
+ropey = "1.6.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+smart-default = "0.7"
+strum = { version = "0.26", features = ["derive"] }
+smallvec = "1.13"
+compact_str = "0.8"
+derive_more = { version = "2.0", features = ["display", "from"] }
+typed-builder = "0.20"
+
+[profile.release]
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "unwind"
+strip = true
+debug = false
+rpath = false

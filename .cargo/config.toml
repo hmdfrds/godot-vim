@@ -1,0 +1,9 @@
+[build]
+rustflags = [
+    # Strip the gdext dependency path from debug symbols for reproducible builds.
+    "--remap-path-prefix",
+    "${CARGO_HOME}/git/checkouts/gdext-067f4b88e7bd088f/9c87a3d=gdext",
+    # Strip the local project root from debug symbols.
+    "--remap-path-prefix",
+    "${CARGO_MANIFEST_DIR}=godot-vim"
+]
