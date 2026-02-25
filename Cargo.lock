@@ -281,7 +281,7 @@ dependencies = [
 
 [[package]]
 name = "godot-vim"
-version = "0.8.13"
+version = "0.8.14"
 dependencies = [
  "compact_str",
  "derive_more",
