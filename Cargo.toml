@@ -1,6 +1,6 @@
 [package]
 name = "godot-vim"
-version = "0.8.14"
+version = "0.8.16"
 edition = "2021"
 
 [lib]
