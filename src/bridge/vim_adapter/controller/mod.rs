@@ -6,6 +6,7 @@
 mod buffer;
 mod cmdline;
 mod cursor;
+mod cursor_geometry;
 mod dispatch;
 mod dispatch_actions;
 mod dispatch_search;
