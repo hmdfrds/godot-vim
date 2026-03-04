@@ -267,9 +267,11 @@ impl GodotVimPlugin {
     #[func]
     fn on_focus_changed(&mut self, focused_node: Gd<Control>) {
         // Deferred to avoid re-entrant borrow during attachment.
-        if focused_node.is_class("CodeEdit") {
+        // Resolve CodeEdit from the focused control tree so non-script editors
+        // (e.g. shader editor hosts) use the same attach path.
+        if let Some(code_edit) = Self::find_code_edit_from_control(&focused_node) {
             self.base_mut()
-                .call_deferred(callbacks::PERFORM_ATTACH, &[focused_node.to_variant()]);
+                .call_deferred(callbacks::PERFORM_ATTACH, &[code_edit.to_variant()]);
         }
 
         if focused_node.is_class("LineEdit") {
@@ -335,12 +337,35 @@ impl GodotVimPlugin {
     }
 
     fn find_active_code_edit() -> Option<Gd<CodeEdit>> {
+        // Primary source: currently focused control subtree.
+        if let Some(code_edit) = Self::find_focused_code_edit() {
+            return Some(code_edit);
+        }
+
+        // Fallback: current ScriptEditor tab (legacy path).
         let interface = EditorInterface::singleton();
         let script_editor = interface.get_script_editor()?;
         let current_editor = script_editor.get_current_editor()?;
 
         // Traverse children of the current script editor base to find CodeEdit
         Self::find_code_edit_recursive(&current_editor.upcast())
+    }
+
+    fn find_focused_code_edit() -> Option<Gd<CodeEdit>> {
+        let interface = EditorInterface::singleton();
+        let focused = interface
+            .get_base_control()
+            .and_then(|c| c.get_viewport())
+            .and_then(|vp| vp.gui_get_focus_owner())?;
+        Self::find_code_edit_from_control(&focused)
+    }
+
+    fn find_code_edit_from_control(control: &Gd<Control>) -> Option<Gd<CodeEdit>> {
+        if let Ok(code_edit) = control.clone().try_cast::<CodeEdit>() {
+            return Some(code_edit);
+        }
+
+        Self::find_code_edit_recursive(&control.clone().upcast::<Node>())
     }
 
     fn find_code_edit_recursive(node: &Gd<Node>) -> Option<Gd<CodeEdit>> {
