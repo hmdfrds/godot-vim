@@ -4,6 +4,7 @@ use crate::bridge::components::status_bar;
 use crate::bridge::godot::names::{
     callbacks, canvas_item, control, editor_settings, line_edit, object, range, text_edit, theme,
 };
+use crate::bridge::vim_adapter::controller::attach_session::AttachState;
 use crate::bridge::vim_wrapper::VimController;
 use godot::classes::object::ConnectFlags;
 use godot::classes::{CodeEdit, ProjectSettings};
@@ -24,10 +25,9 @@ pub trait LifecycleTrait {
 
 impl LifecycleTrait for VimController {
     fn attach_to_editor(&mut self, mut editor: Gd<CodeEdit>) {
-        if let Some(attached) = &self.attached_editor {
-            if attached.is_instance_valid() && attached.instance_id() == editor.instance_id() {
-                return;
-            }
+        let target_id = editor.instance_id();
+        if self.attach_session.is_attached_to(target_id) {
+            return;
         }
 
         for child in editor.get_children().iter_shared() {
@@ -38,7 +38,23 @@ impl LifecycleTrait for VimController {
             }
         }
 
-        self.disconnect_signals();
+        if let Some(current_id) = self.attach_session.attached_editor_id() {
+            if current_id != target_id {
+                if let Err(err) = self.attach_session.begin_detach(current_id) {
+                    log::warn!("Attach session detach transition failed: {}", err);
+                }
+                self.disconnect_signals();
+            }
+        }
+
+        if let Err(err) = self.attach_session.begin_attach(target_id) {
+            log::warn!("Attach session attach transition failed: {}", err);
+            self.attach_session.mark_detached();
+            if let Err(retry_err) = self.attach_session.begin_attach(target_id) {
+                log::error!("Attach session retry failed: {}", retry_err);
+                return;
+            }
+        }
 
         let cmd_line = if let Some(existing) = self.ui.cmdline.take() {
             if existing.is_instance_valid() {
@@ -186,6 +202,9 @@ impl LifecycleTrait for VimController {
         }
 
         self.attached_editor = Some(editor.clone());
+        if let Err(err) = self.attach_session.mark_attached(target_id) {
+            log::warn!("Attach session mark attached failed: {}", err);
+        }
 
         self.refresh_cached_config();
 
@@ -196,8 +215,21 @@ impl LifecycleTrait for VimController {
     }
 
     fn disconnect_signals(&mut self) {
+        let detach_id = self
+            .attached_editor
+            .as_ref()
+            .map(|editor| editor.instance_id())
+            .or_else(|| self.attach_session.attached_editor_id());
+        if let Some(editor_id) = detach_id {
+            if let Err(err) = self.attach_session.begin_detach(editor_id) {
+                // Ignore stale transition races but keep trace for diagnostics.
+                log::debug!("Attach session begin_detach ignored: {}", err);
+            }
+        }
+
         if let Some(mut editor) = self.attached_editor.take() {
             if !editor.is_instance_valid() {
+                self.attach_session.mark_detached();
                 return;
             }
 
@@ -236,6 +268,10 @@ impl LifecycleTrait for VimController {
                 editor.remove_child(&cursor.clone().upcast::<godot::classes::Node>());
                 cursor.queue_free();
             }
+        }
+
+        if !matches!(self.attach_session.state(), AttachState::Detached) {
+            self.attach_session.mark_detached();
         }
     }
 

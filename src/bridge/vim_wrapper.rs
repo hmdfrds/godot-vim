@@ -16,6 +16,7 @@ use crate::bridge::components::line_numbers::LineNumberManager;
 use crate::bridge::godot::api::{get_editor_config, EditorConfig};
 use crate::bridge::settings;
 use crate::bridge::settings::accessors::VimSettings;
+use crate::bridge::vim_adapter::controller::attach_session::AttachSession;
 use crate::bridge::vim_adapter::mapping::GodotMappingLoader;
 use crate::bridge::vim_adapter::subsystems::dock::DockSubsystem;
 use crate::bridge::vim_adapter::subsystems::input::InputSubsystem;
@@ -41,6 +42,8 @@ pub struct VimController {
     pub(crate) engine: VimEngine,
     /// Reference to the attached CodeEdit (for signal disconnection)
     pub(crate) attached_editor: Option<Gd<CodeEdit>>,
+    /// Explicit attach lifecycle state machine.
+    pub(crate) attach_session: AttachSession,
     /// Editor configuration (indent size, tabs vs spaces, etc.)
     pub(crate) editor_config: EditorConfig,
 
@@ -62,6 +65,7 @@ impl INode for VimController {
             base,
             engine: VimEngine::new(),
             attached_editor: None,
+            attach_session: AttachSession::new(),
             editor_config: EditorConfig::default(),
             input: InputSubsystem::new(),
             ui: UiSubsystem::new(),
@@ -76,6 +80,9 @@ impl INode for VimController {
 
         // Cache vim-core config to avoid per-motion FFI calls.
         self.refresh_cached_config();
+
+        // Restore persisted runtime state (schema-validated envelope).
+        self.restore_runtime_state();
 
         // Load key mappings from settings.
         self.reload_mapping_store("ready");

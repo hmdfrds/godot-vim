@@ -11,12 +11,8 @@ use crate::bridge::navigation::window::nav::{handle_window_nav, NavDirection, Wi
 use crate::bridge::safety::input::parse_godot_event;
 use crate::bridge::settings;
 use crate::bridge::settings::accessors::VimSettings;
-use crate::bridge::types::command::EditorCommand;
-use crate::bridge::types::cursor::CursorPos;
-use crate::bridge::vim_adapter::contracts::{ExecutionContext, InputPolicy};
+use crate::bridge::vim_adapter::contracts::InputPolicy;
 use crate::bridge::vim_adapter::convert::key_event_to_vim_key;
-use crate::bridge::vim_adapter::core::column_codec;
-use crate::bridge::vim_adapter::core::snapshot::LazyGodotSnapshot;
 use crate::bridge::vim_adapter::handlers::cmdline::IncsearchHandler;
 use crate::bridge::vim_wrapper::VimController;
 use vim_core::inputs::whitelist::{classify_input, InputPriority};
@@ -195,58 +191,8 @@ impl VimController {
 
     fn execute_key_with_policy(&mut self, vim_key: &vim_core::inputs::VimKey, policy: InputPolicy) {
         if policy == InputPolicy::Exclusive {
-            self.execute_vim_action(vim_key);
-            return;
+            self.commit_quantum_buffer();
         }
-
-        // Passive policy: Godot handles rendering while vim-core updates state/repeat buffers.
-        let Some(editor) = self.get_editor() else {
-            return;
-        };
-
-        let doc = LazyGodotSnapshot::new(&editor);
-        let core_caret = column_codec::read_caret_core_position(&editor);
-        let cursor = CursorPos::new(core_caret.line, usize::from(core_caret.col));
-        let context = ExecutionContext::from_snapshot(cursor, &doc);
-
-        let Some(output) = self
-            .engine
-            .process_key_with_policy(vim_key, policy, &doc, context)
-        else {
-            return;
-        };
-
-        let is_backspace_key = matches!(vim_key.code, vim_core::inputs::KeyCode::Backspace)
-            || (matches!(vim_key.code, vim_core::inputs::KeyCode::Char('h'))
-                && vim_key
-                    .modifiers
-                    .contains(vim_core::inputs::VimModifiers::CTRL));
-        let is_replace_backspace = is_backspace_key
-            && matches!(
-                self.engine.mode(),
-                vim_core::state::mode::Mode::Replace(vim_core::state::mode::ReplaceMode::Overwrite) | vim_core::state::mode::Mode::Replace(vim_core::state::mode::ReplaceMode::Virtual)
-            );
-
-        if is_replace_backspace {
-            self.set_input_handled();
-        }
-
-        // Apply transaction if any (e.g., Replace mode Backspace restore)
-        if let Some(tx) = output.transaction {
-            self.apply_transaction(tx);
-            self.set_input_handled();
-            self.sync_cursor_to_editor();
-        }
-
-        // Passive mode: commands are not dispatched (Godot handles rendering).
-        // Log filtered requests for debugging only.
-        for cmd in &output.commands {
-            match cmd {
-                EditorCommand::TypeChar(_) | EditorCommand::Backspace => {}
-                _ => {
-                    log::debug!("Passive mode ignored command: {cmd:?}");
-                }
-            }
-        }
+        let _ = self.run_key_pipeline(vim_key, policy);
     }
 }

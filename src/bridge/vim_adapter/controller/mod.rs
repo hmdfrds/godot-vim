@@ -3,6 +3,7 @@
 //! These modules extend `VimController` with impl blocks for different categories
 //! of handler methods, reducing the size of `vim_wrapper.rs`.
 
+pub(crate) mod attach_session;
 mod buffer;
 mod cmdline;
 mod cursor;
@@ -17,6 +18,7 @@ mod input_pipeline;
 mod key_processing;
 mod lifecycle;
 mod mapping;
+mod runtime_pipeline;
 mod runtime_gateway;
 mod signals;
 mod transaction;

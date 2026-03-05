@@ -57,31 +57,17 @@ fn clamp_byte_to_char_boundary(line: &str, byte_col: usize) -> usize {
     clamped
 }
 
-/// Convert an editor-native character column to a core byte column for a line.
-#[allow(dead_code)]
-#[must_use]
-pub fn editor_col_to_byte(line: &str, editor_col: usize) -> usize {
-    editor_col_to_core_byte(line, EditorCol::from(editor_col)).as_usize()
-}
-
 /// Convert an editor-native character column to a typed core byte column for a line.
 #[must_use]
-pub fn editor_col_to_core_byte(line: &str, editor_col: EditorCol) -> CoreByteCol {
+pub(crate) fn editor_col_to_core_byte(line: &str, editor_col: EditorCol) -> CoreByteCol {
     line.char_indices()
         .nth(editor_col.as_usize())
         .map_or(CoreByteCol::from(line.len()), |(byte_idx, _)| CoreByteCol::from(byte_idx))
 }
 
-/// Convert a core byte column to an editor-native character column for a line.
-#[allow(dead_code)]
-#[must_use]
-pub fn byte_to_editor_col(line: &str, byte_col: usize) -> usize {
-    core_byte_to_editor_col(line, CoreByteCol::from(byte_col)).as_usize()
-}
-
 /// Convert a typed core byte column to an editor-native character column for a line.
 #[must_use]
-pub fn core_byte_to_editor_col(line: &str, byte_col: CoreByteCol) -> EditorCol {
+pub(crate) fn core_byte_to_editor_col(line: &str, byte_col: CoreByteCol) -> EditorCol {
     let clamped = clamp_byte_to_char_boundary(line, byte_col.as_usize());
     EditorCol::from(line[..clamped].chars().count())
 }
@@ -97,13 +83,17 @@ fn editor_line_text(editor: &Gd<CodeEdit>, line: usize) -> String {
 
 /// Convert editor column -> byte column using current `CodeEdit` line contents.
 #[must_use]
-pub fn editor_col_to_byte_in_editor(editor: &Gd<CodeEdit>, line: usize, editor_col: usize) -> usize {
+pub(crate) fn editor_col_to_byte_in_editor(
+    editor: &Gd<CodeEdit>,
+    line: usize,
+    editor_col: usize,
+) -> usize {
     editor_col_to_core_byte_in_editor(editor, line, EditorCol::from(editor_col)).as_usize()
 }
 
 /// Convert editor column -> typed core byte column using current `CodeEdit` line contents.
 #[must_use]
-pub fn editor_col_to_core_byte_in_editor(
+pub(crate) fn editor_col_to_core_byte_in_editor(
     editor: &Gd<CodeEdit>,
     line: usize,
     editor_col: EditorCol,
@@ -114,13 +104,17 @@ pub fn editor_col_to_core_byte_in_editor(
 
 /// Convert byte column -> editor column using current `CodeEdit` line contents.
 #[must_use]
-pub fn byte_to_editor_col_in_editor(editor: &Gd<CodeEdit>, line: usize, byte_col: usize) -> usize {
+pub(crate) fn byte_to_editor_col_in_editor(
+    editor: &Gd<CodeEdit>,
+    line: usize,
+    byte_col: usize,
+) -> usize {
     core_byte_to_editor_col_in_editor(editor, line, CoreByteCol::from(byte_col)).as_usize()
 }
 
 /// Convert typed core byte column -> typed editor column using current `CodeEdit` line contents.
 #[must_use]
-pub fn core_byte_to_editor_col_in_editor(
+pub(crate) fn core_byte_to_editor_col_in_editor(
     editor: &Gd<CodeEdit>,
     line: usize,
     byte_col: CoreByteCol,
@@ -140,7 +134,7 @@ pub fn read_caret_core_position(editor: &Gd<CodeEdit>) -> Position {
 
 /// Backward-compatible alias for existing call sites.
 #[must_use]
-pub fn caret_to_core_position(editor: &Gd<CodeEdit>) -> Position {
+pub(crate) fn caret_to_core_position(editor: &Gd<CodeEdit>) -> Position {
     read_caret_core_position(editor)
 }
 

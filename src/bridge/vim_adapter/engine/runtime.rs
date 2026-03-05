@@ -4,6 +4,7 @@ use vim_core::inputs::commands::Action;
 use vim_core::inputs::commands::parser::{parse_command, parse_ex_command};
 use vim_core::inputs::commands::parser::ex_completion::complete_command;
 use vim_core::inputs::VimKey;
+use vim_core::state::store::{decode_state, encode_state, PersistError};
 use vim_core::state::mode::Mode;
 use vim_core::state::VimState;
 
@@ -27,6 +28,27 @@ impl VimEngine {
             effects: vim_core::runtime::EffectAccumulator::new(),
             config: vim_core::state::config::Config::default(),
         }
+    }
+
+    /// Replace runtime state from a persisted, schema-validated payload.
+    pub(crate) fn import_persisted_state_json(&mut self, raw: &str) -> Result<(), PersistError> {
+        let mut restored = decode_state(raw)?;
+        // Capability ports are runtime-derived; keep editor clipboard support enabled.
+        restored.capabilities.has_clipboard = true;
+        self.state = restored;
+        Ok(())
+    }
+
+    /// Export runtime state into a schema-versioned payload.
+    pub(crate) fn export_persisted_state_json(&self) -> Result<String, PersistError> {
+        encode_state(&self.state)
+    }
+
+    /// Reset runtime state to defaults (used after schema mismatch / decode failure).
+    pub(crate) fn reset_runtime_state(&mut self) {
+        let mut state = VimState::new();
+        state.capabilities.has_clipboard = true;
+        self.state = state;
     }
 
     /// Canonical key execution entrypoint with explicit input policy.

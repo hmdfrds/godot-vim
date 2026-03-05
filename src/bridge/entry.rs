@@ -21,8 +21,6 @@ pub struct GodotVimPlugin {
     base: Base<EditorPlugin>,
     pub(crate) vim_controller: Option<Gd<VimController>>,
     pub(crate) mapping_panel: Option<Gd<MappingPanel>>,
-    /// Tracks the last attached editor's instance ID (for buffer switch detection)
-    pub(crate) last_editor_id: Option<InstanceId>,
     /// State for global key mapping sequences (e.g., <Space>f)
     pub(crate) global_mapping_state: MappingState,
     /// Timer for global mapping timeout
@@ -37,7 +35,6 @@ impl IEditorPlugin for GodotVimPlugin {
             base,
             vim_controller: None,
             mapping_panel: None,
-            last_editor_id: None,
             global_mapping_state: MappingState::new(),
             global_mapping_timer: None,
         }
@@ -253,12 +250,12 @@ impl GodotVimPlugin {
         // It IS a CodeEdit (or subclass)
         if let Ok(code_edit) = node.clone().try_cast::<CodeEdit>() {
             let current_id = code_edit.instance_id();
-            if self.last_editor_id != Some(current_id) {
-                if let Some(controller) = &mut self.vim_controller {
-                    // Deferred execution provides a fresh call stack, so binding is safe.
-                    self.last_editor_id = Some(current_id);
-                    controller.bind_mut().attach(code_edit);
+            if let Some(controller) = &mut self.vim_controller {
+                if controller.bind().is_attached_to_editor(current_id) {
+                    return;
                 }
+                // Deferred execution provides a fresh call stack, so binding is safe.
+                controller.bind_mut().attach(code_edit);
             }
         }
     }

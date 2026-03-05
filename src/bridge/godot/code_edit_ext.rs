@@ -30,10 +30,6 @@ pub trait CodeEditExt {
     /// Use for jump motions like `G`, `gg`, search, marks.
     fn set_line_unfold(&mut self, line: i32);
 
-    /// Sets caret position (line + column), unfolding if needed.
-    ///
-    /// Use for precise cursor placement that must be visible.
-    fn set_caret_unfold(&mut self, line: i32, col: i32);
 }
 
 impl CodeEditExt for Gd<CodeEdit> {
@@ -62,8 +58,4 @@ impl CodeEditExt for Gd<CodeEdit> {
         self.set_caret_line_ex(line).can_be_hidden(false).done();
     }
 
-    fn set_caret_unfold(&mut self, line: i32, col: i32) {
-        self.set_caret_line_ex(line).can_be_hidden(false).done();
-        self.set_caret_column(col);
-    }
 }
