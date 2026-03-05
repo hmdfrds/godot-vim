@@ -169,7 +169,6 @@ impl IEditorPlugin for GodotVimPlugin {
 
     fn process(&mut self, _delta: f64) {}
 
-
     /// Global input interceptor for Dock Navigation and Global Mappings.
     ///
     /// Delegates to [`GlobalInputHandler`] (see `input/global_input.rs`).

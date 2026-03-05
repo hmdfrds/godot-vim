@@ -6,6 +6,7 @@ use crate::bridge::vim_adapter::core::cast::{i32_to_usize, usize_to_i32};
 use crate::bridge::vim_adapter::core::column_codec;
 use crate::bridge::vim_adapter::core::cursor::CursorMoveType;
 use crate::bridge::vim_wrapper::VimController;
+use vim_core::domain::column::ByteCol;
 use vim_core::domain::position::Position;
 
 /// Trait for handling marks and jump operations.
@@ -52,12 +53,11 @@ impl MarksHandler for VimController {
                     // For ' (apostrophe) - jump to first non-blank of line
                     let first_nonblank =
                         editor.get_first_non_whitespace_column(usize_to_i32(pos.line));
-                    pos.col = column_codec::editor_col_to_byte_in_editor(
+                    pos.col = ByteCol::new(column_codec::editor_col_to_byte_in_editor(
                         &editor,
                         pos.line,
                         i32_to_usize(first_nonblank),
-                    )
-                    .into();
+                    ));
                 }
 
                 self.engine.move_cursor_tracked(pos, CursorMoveType::Jump);

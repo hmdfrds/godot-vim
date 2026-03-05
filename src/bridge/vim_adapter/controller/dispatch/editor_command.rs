@@ -10,9 +10,8 @@ use vim_core::state::mode::Mode;
 
 impl VimController {
     fn handle_clipboard(&mut self, text: String) {
-        godot::classes::DisplayServer::singleton().clipboard_set(&godot::prelude::GString::from(
-            &text,
-        ));
+        godot::classes::DisplayServer::singleton()
+            .clipboard_set(&godot::prelude::GString::from(&text));
     }
 
     /// Dispatch a single `EditorCommand` to the appropriate handler.

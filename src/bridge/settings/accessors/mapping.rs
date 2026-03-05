@@ -1,4 +1,6 @@
-use super::internal::{get_bool_setting, get_int_setting, get_mapping_array, get_mapping_dictionary};
+use super::internal::{
+    get_bool_setting, get_int_setting, get_mapping_array, get_mapping_dictionary,
+};
 use super::VimSettings;
 use crate::bridge::settings::{defaults, keys};
 

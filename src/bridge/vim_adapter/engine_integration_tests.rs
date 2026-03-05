@@ -146,9 +146,9 @@ mod tests {
 
         // Type "Hi"
         engine.record_insert_char('H');
-        assert_eq!(engine.cursor_pos().col, 1);
+        assert_eq!(engine.cursor_pos().col.as_usize(), 1);
         engine.record_insert_char('i');
-        assert_eq!(engine.cursor_pos().col, 2);
+        assert_eq!(engine.cursor_pos().col.as_usize(), 2);
 
         // Exit insert mode
         engine.set_mode(Mode::Normal);

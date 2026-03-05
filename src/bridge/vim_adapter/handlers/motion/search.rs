@@ -5,8 +5,8 @@ use godot::classes::CodeEdit;
 use godot::prelude::*;
 use vim_core::domain::position::Position;
 use vim_core::domain::selection::Selection;
-use vim_core::runtime::pure as pure_motion;
 use vim_core::inputs::commands::motions::Motion;
+use vim_core::runtime::pure as pure_motion;
 use vim_core::state::VimState;
 
 /// Godot adapter for `SearchProvider` — wraps a `&Gd<CodeEdit>` for regex search.
@@ -36,7 +36,7 @@ impl vim_core::domain::search_provider::SearchProvider for GodotSearchProvider<'
             usize_to_i32(column_codec::byte_to_editor_col_in_editor(
                 self.editor,
                 from.line,
-                usize::from(from.col),
+                from.col.as_usize(),
             )),
         );
 
@@ -45,8 +45,11 @@ impl vim_core::domain::search_provider::SearchProvider for GodotSearchProvider<'
             let (wrap_line, wrap_col) = if forward {
                 (0, 0)
             } else {
-                let last_line = self.editor.get_line_count() - 1;
-                let last_col = self.editor.get_line(last_line).to_string().chars().count() as i32;
+                let last_line = column_codec::last_line_index(self.editor)?;
+                let last_col = usize_to_i32(column_codec::editor_line_char_len(
+                    self.editor,
+                    i32_to_usize(last_line),
+                ));
                 (last_line, last_col)
             };
             result = self
@@ -59,12 +62,16 @@ impl vim_core::domain::search_provider::SearchProvider for GodotSearchProvider<'
         }
 
         let match_line = i32_to_usize(result.y);
-        let match_start_col =
-            column_codec::editor_col_to_byte_in_editor(self.editor, match_line, i32_to_usize(result.x));
+        let match_start_col = column_codec::editor_col_to_byte_in_editor(
+            self.editor,
+            match_line,
+            i32_to_usize(result.x),
+        );
         let match_start = Position::from_byte(match_line, match_start_col);
         let pattern_len = pattern.chars().count();
         let end_editor_col = i32_to_usize(result.x) + pattern_len.saturating_sub(1);
-        let end_col = column_codec::editor_col_to_byte_in_editor(self.editor, match_line, end_editor_col);
+        let end_col =
+            column_codec::editor_col_to_byte_in_editor(self.editor, match_line, end_editor_col);
         let match_end = Position::from_byte(match_line, end_col);
 
         Some((match_start, match_end))

@@ -3,8 +3,7 @@ use crate::bridge::godot::names::{button, callbacks, range, tree};
 use crate::bridge::settings::{keys, VimSettings};
 use godot::builtin::{Array, VarDictionary};
 use godot::classes::{
-    Button, Control, EditorInterface, HBoxContainer, Label, LineEdit, SpinBox, Tree,
-    VBoxContainer,
+    Button, Control, EditorInterface, HBoxContainer, Label, LineEdit, SpinBox, Tree, VBoxContainer,
 };
 use godot::prelude::*;
 
@@ -186,7 +185,6 @@ impl MappingPanel {
                         }
                     }
                 }
-
             }
         }
     }

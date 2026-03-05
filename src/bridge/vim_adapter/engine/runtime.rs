@@ -1,11 +1,11 @@
 use vim_core::domain::snapshot::DocumentSnapshot;
-use vim_core::runtime::execute_action_with_capabilities;
-use vim_core::inputs::commands::Action;
-use vim_core::inputs::commands::parser::{parse_command, parse_ex_command};
 use vim_core::inputs::commands::parser::ex_completion::complete_command;
+use vim_core::inputs::commands::parser::{parse_command, parse_ex_command};
+use vim_core::inputs::commands::Action;
 use vim_core::inputs::VimKey;
-use vim_core::state::store::{decode_state, encode_state, PersistError};
+use vim_core::runtime::execute_action_with_capabilities;
 use vim_core::state::mode::Mode;
+use vim_core::state::store::{decode_state, encode_state, PersistError};
 use vim_core::state::VimState;
 
 use crate::bridge::types::key::KeyEvent;

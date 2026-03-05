@@ -21,7 +21,7 @@ impl VimController {
         let cursor = usize_to_i32(column_codec::byte_to_editor_col_in_editor(
             &editor,
             cursor_pos.line,
-            usize::from(cursor_pos.col),
+            cursor_pos.col.as_usize(),
         ));
         let line = usize_to_i32(cursor_pos.line);
 

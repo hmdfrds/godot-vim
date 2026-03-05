@@ -5,7 +5,7 @@ use vim_core::domain::position::Position;
 #[inline]
 #[must_use]
 pub fn position_to_cursor(pos: &Position) -> CursorPos {
-    CursorPos::new(pos.line, usize::from(pos.col))
+    CursorPos::new(pos.line, pos.col.as_usize())
 }
 
 /// Convert shell `CursorPos` to vim-core `Position`.

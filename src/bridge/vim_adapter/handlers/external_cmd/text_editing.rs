@@ -9,7 +9,7 @@ use crate::bridge::vim_wrapper::VimController;
 use godot::classes::CodeEdit;
 use godot::prelude::*;
 use vim_core::runtime::pure::{execute_open_line, execute_replace_char};
-use vim_core::state::mode::{Mode, InsertMode};
+use vim_core::state::mode::{InsertMode, Mode};
 
 pub fn handle_replace_char(editor: &mut Gd<CodeEdit>, c: char) {
     let cursor = column_codec::caret_to_core_position(editor);
@@ -102,7 +102,8 @@ impl VimController {
             }
         }
 
-        self.engine.set_mode(Mode::Insert(InsertMode::Standard { count }));
+        self.engine
+            .set_mode(Mode::Insert(InsertMode::Standard { count }));
         self.handle_mode_change(Mode::Insert(InsertMode::Standard { count }), None);
         log::debug!(
             "OpenLine{}: applied tx + smart indent",

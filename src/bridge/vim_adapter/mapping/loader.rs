@@ -5,8 +5,8 @@
 
 use std::fmt;
 
-use crate::bridge::settings::VimSettings;
 use crate::bridge::settings::presets::get_recommended_mappings;
+use crate::bridge::settings::VimSettings;
 use vim_core::inputs::mapping::{
     parse_key_sequence, KeyMapping, MappedAction, MappingMode, MappingOwner, MappingStore,
 };

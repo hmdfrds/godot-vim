@@ -76,4 +76,3 @@ pub fn init_logging() {
     let _ = log::set_logger(&LOGGER).map(|()| log::set_max_level(log::LevelFilter::Off));
     // Default to Off until settings load
 }
-

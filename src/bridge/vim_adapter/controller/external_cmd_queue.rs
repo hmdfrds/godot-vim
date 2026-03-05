@@ -24,7 +24,10 @@ impl VimController {
     /// Custom → deferred → Ex parse → …).
     pub(crate) fn execute_command_deferred_impl(&mut self, cmd: String, args: PackedStringArray) {
         let args_vec: Vec<String> = args.as_slice().iter().map(|s| s.to_string()).collect();
-        let editor_cmd = EditorCommand::Custom { cmd, args: args_vec };
+        let editor_cmd = EditorCommand::Custom {
+            cmd,
+            args: args_vec,
+        };
         self.perform_editor_command_immediate(editor_cmd);
     }
 

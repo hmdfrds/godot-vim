@@ -13,6 +13,28 @@ use vim_core::inputs::VimKey;
 use vim_core::state::mode::{Mode, VisualKind};
 
 impl VimController {
+    fn runtime_cursor_and_snapshot(
+        &self,
+        editor: &godot::obj::Gd<godot::classes::CodeEdit>,
+    ) -> (Position, LazyGodotSnapshot) {
+        if let Mode::Visual(VisualKind::Block {
+            start,
+            cursor: vcursor,
+        }) = &self.engine.mode()
+        {
+            let block_selection = Selection::new(
+                Position::from_byte(start.line, start.col.as_usize()),
+                *vcursor,
+            );
+            (
+                *vcursor,
+                LazyGodotSnapshot::with_selection(editor, block_selection),
+            )
+        } else {
+            (self.engine.cursor_pos(), LazyGodotSnapshot::new(editor))
+        }
+    }
+
     /// Execute one key through the canonical runtime and visual synchronization path.
     pub(crate) fn execute_key_with_visuals(&mut self, key: &VimKey, policy: InputPolicy) {
         let _ = self.run_key_pipeline(key, policy);
@@ -24,22 +46,10 @@ impl VimController {
             return;
         };
 
-        let (cursor, snapshot) = if let Mode::Visual(VisualKind::Block {
-            start,
-            cursor: vcursor,
-        }) = &self.engine.mode()
-        {
-            let block_selection = Selection::new(Position::from_byte(start.line, start.col), *vcursor);
-            (
-                *vcursor,
-                LazyGodotSnapshot::with_selection(&editor, block_selection),
-            )
-        } else {
-            (self.engine.cursor_pos(), LazyGodotSnapshot::new(&editor))
-        };
+        let (cursor, snapshot) = self.runtime_cursor_and_snapshot(&editor);
 
         let snap = self.engine.visual_snapshot();
-        let cursor_pos = CursorPos::new(cursor.line, usize::from(cursor.col));
+        let cursor_pos = CursorPos::new(cursor.line, cursor.col.as_usize());
         let context = ExecutionContext::from_snapshot(cursor_pos, &snapshot);
         let output = self
             .engine
@@ -54,22 +64,10 @@ impl VimController {
             return;
         };
 
-        let (cursor, snapshot) = if let Mode::Visual(VisualKind::Block {
-            start,
-            cursor: vcursor,
-        }) = &self.engine.mode()
-        {
-            let block_selection = Selection::new(Position::from_byte(start.line, start.col), *vcursor);
-            (
-                *vcursor,
-                LazyGodotSnapshot::with_selection(&editor, block_selection),
-            )
-        } else {
-            (self.engine.cursor_pos(), LazyGodotSnapshot::new(&editor))
-        };
+        let (cursor, snapshot) = self.runtime_cursor_and_snapshot(&editor);
 
         let snap = self.engine.visual_snapshot();
-        let cursor_pos = CursorPos::new(cursor.line, usize::from(cursor.col));
+        let cursor_pos = CursorPos::new(cursor.line, cursor.col.as_usize());
         let context = ExecutionContext::from_snapshot(cursor_pos, &snapshot);
         let output = self
             .engine

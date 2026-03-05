@@ -5,7 +5,9 @@ use vim_core::state::mode::{Mode, ReplaceMode, VisualKind};
 use vim_core::state::registry::CommandRegistry;
 use vim_core::state::VimState;
 
-use crate::bridge::vim_adapter::managers::visual_tracker::{DirtyFlags, VisualSnapshot, VisualTracker};
+use crate::bridge::vim_adapter::managers::visual_tracker::{
+    DirtyFlags, VisualSnapshot, VisualTracker,
+};
 
 use super::VimEngine;
 
@@ -32,7 +34,10 @@ impl VimEngine {
     #[must_use]
     #[allow(dead_code)]
     pub(crate) fn is_replace(&self) -> bool {
-        matches!(self.state.mode(), Mode::Replace(ReplaceMode::Overwrite) | Mode::Replace(ReplaceMode::Virtual))
+        matches!(
+            self.state.mode(),
+            Mode::Replace(ReplaceMode::Overwrite) | Mode::Replace(ReplaceMode::Virtual)
+        )
     }
 
     #[inline]

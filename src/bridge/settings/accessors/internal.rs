@@ -56,10 +56,7 @@ pub(super) fn get_color_setting(key: &str, default: Color) -> Color {
             .get_setting(&key_gstring)
             .try_to::<Color>()
             .unwrap_or_else(|_| {
-                log::warn!(
-                    "Type mismatch for setting key={}, using default color",
-                    key
-                );
+                log::warn!("Type mismatch for setting key={}, using default color", key);
                 default
             })
     } else {

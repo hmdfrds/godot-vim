@@ -86,7 +86,8 @@ impl VimEngine {
     pub(crate) fn record_insert_char(&mut self, c: char) {
         self.state.insert.current_text.push(c);
         self.state.insert.quantum.insert(c);
-        self.state.set_cursor_pos(self.state.insert.quantum.cursor());
+        self.state
+            .set_cursor_pos(self.state.insert.quantum.cursor());
     }
 
     #[inline]
@@ -97,7 +98,7 @@ impl VimEngine {
     pub(crate) fn init_quantum_buffer(&mut self, cursor: Position) {
         self.state.insert.quantum.text.clear();
         self.state.insert.quantum.start = cursor;
-        self.state.insert.quantum.deleted_before = 0;
+        self.state.insert.quantum.deleted_before_bytes = 0;
         self.state.set_cursor_pos(cursor);
     }
 

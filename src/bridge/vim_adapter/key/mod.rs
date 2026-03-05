@@ -1,6 +1,6 @@
 //! Key input handling infrastructure.
 //!
-//! Implements a consumer pipeline pattern 
+//! Implements a consumer pipeline pattern
 //! where each `KeyConsumer` handles a specific concern (mapping, completion, etc.),
 //! and the pipeline orchestrates them in order.
 //!

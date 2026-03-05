@@ -21,9 +21,7 @@ pub fn mode_to_editor_mode(mode: &Mode) -> EditorMode {
             EditorMode::CmdLine(CmdLineKind::Ex)
         }
         Mode::CmdLine(CmdType::SearchForward) => EditorMode::CmdLine(CmdLineKind::SearchForward),
-        Mode::CmdLine(CmdType::SearchBackward) => {
-            EditorMode::CmdLine(CmdLineKind::SearchBackward)
-        }
+        Mode::CmdLine(CmdType::SearchBackward) => EditorMode::CmdLine(CmdLineKind::SearchBackward),
         Mode::CmdLine(CmdType::Filter) => EditorMode::CmdLine(CmdLineKind::Ex),
         Mode::Recording { register } => EditorMode::Recording {
             register: *register,

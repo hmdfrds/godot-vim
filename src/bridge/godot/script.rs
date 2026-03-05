@@ -205,7 +205,10 @@ impl ScriptContext {
     pub fn is_unsaved(&self) -> bool {
         if let Some(seb) = &self.script_editor_base {
             // ScriptEditorBase has is_unsaved() method
-            return seb.clone().call(script_editor_base::methods::IS_UNSAVED, &[]).to::<bool>();
+            return seb
+                .clone()
+                .call(script_editor_base::methods::IS_UNSAVED, &[])
+                .to::<bool>();
         }
         false
     }

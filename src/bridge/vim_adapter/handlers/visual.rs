@@ -20,7 +20,9 @@ pub fn update_cursor_visuals(
     editor.set_caret_type(caret_type);
     editor.set_caret_blink_enabled(matches!(
         mode,
-        Mode::Insert(..) | Mode::Replace(ReplaceMode::Overwrite) | Mode::Replace(ReplaceMode::Virtual)
+        Mode::Insert(..)
+            | Mode::Replace(ReplaceMode::Overwrite)
+            | Mode::Replace(ReplaceMode::Virtual)
     ));
 }
 
@@ -43,12 +45,12 @@ pub fn render_visual_selection(editor: &mut Gd<CodeEdit>, mode: &Mode, head: Pos
             let start_col = usize_to_i32(column_codec::byte_to_editor_col_in_editor(
                 editor,
                 start.line,
-                usize::from(start.col),
+                start.col.as_usize(),
             ));
             let current_col = usize_to_i32(column_codec::byte_to_editor_col_in_editor(
                 editor,
                 head.line,
-                usize::from(head.col),
+                head.col.as_usize(),
             ));
 
             // Vim visual mode is INCLUSIVE on both ends.
@@ -100,8 +102,8 @@ pub fn render_visual_selection(editor: &mut Gd<CodeEdit>, mode: &Mode, head: Pos
 /// Updates visual block selection display.
 pub fn update_visual_block(mode: &Mode, editor: &mut Gd<CodeEdit>, head: Position) {
     if let Mode::Visual(VisualKind::Block { start, cursor: _ }) = mode {
-        let (start_line, start_col) = (start.line, usize::from(start.col));
-        let (current_line, current_col) = (head.line, usize::from(head.col));
+        let (start_line, start_col) = (start.line, start.col.as_usize());
+        let (current_line, current_col) = (head.line, head.col.as_usize());
 
         let min_line = start_line.min(current_line);
         let max_line = start_line.max(current_line);
@@ -123,15 +125,23 @@ pub fn update_visual_block(mode: &Mode, editor: &mut Gd<CodeEdit>, head: Positio
         //          Call: select(Max+1, Min)
 
         let current_line_i32 = usize_to_i32(current_line);
-        let current_min_col = column_codec::byte_to_editor_col_in_editor(editor, current_line, min_col);
-        let current_max_col = column_codec::byte_to_editor_col_in_editor(editor, current_line, max_col);
+        let current_min_col =
+            column_codec::byte_to_editor_col_in_editor(editor, current_line, min_col);
+        let current_max_col =
+            column_codec::byte_to_editor_col_in_editor(editor, current_line, max_col);
         let (render_anchor, render_head) = if current_col == min_col {
             // Backward
-            (usize_to_i32(current_max_col + 1), usize_to_i32(current_min_col))
+            (
+                usize_to_i32(current_max_col + 1),
+                usize_to_i32(current_min_col),
+            )
         } else {
             // Forward
             // The selection includes the cursor column (max_col).
-            (usize_to_i32(current_min_col), usize_to_i32(current_max_col + 1))
+            (
+                usize_to_i32(current_min_col),
+                usize_to_i32(current_max_col + 1),
+            )
         };
 
         // Primary caret

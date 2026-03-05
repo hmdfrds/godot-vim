@@ -104,9 +104,9 @@ fn convert_navigation_mark_request(req: &ShellRequest) -> Option<EditorCommand> 
         }),
         ShellRequest::JumpTo(pos) => Some(EditorCommand::JumpTo(position_to_cursor(pos))),
         ShellRequest::ScrollWindow { up } => Some(EditorCommand::ScrollWindow { up: *up }),
-        ShellRequest::ViewportUpdate { top_line } => {
-            Some(EditorCommand::ViewportUpdate { top_line: *top_line })
-        }
+        ShellRequest::ViewportUpdate { top_line } => Some(EditorCommand::ViewportUpdate {
+            top_line: *top_line,
+        }),
         ShellRequest::Motion { motion, count } => Some(EditorCommand::Motion {
             motion: *motion,
             count: *count,
@@ -136,11 +136,13 @@ fn convert_search_replace_request(req: &ShellRequest) -> Option<EditorCommand> {
 
 fn convert_block_insert_request(req: &ShellRequest) -> Option<EditorCommand> {
     match req {
-        ShellRequest::BeginBlockInsert { lines, col, origin } => Some(EditorCommand::BeginBlockInsert {
-            lines: *lines,
-            col: *col,
-            origin: position_to_cursor(origin),
-        }),
+        ShellRequest::BeginBlockInsert { lines, col, origin } => {
+            Some(EditorCommand::BeginBlockInsert {
+                lines: *lines,
+                col: *col,
+                origin: position_to_cursor(origin),
+            })
+        }
         ShellRequest::BeginBlockAppend {
             lines,
             end_col,
@@ -172,11 +174,13 @@ fn convert_block_insert_request(req: &ShellRequest) -> Option<EditorCommand> {
             text: text.clone(),
             origin: position_to_cursor(origin),
         }),
-        ShellRequest::BlockInsertPreview { lines, col, text } => Some(EditorCommand::BlockInsertPreview {
-            lines: *lines,
-            col: *col,
-            text: text.clone(),
-        }),
+        ShellRequest::BlockInsertPreview { lines, col, text } => {
+            Some(EditorCommand::BlockInsertPreview {
+                lines: *lines,
+                col: *col,
+                text: text.clone(),
+            })
+        }
         ShellRequest::BlockInsertBackspace { lines, col, text } => {
             Some(EditorCommand::BlockInsertBackspace {
                 lines: *lines,

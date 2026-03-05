@@ -56,14 +56,15 @@ pub fn execute_vertical_motion_fold_aware_public(
 
     // Pure algorithm in vim-core
     let fold_provider = GodotFoldProvider { editor: &*editor };
-    let (target_line, new_col, preferred_to_set) = vim_core::runtime::pure::fold_aware_vertical_motion(
-        &snapshot,
-        vim_state,
-        from,
-        count,
-        direction,
-        &fold_provider,
-    );
+    let (target_line, new_col, preferred_to_set) =
+        vim_core::runtime::pure::fold_aware_vertical_motion(
+            &snapshot,
+            vim_state,
+            from,
+            count,
+            direction,
+            &fold_provider,
+        );
 
     // Update the preferred column when the motion produces one.
     if let Some(pref) = preferred_to_set {

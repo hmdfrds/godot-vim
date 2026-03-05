@@ -105,8 +105,11 @@ pub fn perform_search_and_locate(
     let (wrap_line, wrap_col) = if forward {
         (0, 0)
     } else {
-        let last_line = editor.get_line_count() - 1;
-        let last_col = usize_to_i32(editor.get_line(last_line).len());
+        let last_line = column_codec::last_line_index(editor)?;
+        let last_col = usize_to_i32(column_codec::editor_line_char_len(
+            editor,
+            i32_to_usize(last_line),
+        ));
         (last_line, last_col)
     };
 
@@ -129,6 +132,9 @@ fn validate_search_position(editor: &Gd<CodeEdit>, line: i32, col: i32) -> Optio
     if line < 0 || line >= line_count {
         return None;
     }
-    let line_len = usize_to_i32(editor.get_line(line).len());
+    let line_len = usize_to_i32(column_codec::editor_line_char_len(
+        editor,
+        i32_to_usize(line),
+    ));
     Some((line, col.clamp(0, line_len)))
 }

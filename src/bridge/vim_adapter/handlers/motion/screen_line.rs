@@ -1,8 +1,8 @@
 use crate::bridge::vim_adapter::core::cast::{i32_to_usize, usize_to_i32};
 use godot::classes::CodeEdit;
 use godot::prelude::*;
-use vim_core::runtime::pure::{self as pure_motion, ScreenLineResult, WrapInfo};
 use vim_core::inputs::commands::motions::Motion;
+use vim_core::runtime::pure::{self as pure_motion, ScreenLineResult, WrapInfo};
 
 /// Handles window positioning motions (H, M, L) via pure core computation.
 pub fn execute_window_motion(editor: &mut Gd<CodeEdit>, motion: Motion, count: usize) {
@@ -32,17 +32,19 @@ pub fn execute_screen_line_motion(editor: &mut Gd<CodeEdit>, motion: Motion) {
         vec![editor.get_line(line).len()]
     } else {
         (0..wrapped_parts.len())
-            .filter_map(|i| wrapped_parts.get(i).map(|s| s.to_string().len()))
+            .filter_map(|i| wrapped_parts.get(i).map(|s| s.chars().len()))
             .collect()
     };
 
     // Compute first non-blank for the current segment
     let segment_first_nonblank = if let Some(seg) = wrapped_parts.get(wrap_index) {
-        let text = seg.to_string();
-        text.find(|c: char| !c.is_whitespace()).unwrap_or(0)
+        seg.chars()
+            .iter()
+            .position(|c| !c.is_whitespace())
+            .unwrap_or(0)
     } else {
         let text = editor.get_line(line).to_string();
-        text.find(|c: char| !c.is_whitespace()).unwrap_or(0)
+        text.chars().position(|c| !c.is_whitespace()).unwrap_or(0)
     };
 
     let wrap = WrapInfo {
@@ -62,7 +64,7 @@ pub fn execute_screen_line_motion(editor: &mut Gd<CodeEdit>, motion: Motion) {
             editor.set_caret_line(usize_to_i32(target_line));
             if let Some(col_offset) = col_hint {
                 let target_line_len = editor.get_line(usize_to_i32(target_line)).len();
-                let target = col_offset.min(target_line_len.saturating_sub(1));
+                let target = col_offset.min(target_line_len);
                 editor.set_caret_column(usize_to_i32(target));
             }
         }

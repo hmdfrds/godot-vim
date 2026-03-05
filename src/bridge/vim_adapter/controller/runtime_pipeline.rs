@@ -33,8 +33,10 @@ impl VimController {
         let prev_mode = self.engine.mode();
         let (cursor, snapshot) = match self.engine.mode() {
             Mode::Visual(VisualKind::Block { start, cursor }) => {
-                let block_selection =
-                    Selection::new(Position::from_byte(start.line, start.col), cursor);
+                let block_selection = Selection::new(
+                    Position::from_byte(start.line, start.col.as_usize()),
+                    cursor,
+                );
                 (
                     cursor,
                     LazyGodotSnapshot::with_selection(&editor, block_selection),
@@ -51,7 +53,7 @@ impl VimController {
         };
 
         let snap = self.engine.visual_snapshot();
-        let cursor_pos = CursorPos::new(cursor.line, usize::from(cursor.col));
+        let cursor_pos = CursorPos::new(cursor.line, cursor.col.as_usize());
         let context = ExecutionContext::from_snapshot(cursor_pos, &snapshot);
         let Some(mut output) = self
             .engine

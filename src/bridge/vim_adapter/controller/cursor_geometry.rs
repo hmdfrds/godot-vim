@@ -4,6 +4,7 @@
 //! heuristics by calibrating to Godot's native caret draw position.
 
 use crate::bridge::godot::names::theme;
+use crate::bridge::vim_adapter::core::column_codec::EditorCol;
 use godot::classes::CodeEdit;
 use godot::prelude::*;
 
@@ -33,7 +34,7 @@ pub(crate) enum RectAlignmentMode {
 /// differ from CodeEdit's live caret due to selection rendering behavior.
 pub(crate) fn compute_cursor_geometry(
     editor: &Gd<CodeEdit>,
-    override_pos: Option<(usize, usize)>,
+    override_pos: Option<(usize, EditorCol)>,
 ) -> Option<CursorGeometry> {
     let line_height = editor.get_line_height() as f32;
     let font = editor.get_theme_font(theme::FONT)?;
@@ -45,7 +46,7 @@ pub(crate) fn compute_cursor_geometry(
     let native_caret_pos = editor.get_caret_draw_pos();
 
     let (line, col, using_override) = if let Some((l, c)) = override_pos {
-        (l as i32, c as i32, true)
+        (l as i32, c.as_usize() as i32, true)
     } else {
         (current_line, current_col, false)
     };

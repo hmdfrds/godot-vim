@@ -2,7 +2,7 @@ use crate::bridge::components::cmdline::VimCmdLine;
 use crate::bridge::components::cursor_visual::VimCursor;
 use crate::bridge::components::status_bar;
 use crate::bridge::godot::names::{
-    callbacks, canvas_item, control, editor_settings, line_edit, object, range, text_edit, theme,
+    callbacks, canvas_item, control, editor_settings, line_edit, range, text_edit, theme,
 };
 use crate::bridge::vim_adapter::controller::attach_session::AttachState;
 use crate::bridge::vim_wrapper::VimController;
@@ -100,7 +100,7 @@ impl LifecycleTrait for VimController {
             // Deferred connection prevents re-entrant borrow: caret changes fire synchronously
             // during text edits, which would re-enter VimController while it is modifying text.
             editor.call(
-                object::methods::CONNECT,
+                "connect",
                 &[
                     text_edit::signals::CARET_CHANGED.to_variant(),
                     callable.to_variant(),
@@ -134,7 +134,7 @@ impl LifecycleTrait for VimController {
         if let Some(mut v_scroll) = editor.get_v_scroll_bar() {
             if !v_scroll.is_connected(range::signals::VALUE_CHANGED, &scroll_callable) {
                 v_scroll.call(
-                    object::methods::CONNECT,
+                    "connect",
                     &[
                         range::signals::VALUE_CHANGED.to_variant(),
                         scroll_callable.to_variant(),
@@ -146,7 +146,7 @@ impl LifecycleTrait for VimController {
         if let Some(mut h_scroll) = editor.get_h_scroll_bar() {
             if !h_scroll.is_connected(range::signals::VALUE_CHANGED, &scroll_callable) {
                 h_scroll.call(
-                    object::methods::CONNECT,
+                    "connect",
                     &[
                         range::signals::VALUE_CHANGED.to_variant(),
                         scroll_callable.to_variant(),
@@ -159,7 +159,7 @@ impl LifecycleTrait for VimController {
         // Deferred connection prevents re-entrancy during draw/resize/visibility changes.
         if !editor.is_connected(canvas_item::signals::DRAW, &update_callable) {
             editor.call(
-                object::methods::CONNECT,
+                "connect",
                 &[
                     canvas_item::signals::DRAW.to_variant(),
                     update_callable.to_variant(),
@@ -169,7 +169,7 @@ impl LifecycleTrait for VimController {
         }
         if !editor.is_connected(canvas_item::signals::VISIBILITY_CHANGED, &update_callable) {
             editor.call(
-                object::methods::CONNECT,
+                "connect",
                 &[
                     canvas_item::signals::VISIBILITY_CHANGED.to_variant(),
                     update_callable.to_variant(),
@@ -179,7 +179,7 @@ impl LifecycleTrait for VimController {
         }
         if !editor.is_connected(control::signals::MINIMUM_SIZE_CHANGED, &update_callable) {
             editor.call(
-                object::methods::CONNECT,
+                "connect",
                 &[
                     control::signals::MINIMUM_SIZE_CHANGED.to_variant(),
                     update_callable.to_variant(),

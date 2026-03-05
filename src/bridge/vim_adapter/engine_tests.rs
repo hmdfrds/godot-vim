@@ -65,7 +65,7 @@ mod tests {
         let engine = VimEngine::new();
         let pos = engine.cursor_pos();
         assert_eq!(pos.line, 0);
-        assert_eq!(pos.col, 0);
+        assert_eq!(pos.col.as_usize(), 0);
     }
 
     #[test]

@@ -9,7 +9,7 @@ use crate::bridge::vim_wrapper::VimController;
 use godot::classes::CodeEdit;
 use godot::prelude::*;
 use vim_core::runtime::pure::{compute_repeat_insert, RepeatInsertAction};
-use vim_core::state::mode::{Mode, InsertMode};
+use vim_core::state::mode::{InsertMode, Mode};
 
 impl VimController {
     /// Handles exiting Insert mode with repetition count.
@@ -40,7 +40,10 @@ impl VimController {
         }
 
         // Pass the previous Insert mode so handle_mode_change saves the last insert position.
-        self.handle_mode_change(Mode::Normal, Some(Mode::Insert(InsertMode::Standard { count })));
+        self.handle_mode_change(
+            Mode::Normal,
+            Some(Mode::Insert(InsertMode::Standard { count })),
+        );
     }
 
     /// Handles Dot Repeat (.) command via the canonical action pipeline.
@@ -56,7 +59,11 @@ impl VimController {
             return;
         };
 
-        log::debug!("Repeat: executing change={:?} count={}", change, repeat_count);
+        log::debug!(
+            "Repeat: executing change={:?} count={}",
+            change,
+            repeat_count
+        );
 
         match &change {
             vim_core::state::global::repeat::RepeatableChange::Insert { text, count, entry } => {

@@ -6,12 +6,7 @@ use vim_core::inputs::commands::motions::Motion;
 use super::VimEngine;
 
 impl VimEngine {
-    pub(crate) fn apply_motion(
-        &mut self,
-        editor: &mut Gd<CodeEdit>,
-        motion: Motion,
-        count: usize,
-    ) {
+    pub(crate) fn apply_motion(&mut self, editor: &mut Gd<CodeEdit>, motion: Motion, count: usize) {
         crate::bridge::vim_adapter::handlers::motion::apply_pure_motion(
             editor,
             &mut self.state,

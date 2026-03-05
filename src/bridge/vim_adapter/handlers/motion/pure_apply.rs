@@ -6,8 +6,8 @@ use godot::classes::CodeEdit;
 use godot::prelude::*;
 use vim_core::domain::position::Position;
 use vim_core::domain::selection::Selection;
-use vim_core::runtime::pure::{self as pure_motion, MotionContext};
 use vim_core::inputs::commands::motions::Motion;
+use vim_core::runtime::pure::{self as pure_motion, MotionContext};
 use vim_core::state::config::Config;
 use vim_core::state::mode::{Mode, VisualKind};
 use vim_core::state::VimState;
@@ -48,13 +48,17 @@ fn resolve_current_pos(editor: &Gd<CodeEdit>, vim_state: &VimState) -> Position 
 
 fn build_selection_for_mode(vim_state: &VimState, current_pos: Position) -> Selection {
     match vim_state.mode() {
-        Mode::Visual(VisualKind::Char { start }) => Selection::new(Position::from_byte(start.line, start.col), current_pos),
+        Mode::Visual(VisualKind::Char { start }) => Selection::new(
+            Position::from_byte(start.line, start.col.as_usize()),
+            current_pos,
+        ),
         Mode::Visual(VisualKind::Line { start_line }) => {
             Selection::new(Position::from_byte(start_line, 0), current_pos)
         }
-        Mode::Visual(VisualKind::Block { start, cursor: _ }) => {
-            Selection::new(Position::from_byte(start.line, start.col), current_pos)
-        }
+        Mode::Visual(VisualKind::Block { start, cursor: _ }) => Selection::new(
+            Position::from_byte(start.line, start.col.as_usize()),
+            current_pos,
+        ),
         _ => Selection::at(current_pos),
     }
 }
@@ -100,7 +104,7 @@ fn apply_result_to_editor_and_state(
     move_cursor_with_tracking(
         editor,
         vim_state,
-        Position::from_byte(target_line, new_sel.head.col),
+        Position::from_byte(target_line, new_sel.head.col.as_usize()),
         move_type,
     );
 

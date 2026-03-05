@@ -63,7 +63,10 @@ impl VimController {
                 self.persist_runtime_state();
             }
             Err(err) => {
-                log::warn!("Resetting persisted Vim state due to decode failure: {}", err);
+                log::warn!(
+                    "Resetting persisted Vim state due to decode failure: {}",
+                    err
+                );
                 self.engine.reset_runtime_state();
                 self.persist_runtime_state();
             }
@@ -75,7 +78,10 @@ impl VimController {
         let encoded = match self.engine.export_persisted_state_json() {
             Ok(value) => value,
             Err(err) => {
-                log::warn!("Skipping Vim state persistence due to encode failure: {}", err);
+                log::warn!(
+                    "Skipping Vim state persistence due to encode failure: {}",
+                    err
+                );
                 return;
             }
         };

@@ -51,7 +51,9 @@ impl ModeHandler for VimController {
                 // Entering visual mode from non-visual - use current cursor as anchor
                 let cursor = Self::cursor_from_editor(&editor);
                 match &mut new_mode {
-                    Mode::Visual(VisualKind::Char { start }) if start.line == 0 && start.col == 0 => {
+                    Mode::Visual(VisualKind::Char { start })
+                        if start.line == 0 && start.col.as_usize() == 0 =>
+                    {
                         *start = cursor;
                         self.engine.sync_cursor(cursor);
                         log::debug!("Hydrated Visual start from cursor: {:?}", cursor);
@@ -67,7 +69,7 @@ impl ModeHandler for VimController {
                     Mode::Visual(VisualKind::Block {
                         start,
                         cursor: block_cursor,
-                    }) if start.line == 0 && start.col == 0 => {
+                    }) if start.line == 0 && start.col.as_usize() == 0 => {
                         *start = cursor;
                         *block_cursor = cursor;
                         self.engine.sync_cursor(cursor);
@@ -93,7 +95,9 @@ impl ModeHandler for VimController {
                         // Save insert position for 'gi' command when leaving Insert mode
                         if matches!(
                             prev,
-                            Mode::Insert(..) | Mode::Replace(ReplaceMode::Overwrite) | Mode::Replace(ReplaceMode::Virtual)
+                            Mode::Insert(..)
+                                | Mode::Replace(ReplaceMode::Overwrite)
+                                | Mode::Replace(ReplaceMode::Virtual)
                         ) {
                             let pos = vim_core::domain::position::Position::from_byte(
                                 i32_to_usize(editor.get_caret_line()),
@@ -131,7 +135,8 @@ impl ModeHandler for VimController {
                     editor.remove_secondary_carets();
                     editor.deselect();
                     editor.set_caret_line(usize_to_i32(lines.0));
-                    let editor_col = column_codec::byte_to_editor_col_in_editor(&editor, lines.0, col);
+                    let editor_col =
+                        column_codec::byte_to_editor_col_in_editor(&editor, lines.0, col);
                     editor.set_caret_column(usize_to_i32(editor_col));
                     self.engine.set_mode(new_mode);
                 }

@@ -25,7 +25,7 @@ pub const LINE_NUMBER_MODE: i64 = 1;
 
 pub const MODE_COLORS_ENABLED: bool = true;
 
-/// Normal mode: white 
+/// Normal mode: white
 pub const NORMAL_MODE_COLOR: Color = Color::WHITE;
 
 /// Insert mode: green (active editing)

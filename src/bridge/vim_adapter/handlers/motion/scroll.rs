@@ -2,8 +2,8 @@ use crate::bridge::godot::names::theme;
 use crate::bridge::vim_adapter::core::cast::{i32_to_usize, usize_to_i32};
 use godot::classes::CodeEdit;
 use godot::prelude::*;
-use vim_core::runtime::pure::{self as pure_motion};
 use vim_core::inputs::commands::motions::Motion;
+use vim_core::runtime::pure::{self as pure_motion};
 
 /// Handles scroll/viewport motions via pure core computation + thin shell adapter.
 ///

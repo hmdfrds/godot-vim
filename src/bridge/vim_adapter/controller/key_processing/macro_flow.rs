@@ -1,6 +1,6 @@
 use crate::bridge::vim_wrapper::VimController;
-use vim_core::inputs::commands::Action;
 use vim_core::inputs::commands::action::MacroAction;
+use vim_core::inputs::commands::Action;
 use vim_core::inputs::{KeyCode, VimKey};
 
 impl VimController {

@@ -14,9 +14,9 @@
 mod serialization;
 mod ui;
 
+use godot::classes::Node;
 use godot::classes::{Button, Control, IControl, LineEdit, SpinBox, Tree};
 use godot::prelude::*;
-use godot::classes::Node;
 
 use crate::bridge::godot::names::callbacks;
 

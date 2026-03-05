@@ -93,7 +93,6 @@ pub mod text_edit {
         pub const SEARCH: &str = "search";
         pub const SET_SEARCH_TEXT: &str = "set_search_text";
         pub const SET_SEARCH_FLAGS: &str = "set_search_flags";
-
     }
 
     pub mod properties {

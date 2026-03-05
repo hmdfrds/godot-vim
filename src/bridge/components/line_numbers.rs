@@ -201,7 +201,8 @@ impl LineNumberManager {
     pub fn update_gutters_deferred(&mut self) {
         // Force update since caret changed - the deferred call ensures position is settled
         self.force_next_update = true;
-        self.base_mut().call_deferred(callbacks::UPDATE_GUTTERS, &[]);
+        self.base_mut()
+            .call_deferred(callbacks::UPDATE_GUTTERS, &[]);
     }
 
     #[func]

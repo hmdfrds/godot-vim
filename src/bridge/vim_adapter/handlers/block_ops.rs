@@ -156,7 +156,7 @@ impl BlockOpsHandler for VimController {
         // Position cursor at top-left of block (origin), matching Vim behavior
         editor.set_caret_line(usize_to_i32(origin.line));
         let origin_col =
-            column_codec::byte_to_editor_col_in_editor(editor, origin.line, usize::from(origin.col));
+            column_codec::byte_to_editor_col_in_editor(editor, origin.line, origin.col.as_usize());
         editor.set_caret_column(usize_to_i32(origin_col));
     }
 
@@ -183,7 +183,7 @@ impl BlockOpsHandler for VimController {
         // Position cursor at top-left of block (origin), matching Vim behavior
         editor.set_caret_line(usize_to_i32(origin.line));
         let origin_col =
-            column_codec::byte_to_editor_col_in_editor(editor, origin.line, usize::from(origin.col));
+            column_codec::byte_to_editor_col_in_editor(editor, origin.line, origin.col.as_usize());
         editor.set_caret_column(usize_to_i32(origin_col));
     }
 

@@ -29,7 +29,6 @@ pub trait CodeEditExt {
     ///
     /// Use for jump motions like `G`, `gg`, search, marks.
     fn set_line_unfold(&mut self, line: i32);
-
 }
 
 impl CodeEditExt for Gd<CodeEdit> {
@@ -57,5 +56,4 @@ impl CodeEditExt for Gd<CodeEdit> {
         // can_be_hidden(false) tells Godot to unfold the line if it's hidden
         self.set_caret_line_ex(line).can_be_hidden(false).done();
     }
-
 }

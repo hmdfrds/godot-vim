@@ -1,7 +1,7 @@
 //! Output application and visual synchronization for VimController.
 
-use crate::bridge::vim_adapter::core::column_codec;
 use crate::bridge::vim_adapter::controller::signals::SignalHandlersTrait;
+use crate::bridge::vim_adapter::core::column_codec;
 use crate::bridge::vim_adapter::managers::visual_tracker::{DirtyFlags, VisualSnapshot};
 use crate::bridge::vim_wrapper::VimController;
 use vim_core::state::mode::Mode;

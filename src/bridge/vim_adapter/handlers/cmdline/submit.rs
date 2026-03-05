@@ -2,11 +2,11 @@ use super::CmdLineHandler;
 use crate::bridge::godot::names::{control, text_edit};
 use crate::bridge::vim_adapter::core::cast::i32_to_usize;
 use crate::bridge::vim_adapter::core::column_codec;
-use vim_core::inputs::{KeyCode, VimKey, VimModifiers};
 use crate::bridge::vim_adapter::handlers::mode::ModeHandler;
 use crate::bridge::vim_adapter::managers::preview::parse_substitute_command;
 use crate::bridge::vim_wrapper::VimController;
 use godot::prelude::*;
+use vim_core::inputs::{KeyCode, VimKey, VimModifiers};
 use vim_core::state::mode::{CmdType, Mode};
 
 #[derive(Default)]
@@ -128,25 +128,17 @@ fn apply_focus_and_search_target(controller: &mut VimController, outcome: &CmdSu
 
         if let Some((line, col)) = outcome.search_target {
             let line_usize = i32_to_usize(line);
-            let byte_col = column_codec::editor_col_to_byte_in_editor(
-                &editor,
-                line_usize,
-                i32_to_usize(col),
-            );
+            let byte_col =
+                column_codec::editor_col_to_byte_in_editor(&editor, line_usize, i32_to_usize(col));
             controller
                 .engine
                 .sync_cursor(vim_core::domain::position::Position::from_byte(
-                    line_usize,
-                    byte_col,
+                    line_usize, byte_col,
                 ));
 
             editor.call_deferred(text_edit::methods::SET_CARET_LINE, &[line.to_variant()]);
             editor.call_deferred(text_edit::methods::SET_CARET_COLUMN, &[col.to_variant()]);
-            log::debug!(
-                "Cursor deferred to line={} col={} after focus",
-                line,
-                col
-            );
+            log::debug!("Cursor deferred to line={} col={} after focus", line, col);
 
             if outcome.extend_visual {
                 log::debug!(

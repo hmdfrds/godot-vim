@@ -235,12 +235,7 @@ impl VimCmdLine {
 
                 // Tween owns the PropertyTweener internally; return value not needed.
                 // Fade to dim (0.5 alpha), then fade back to bright (1.0 alpha).
-                drop(tween.tween_property(
-                    &panel,
-                    property,
-                    &Variant::from(0.5_f64),
-                    0.4,
-                ));
+                drop(tween.tween_property(&panel, property, &Variant::from(0.5_f64), 0.4));
                 drop(tween.tween_property(&panel, property, &Variant::from(1.0_f64), 0.4));
 
                 Some(tween)

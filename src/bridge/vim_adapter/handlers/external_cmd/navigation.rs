@@ -15,7 +15,8 @@ impl VimController {
 
         // Save current position to jumplist using centralized tracker
         let line_usize = i32_to_usize(line);
-        let byte_col = column_codec::editor_col_to_byte_in_editor(editor, line_usize, i32_to_usize(col));
+        let byte_col =
+            column_codec::editor_col_to_byte_in_editor(editor, line_usize, i32_to_usize(col));
         let current = Position::from_byte(line_usize, byte_col);
 
         self.engine.record_jump_at(current);

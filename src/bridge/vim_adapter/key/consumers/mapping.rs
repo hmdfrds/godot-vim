@@ -64,9 +64,7 @@ impl KeyConsumer for MappingConsumer {
                 ctx.trace("Mapping: prefix, waiting");
                 ConsumeResult::Consumed
             }
-            MappingLookup::None => {
-                ConsumeResult::NotConsumed
-            }
+            MappingLookup::None => ConsumeResult::NotConsumed,
         }
     }
 }

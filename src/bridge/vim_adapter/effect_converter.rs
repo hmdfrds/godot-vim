@@ -15,9 +15,9 @@
 //! VimOutput { mode, cursor, commands, transaction, pending_keys }
 //! ```
 
-use vim_core::runtime::EffectAccumulator;
 use vim_core::inputs::VimKey;
 use vim_core::protocol::messages::ProtocolRequest;
+use vim_core::runtime::EffectAccumulator;
 use vim_core::state::mode::Mode;
 use vim_core::state::VimState;
 

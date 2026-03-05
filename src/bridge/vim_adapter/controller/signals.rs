@@ -7,6 +7,7 @@ use crate::bridge::components::cursor_visual::VimCursor;
 use crate::bridge::components::status_bar;
 use crate::bridge::godot::names::theme;
 use crate::bridge::settings;
+use crate::bridge::vim_adapter::core::column_codec::{self, CoreByteCol};
 use godot::classes::CanvasItem;
 use godot::prelude::*;
 
@@ -84,7 +85,12 @@ impl SignalHandlersTrait for crate::bridge::vim_wrapper::VimController {
         // Godot's select() moves the caret to the selection endpoint.
         let cursor_pos = if self.engine.is_visual() {
             let p = self.engine.cursor_pos();
-            Some((p.line, usize::from(p.col)))
+            let editor_col = column_codec::core_byte_to_editor_col_in_editor(
+                &editor,
+                p.line,
+                CoreByteCol::new(p.col.as_usize()),
+            );
+            Some((p.line, editor_col))
         } else {
             None
         };

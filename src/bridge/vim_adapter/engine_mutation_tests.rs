@@ -127,7 +127,7 @@ mod tests {
         engine.init_quantum_buffer(Position::from_byte(0, 0));
         engine.record_insert_char('h');
         // After inserting 'h', cursor should advance to col 1
-        assert_eq!(engine.cursor_pos().col, 1);
+        assert_eq!(engine.cursor_pos().col.as_usize(), 1);
     }
 
     #[test]

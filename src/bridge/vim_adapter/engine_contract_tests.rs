@@ -7,10 +7,10 @@ mod tests {
     use vim_core::domain::external_command::ExternalCommand;
     use vim_core::domain::selection::Selection;
     use vim_core::domain::snapshot::TestDoc;
-    use vim_core::runtime::EffectAccumulator;
     use vim_core::inputs::commands::Action;
     use vim_core::inputs::{KeyCode, VimKey, VimModifiers};
     use vim_core::protocol::messages::{ProtocolRequest, StableShellRequest};
+    use vim_core::runtime::EffectAccumulator;
     use vim_core::state::VimState;
 
     fn no_caps_context(cursor: CursorPos) -> ExecutionContext<'static> {

@@ -1,4 +1,7 @@
-use super::internal::{get_bool_setting, get_int_setting, get_string_array_setting, get_string_setting, normalize_key_string, set_bool_setting};
+use super::internal::{
+    get_bool_setting, get_int_setting, get_string_array_setting, get_string_setting,
+    normalize_key_string, set_bool_setting,
+};
 use super::{LineNumberMode, LogLevel, VimSettings};
 use crate::bridge::settings::{defaults, keys};
 

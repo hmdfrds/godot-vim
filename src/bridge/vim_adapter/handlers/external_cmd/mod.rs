@@ -205,7 +205,12 @@ impl ExternalCmdHandler for VimController {
             }
 
             EditorCommand::RepeatSubstituteAllLines => {
-                let last_line = i32_to_usize((editor.get_line_count() - 1).max(0));
+                let Some(last_line_i32) =
+                    crate::bridge::vim_adapter::core::column_codec::last_line_index(&editor)
+                else {
+                    return FocusBehavior::Restore;
+                };
+                let last_line = i32_to_usize(last_line_i32);
                 let (pat, repl, flags) = self.engine.last_substitute();
                 if let (Some(pattern), Some(replacement), Some(flags)) = (pat, repl, flags) {
                     text_editing::execute_substitute_range(

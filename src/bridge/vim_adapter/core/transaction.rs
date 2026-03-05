@@ -22,22 +22,22 @@ pub fn apply_transaction(editor: &mut Gd<CodeEdit>, transaction: &Transaction) {
     for edit in &transaction.edits {
         match edit {
             EditOp::Insert { pos, text } => {
-                apply_insert(editor, (pos.line, usize::from(pos.col)), text);
+                apply_insert(editor, (pos.line, pos.col.as_usize()), text);
             }
             EditOp::Delete { start, end } => {
                 apply_delete(
                     editor,
-                    (start.line, usize::from(start.col)),
-                    (end.line, usize::from(end.col)),
+                    (start.line, start.col.as_usize()),
+                    (end.line, end.col.as_usize()),
                 );
             }
             EditOp::Replace { start, end, text } => {
                 apply_delete(
                     editor,
-                    (start.line, usize::from(start.col)),
-                    (end.line, usize::from(end.col)),
+                    (start.line, start.col.as_usize()),
+                    (end.line, end.col.as_usize()),
                 );
-                apply_insert(editor, (start.line, usize::from(start.col)), text);
+                apply_insert(editor, (start.line, start.col.as_usize()), text);
             }
             EditOp::BlockDelete { .. } | EditOp::BlockInsert { .. } => {
                 log::warn!("Block operations not supported in transaction adapter");
@@ -100,7 +100,10 @@ fn apply_text_ops_batch(editor: &mut Gd<CodeEdit>, ops: &[TextOperation]) {
 
 /// Insert text at a position.
 fn apply_insert(editor: &mut Gd<CodeEdit>, pos: (usize, usize), text: &str) {
-    column_codec::apply_core_position_to_editor(editor, vim_core::domain::position::Position::from_byte(pos.0, pos.1));
+    column_codec::apply_core_position_to_editor(
+        editor,
+        vim_core::domain::position::Position::from_byte(pos.0, pos.1),
+    );
 
     // Insert text
     editor.insert_text_at_caret(text);

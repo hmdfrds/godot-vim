@@ -4,6 +4,7 @@
 //! implementing the same operations used by shell handlers.
 #![allow(dead_code)]
 
+use vim_core::domain::column::ByteCol;
 use vim_core::domain::position::Position;
 use vim_core::domain::selection::Selection;
 use vim_core::domain::shared_str::SharedStr;
@@ -120,7 +121,7 @@ impl MockEditor {
     /// Inserts text at the current cursor position.
     pub fn insert_text(&mut self, text: &str) {
         let line = self.cursor.line;
-        let col = usize::from(self.cursor.col);
+        let col = self.cursor.col.as_usize();
 
         // Handle multi-line insertion
         let insert_lines: Vec<&str> = text.split('\n').collect();
@@ -152,7 +153,7 @@ impl MockEditor {
 
             // Update cursor
             self.cursor.line = line + last_idx;
-            self.cursor.col = insert_lines[last_idx].len().into();
+            self.cursor.col = ByteCol::new(insert_lines[last_idx].len());
         }
 
         self.anchor = self.cursor;
@@ -163,8 +164,8 @@ impl MockEditor {
         if !self.has_selection() {
             // Delete single character at cursor
             if let Some(line) = self.lines.get_mut(self.cursor.line) {
-                if self.cursor.col < line.len() {
-                    line.remove(usize::from(self.cursor.col));
+                if self.cursor.col.as_usize() < line.len() {
+                    line.remove(self.cursor.col.as_usize());
                 }
             }
             return;
@@ -277,7 +278,7 @@ mod tests {
         editor.set_cursor(0, 5);
         editor.insert_text(" world");
         assert_eq!(editor.line(0).as_ref(), "hello world");
-        assert_eq!(editor.cursor().col, 11);
+        assert_eq!(editor.cursor().col.as_usize(), 11);
     }
 
     #[test]

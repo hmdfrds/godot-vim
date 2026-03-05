@@ -1,4 +1,5 @@
-use crate::bridge::vim_adapter::core::cast::usize_to_i32;
+use crate::bridge::vim_adapter::core::cast::{i32_to_usize, usize_to_i32};
+use crate::bridge::vim_adapter::core::column_codec;
 use crate::bridge::vim_wrapper::VimController;
 use godot::classes::text_edit::SearchFlags;
 use godot::classes::CodeEdit;
@@ -38,7 +39,12 @@ impl VimController {
         if result.x >= 0 && result.y >= 0 {
             let (found_line, found_col) = (result.y, result.x);
             if let Some(validated) = Self::validate_position(&editor, found_line, found_col) {
-                log::debug!("Found pattern={} line={} col={}", pattern, validated.0, validated.1);
+                log::debug!(
+                    "Found pattern={} line={} col={}",
+                    pattern,
+                    validated.0,
+                    validated.1
+                );
                 return Some(validated);
             }
         }
@@ -47,8 +53,11 @@ impl VimController {
         let (wrap_line, wrap_col) = if forward {
             (0, 0)
         } else {
-            let last_line = editor.get_line_count() - 1;
-            let last_col = usize_to_i32(editor.get_line(last_line).len());
+            let last_line = column_codec::last_line_index(&editor)?;
+            let last_col = usize_to_i32(column_codec::editor_line_char_len(
+                &editor,
+                i32_to_usize(last_line),
+            ));
             (last_line, last_col)
         };
 
@@ -79,7 +88,10 @@ impl VimController {
             return None;
         }
 
-        let line_len = usize_to_i32(editor.get_line(line).len());
+        let line_len = usize_to_i32(column_codec::editor_line_char_len(
+            editor,
+            i32_to_usize(line),
+        ));
         // Clamp column to valid range [0, line_length]
         let col = col.clamp(0, line_len);
         Some((line, col))

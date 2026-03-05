@@ -11,9 +11,9 @@ use crate::bridge::vim_wrapper::VimController;
 use godot::classes::CodeEdit;
 use godot::prelude::*;
 use vim_core::domain::position::Position;
+use vim_core::inputs::commands::motions::Motion;
 use vim_core::prelude::EditOp;
 use vim_core::runtime::pure::{calculate_replace_edits, calculate_virtual_replace_edits};
-use vim_core::inputs::commands::motions::Motion;
 use vim_core::state::mode::{Mode, ReplaceMode};
 
 impl VimController {
@@ -24,7 +24,10 @@ impl VimController {
         };
 
         let mode = self.engine.mode();
-        let is_replace = matches!(mode, Mode::Replace(ReplaceMode::Overwrite) | Mode::Replace(ReplaceMode::Virtual));
+        let is_replace = matches!(
+            mode,
+            Mode::Replace(ReplaceMode::Overwrite) | Mode::Replace(ReplaceMode::Virtual)
+        );
 
         if is_replace {
             editor.begin_complex_operation();
@@ -34,7 +37,7 @@ impl VimController {
         let pos = Self::cursor_from_editor(&editor);
         self.engine.set_last_change(pos);
         let line = usize_to_i32(pos.line);
-        let col = usize_to_i32(usize::from(pos.col));
+        let col = usize_to_i32(pos.col.as_usize());
 
         // Handle newline separately (special indentation logic)
         if c == '\n' {
@@ -84,10 +87,13 @@ impl VimController {
                     let start_col = column_codec::byte_to_editor_col_in_editor(
                         &editor,
                         start.line,
-                        usize::from(start.col),
+                        start.col.as_usize(),
                     );
-                    let end_col =
-                        column_codec::byte_to_editor_col_in_editor(&editor, end.line, usize::from(end.col));
+                    let end_col = column_codec::byte_to_editor_col_in_editor(
+                        &editor,
+                        end.line,
+                        end.col.as_usize(),
+                    );
                     editor.remove_text(
                         usize_to_i32(start.line),
                         usize_to_i32(start_col),
@@ -212,7 +218,7 @@ impl VimController {
             .can_be_hidden(false)
             .done();
         let editor_col =
-            column_codec::byte_to_editor_col_in_editor(editor, target.line, usize::from(target.col));
+            column_codec::byte_to_editor_col_in_editor(editor, target.line, target.col.as_usize());
         editor.set_caret_column(usize_to_i32(editor_col));
     }
 
@@ -223,8 +229,10 @@ impl VimController {
                 // Clamp to valid buffer bounds before moving.
                 let line_count = i32_to_usize(editor.get_line_count());
                 let line = pos.line.min(line_count.saturating_sub(1));
-                let line_len = editor.get_line(usize_to_i32(line)).to_string().len();
-                let col = usize::from(pos.col).min(line_len);
+                let line_char_len = column_codec::editor_line_char_len(editor, line);
+                let line_len_bytes =
+                    column_codec::editor_col_to_byte_in_editor(editor, line, line_char_len);
+                let col = pos.col.as_usize().min(line_len_bytes);
 
                 let target = Position::from_byte(line, col);
                 self.engine
@@ -233,9 +241,14 @@ impl VimController {
                     .set_caret_line_ex(usize_to_i32(target.line))
                     .can_be_hidden(false)
                     .done();
-                let editor_col = column_codec::byte_to_editor_col_in_editor(editor, target.line, col);
+                let editor_col =
+                    column_codec::byte_to_editor_col_in_editor(editor, target.line, col);
                 editor.set_caret_column(usize_to_i32(editor_col));
-                log::debug!("gi: jumped to last insert position line={} col={}", line, col);
+                log::debug!(
+                    "gi: jumped to last insert position line={} col={}",
+                    line,
+                    col
+                );
             }
             None => {
                 log::debug!("gi: No last insert position recorded");
