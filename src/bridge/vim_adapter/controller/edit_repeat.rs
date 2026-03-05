@@ -3,6 +3,7 @@
 //! Handles the `.` (dot repeat) command and insert-mode exit with count repetition.
 
 use crate::bridge::vim_adapter::core::cast::{i32_to_usize, usize_to_i32};
+use crate::bridge::vim_adapter::core::column_codec;
 use crate::bridge::vim_adapter::handlers::mode::ModeHandler;
 use crate::bridge::vim_wrapper::VimController;
 use godot::classes::CodeEdit;
@@ -112,8 +113,12 @@ impl VimController {
         repeat_count: usize,
         entry: &vim_core::state::global::repeat::InsertEntry,
     ) {
-        let cursor_col = i32_to_usize(editor.get_caret_column());
         let line = editor.get_caret_line();
+        let cursor_col = column_codec::editor_col_to_byte_in_editor(
+            editor,
+            i32_to_usize(line),
+            i32_to_usize(editor.get_caret_column()),
+        );
         let line_text = editor.get_line(line).to_string();
 
         let action = compute_repeat_insert(
@@ -133,7 +138,9 @@ impl VimController {
 
         match action {
             RepeatInsertAction::InsertAt { col, text } => {
-                editor.set_caret_column(usize_to_i32(col));
+                let editor_col =
+                    column_codec::byte_to_editor_col_in_editor(editor, i32_to_usize(line), col);
+                editor.set_caret_column(usize_to_i32(editor_col));
                 editor.insert_text_at_caret(&text);
             }
             RepeatInsertAction::InsertEOL { text } => {

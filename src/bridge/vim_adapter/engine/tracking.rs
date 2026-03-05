@@ -12,7 +12,7 @@ use super::VimEngine;
 impl VimEngine {
     #[inline]
     pub(crate) fn set_cursor(&mut self, line: usize, col: usize) {
-        self.state.set_cursor_pos(Position::new(line, col));
+        self.state.set_cursor_pos(Position::from_byte(line, col));
     }
 
     #[inline]
@@ -129,12 +129,8 @@ impl VimEngine {
 
     pub(crate) fn confirm_completion(&mut self, editor: &mut Gd<CodeEdit>) {
         editor.confirm_code_completion();
-        let line = editor.get_caret_line();
-        let col = editor.get_caret_column();
-        self.state.set_cursor_pos(Position::new(
-            crate::bridge::vim_adapter::core::cast::i32_to_usize(line),
-            crate::bridge::vim_adapter::core::cast::i32_to_usize(col),
-        ));
+        let pos = crate::bridge::vim_adapter::core::column_codec::caret_to_core_position(editor);
+        self.state.set_cursor_pos(pos);
     }
 
     #[inline]

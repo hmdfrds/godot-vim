@@ -3,6 +3,7 @@
 //! Handles mode change transitions and their side effects.
 
 use crate::bridge::vim_adapter::core::cast::{i32_to_usize, usize_to_i32};
+use crate::bridge::vim_adapter::core::column_codec;
 use crate::bridge::vim_wrapper::VimController;
 use vim_core::state::mode::{CmdType, InsertMode, Mode, ReplaceMode, VisualKind};
 
@@ -94,9 +95,13 @@ impl ModeHandler for VimController {
                             prev,
                             Mode::Insert(..) | Mode::Replace(ReplaceMode::Overwrite) | Mode::Replace(ReplaceMode::Virtual)
                         ) {
-                            let pos = vim_core::domain::position::Position::new(
+                            let pos = vim_core::domain::position::Position::from_byte(
                                 i32_to_usize(editor.get_caret_line()),
-                                i32_to_usize(editor.get_caret_column()),
+                                column_codec::editor_col_to_byte_in_editor(
+                                    &editor,
+                                    i32_to_usize(editor.get_caret_line()),
+                                    i32_to_usize(editor.get_caret_column()),
+                                ),
                             );
                             self.engine.set_last_insert(pos);
                             log::debug!("Saved last insert position: {:?}", pos);
@@ -126,7 +131,8 @@ impl ModeHandler for VimController {
                     editor.remove_secondary_carets();
                     editor.deselect();
                     editor.set_caret_line(usize_to_i32(lines.0));
-                    editor.set_caret_column(usize_to_i32(col));
+                    let editor_col = column_codec::byte_to_editor_col_in_editor(&editor, lines.0, col);
+                    editor.set_caret_column(usize_to_i32(editor_col));
                     self.engine.set_mode(new_mode);
                 }
                 Mode::Insert(InsertMode::BlockAppend { .. }) => {

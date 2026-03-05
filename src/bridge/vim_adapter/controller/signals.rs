@@ -84,7 +84,7 @@ impl SignalHandlersTrait for crate::bridge::vim_wrapper::VimController {
         // Godot's select() moves the caret to the selection endpoint.
         let cursor_pos = if self.engine.is_visual() {
             let p = self.engine.cursor_pos();
-            Some((p.line, p.col))
+            Some((p.line, usize::from(p.col)))
         } else {
             None
         };

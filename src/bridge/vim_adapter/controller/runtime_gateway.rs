@@ -26,7 +26,7 @@ impl VimController {
             cursor: vcursor,
         }) = &self.engine.mode()
         {
-            let block_selection = Selection::new(Position::new(start.line, start.col), *vcursor);
+            let block_selection = Selection::new(Position::from_byte(start.line, start.col), *vcursor);
             (
                 *vcursor,
                 LazyGodotSnapshot::with_selection(&editor, block_selection),
@@ -36,7 +36,7 @@ impl VimController {
         };
 
         let snap = self.engine.visual_snapshot();
-        let cursor_pos = CursorPos::new(cursor.line, cursor.col);
+        let cursor_pos = CursorPos::new(cursor.line, usize::from(cursor.col));
         let context = ExecutionContext::from_snapshot(cursor_pos, &snapshot);
         let Some(output) = self
             .engine
@@ -59,7 +59,7 @@ impl VimController {
             cursor: vcursor,
         }) = &self.engine.mode()
         {
-            let block_selection = Selection::new(Position::new(start.line, start.col), *vcursor);
+            let block_selection = Selection::new(Position::from_byte(start.line, start.col), *vcursor);
             (
                 *vcursor,
                 LazyGodotSnapshot::with_selection(&editor, block_selection),
@@ -69,7 +69,7 @@ impl VimController {
         };
 
         let snap = self.engine.visual_snapshot();
-        let cursor_pos = CursorPos::new(cursor.line, cursor.col);
+        let cursor_pos = CursorPos::new(cursor.line, usize::from(cursor.col));
         let context = ExecutionContext::from_snapshot(cursor_pos, &snapshot);
         let output = self
             .engine
@@ -89,7 +89,7 @@ impl VimController {
             cursor: vcursor,
         }) = &self.engine.mode()
         {
-            let block_selection = Selection::new(Position::new(start.line, start.col), *vcursor);
+            let block_selection = Selection::new(Position::from_byte(start.line, start.col), *vcursor);
             (
                 *vcursor,
                 LazyGodotSnapshot::with_selection(&editor, block_selection),
@@ -99,7 +99,7 @@ impl VimController {
         };
 
         let snap = self.engine.visual_snapshot();
-        let cursor_pos = CursorPos::new(cursor.line, cursor.col);
+        let cursor_pos = CursorPos::new(cursor.line, usize::from(cursor.col));
         let context = ExecutionContext::from_snapshot(cursor_pos, &snapshot);
         let output = self
             .engine

@@ -4,7 +4,8 @@ use strum::Display;
 use vim_core::domain::position::Position;
 use vim_core::state::VimState;
 
-use crate::bridge::vim_adapter::core::cast::{i32_to_usize, usize_to_i32};
+use crate::bridge::vim_adapter::core::cast::usize_to_i32;
+use crate::bridge::vim_adapter::core::column_codec;
 
 #[derive(Display)]
 pub enum CursorMoveType {
@@ -26,9 +27,7 @@ pub fn move_cursor_with_tracking(
     target: Position,
     move_type: CursorMoveType,
 ) {
-    let current_line = i32_to_usize(editor.get_caret_line());
-    let current_col = i32_to_usize(editor.get_caret_column());
-    let current_pos = Position::new(current_line, current_col);
+    let current_pos = column_codec::caret_to_core_position(editor);
 
     match move_type {
         CursorMoveType::Jump => {
@@ -53,7 +52,8 @@ pub fn move_cursor_with_tracking(
         .set_caret_line_ex(usize_to_i32(target.line))
         .can_be_hidden(false)
         .done();
-    editor.set_caret_column(usize_to_i32(target.col));
+    let editor_col = column_codec::byte_to_editor_col_in_editor(editor, target.line, usize::from(target.col));
+    editor.set_caret_column(usize_to_i32(editor_col));
 
     state.set_cursor_pos(target);
 }

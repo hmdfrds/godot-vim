@@ -1,6 +1,7 @@
 //! Navigation operations: GotoDefinition, ShowDocumentation.
 
 use crate::bridge::vim_adapter::core::cast::i32_to_usize;
+use crate::bridge::vim_adapter::core::column_codec;
 use crate::bridge::vim_wrapper::VimController;
 use crate::bridge::vim_wrapper_util::extract_word_at_col;
 use godot::classes::CodeEdit;
@@ -13,7 +14,9 @@ impl VimController {
         let col = editor.get_caret_column();
 
         // Save current position to jumplist using centralized tracker
-        let current = Position::new(i32_to_usize(line), i32_to_usize(col));
+        let line_usize = i32_to_usize(line);
+        let byte_col = column_codec::editor_col_to_byte_in_editor(editor, line_usize, i32_to_usize(col));
+        let current = Position::from_byte(line_usize, byte_col);
 
         self.engine.record_jump_at(current);
 

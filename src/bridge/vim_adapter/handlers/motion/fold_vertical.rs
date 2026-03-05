@@ -1,5 +1,6 @@
 use crate::bridge::godot::code_edit_ext::CodeEditExt;
 use crate::bridge::vim_adapter::core::cast::{i32_to_usize, usize_to_i32};
+use crate::bridge::vim_adapter::core::column_codec;
 use crate::bridge::vim_adapter::core::cursor::{move_cursor_with_tracking, CursorMoveType};
 use crate::bridge::vim_adapter::core::snapshot::GodotSnapshot;
 use godot::classes::CodeEdit;
@@ -43,10 +44,7 @@ pub fn execute_vertical_motion_fold_aware_public(
     count: usize,
     _config: &Config,
 ) {
-    let from = Position::new(
-        i32_to_usize(editor.get_caret_line()),
-        i32_to_usize(editor.get_caret_column()),
-    );
+    let from = column_codec::caret_to_core_position(editor);
 
     let direction = match motion {
         Motion::Up => vim_core::domain::fold::VerticalDirection::Up,
@@ -76,35 +74,36 @@ pub fn execute_vertical_motion_fold_aware_public(
     move_cursor_with_tracking(
         editor,
         vim_state,
-        Position::new(target_line, new_col),
+        Position::from_byte(target_line, new_col),
         CursorMoveType::Step,
     );
 
     // Visual mode selection
     if vim_state.mode().is_visual() {
-        let new_head = Position::new(target_line, new_col);
+        let new_head = Position::from_byte(target_line, new_col);
         crate::bridge::vim_adapter::handlers::visual::render_visual_selection(
             editor,
             &vim_state.mode(),
             new_head,
         );
     } else {
-        editor.set_caret_column(usize_to_i32(new_col));
+        let editor_col = column_codec::byte_to_editor_col_in_editor(editor, target_line, new_col);
+        editor.set_caret_column(usize_to_i32(editor_col));
     }
 
     // Update vim_state cursor
-    vim_state.set_cursor_pos(Position::new(target_line, new_col));
+    vim_state.set_cursor_pos(Position::from_byte(target_line, new_col));
 
     // VisualBlock cursor update
     if let Mode::Visual(VisualKind::Block { start, .. }) = vim_state.mode() {
         vim_state.set_mode(Mode::Visual(VisualKind::Block {
             start,
-            cursor: Position::new(target_line, new_col),
+            cursor: Position::from_byte(target_line, new_col),
         }));
         log::debug!(
             "Visual block cursor updated start={:?} cursor={:?}",
             start,
-            Position::new(target_line, new_col)
+            Position::from_byte(target_line, new_col)
         );
     }
 

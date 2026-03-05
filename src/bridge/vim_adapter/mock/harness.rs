@@ -124,7 +124,7 @@ impl TestHarness {
         let actual = self.editor.cursor();
         assert_eq!(
             actual,
-            Position::new(line, col),
+            Position::from_byte(line, col),
             "Expected cursor at ({}, {}), got ({}, {})",
             line,
             col,
@@ -173,7 +173,7 @@ impl TestHarness {
     #[must_use]
     pub fn cursor(&self) -> (usize, usize) {
         let pos = self.editor.cursor();
-        (pos.line, pos.col)
+        (pos.line, usize::from(pos.col))
     }
 
     /// Returns current line content.

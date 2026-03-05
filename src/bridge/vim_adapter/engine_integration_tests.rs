@@ -34,14 +34,14 @@ mod tests {
         let mut engine = VimEngine::new();
 
         engine.set_mode(Mode::Visual(VisualKind::Char {
-            start: Position::new(0, 0),
+            start: Position::from_byte(0, 0),
         }));
         assert!(engine.is_visual());
         assert!(!engine.is_visual_block());
 
         engine.set_mode(Mode::Visual(VisualKind::Block {
-            start: Position::new(0, 0),
-            cursor: Position::new(0, 0),
+            start: Position::from_byte(0, 0),
+            cursor: Position::from_byte(0, 0),
         }));
         assert!(engine.is_visual());
         assert!(engine.is_visual_block());
@@ -59,17 +59,17 @@ mod tests {
     fn facade_cursor_movement_preserves_state() {
         let mut engine = VimEngine::new();
         engine.set_cursor(0, 0);
-        assert_eq!(engine.cursor_pos(), Position::new(0, 0));
+        assert_eq!(engine.cursor_pos(), Position::from_byte(0, 0));
 
         engine.set_cursor(5, 10);
-        assert_eq!(engine.cursor_pos(), Position::new(5, 10));
+        assert_eq!(engine.cursor_pos(), Position::from_byte(5, 10));
 
         engine.set_preferred_column(10);
         assert_eq!(engine.preferred_column(), Some(10));
 
         // sync_cursor should also update
-        engine.sync_cursor(Position::new(3, 7));
-        assert_eq!(engine.cursor_pos(), Position::new(3, 7));
+        engine.sync_cursor(Position::from_byte(3, 7));
+        assert_eq!(engine.cursor_pos(), Position::from_byte(3, 7));
     }
 
     #[test]
@@ -79,12 +79,12 @@ mod tests {
 
         // Start at (0,0) → jump to (10,0) → jump to (20,0)
         engine.set_cursor(0, 0);
-        engine.move_cursor_tracked(Position::new(10, 0), CursorMoveType::Jump);
-        assert_eq!(engine.last_jump_pos(), Some(Position::new(0, 0)));
+        engine.move_cursor_tracked(Position::from_byte(10, 0), CursorMoveType::Jump);
+        assert_eq!(engine.last_jump_pos(), Some(Position::from_byte(0, 0)));
 
-        engine.move_cursor_tracked(Position::new(20, 0), CursorMoveType::Jump);
-        assert_eq!(engine.last_jump_pos(), Some(Position::new(10, 0)));
-        assert_eq!(engine.cursor_pos(), Position::new(20, 0));
+        engine.move_cursor_tracked(Position::from_byte(20, 0), CursorMoveType::Jump);
+        assert_eq!(engine.last_jump_pos(), Some(Position::from_byte(10, 0)));
+        assert_eq!(engine.cursor_pos(), Position::from_byte(20, 0));
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -140,8 +140,8 @@ mod tests {
         assert!(engine.is_insert());
 
         // Initialize quantum buffer at cursor
-        engine.init_quantum_buffer(Position::new(0, 0));
-        assert_eq!(engine.cursor_pos(), Position::new(0, 0));
+        engine.init_quantum_buffer(Position::from_byte(0, 0));
+        assert_eq!(engine.cursor_pos(), Position::from_byte(0, 0));
 
         // Type "Hi"
         engine.record_insert_char('H');

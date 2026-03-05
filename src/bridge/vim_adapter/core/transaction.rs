@@ -7,6 +7,7 @@ use godot::classes::CodeEdit;
 use godot::obj::Gd;
 
 use crate::bridge::vim_adapter::core::cast::{i32_to_usize, usize_to_i32};
+use crate::bridge::vim_adapter::core::column_codec;
 use vim_core::prelude::{EditOp, Transaction};
 use vim_core::protocol::messages::{TextOperation, TransactionPatch};
 
@@ -21,14 +22,22 @@ pub fn apply_transaction(editor: &mut Gd<CodeEdit>, transaction: &Transaction) {
     for edit in &transaction.edits {
         match edit {
             EditOp::Insert { pos, text } => {
-                apply_insert(editor, (pos.line, pos.col), text);
+                apply_insert(editor, (pos.line, usize::from(pos.col)), text);
             }
             EditOp::Delete { start, end } => {
-                apply_delete(editor, (start.line, start.col), (end.line, end.col));
+                apply_delete(
+                    editor,
+                    (start.line, usize::from(start.col)),
+                    (end.line, usize::from(end.col)),
+                );
             }
             EditOp::Replace { start, end, text } => {
-                apply_delete(editor, (start.line, start.col), (end.line, end.col));
-                apply_insert(editor, (start.line, start.col), text);
+                apply_delete(
+                    editor,
+                    (start.line, usize::from(start.col)),
+                    (end.line, usize::from(end.col)),
+                );
+                apply_insert(editor, (start.line, usize::from(start.col)), text);
             }
             EditOp::BlockDelete { .. } | EditOp::BlockInsert { .. } => {
                 log::warn!("Block operations not supported in transaction adapter");
@@ -93,7 +102,8 @@ fn apply_text_ops_batch(editor: &mut Gd<CodeEdit>, ops: &[TextOperation]) {
 fn apply_insert(editor: &mut Gd<CodeEdit>, pos: (usize, usize), text: &str) {
     // Move cursor to position
     editor.set_caret_line(usize_to_i32(pos.0));
-    editor.set_caret_column(usize_to_i32(pos.1));
+    let editor_col = column_codec::byte_to_editor_col_in_editor(editor, pos.0, pos.1);
+    editor.set_caret_column(usize_to_i32(editor_col));
 
     // Insert text
     editor.insert_text_at_caret(text);
@@ -115,7 +125,11 @@ fn apply_delete(editor: &mut Gd<CodeEdit>, start: (usize, usize), end: (usize, u
                 editor.select(usize_to_i32(start_line), 0, usize_to_i32(start_line + 1), 0);
             } else {
                 // Last line - select to end of line
-                let line_len = editor.get_line(usize_to_i32(start_line)).len();
+                let line_len = editor
+                    .get_line(usize_to_i32(start_line))
+                    .to_string()
+                    .chars()
+                    .count();
                 editor.select(
                     usize_to_i32(start_line),
                     0,
@@ -127,20 +141,26 @@ fn apply_delete(editor: &mut Gd<CodeEdit>, start: (usize, usize), end: (usize, u
         }
     } else if start_line == end_line {
         // Same line: simple character range delete
+        let start_editor_col =
+            column_codec::byte_to_editor_col_in_editor(editor, start_line, start_col);
+        let end_editor_col = column_codec::byte_to_editor_col_in_editor(editor, end_line, end_col);
         editor.select(
             usize_to_i32(start_line),
-            usize_to_i32(start_col),
+            usize_to_i32(start_editor_col),
             usize_to_i32(end_line),
-            usize_to_i32(end_col),
+            usize_to_i32(end_editor_col),
         );
         editor.delete_selection();
     } else {
         // Multi-line but not linewise: delete from start to end
+        let start_editor_col =
+            column_codec::byte_to_editor_col_in_editor(editor, start_line, start_col);
+        let end_editor_col = column_codec::byte_to_editor_col_in_editor(editor, end_line, end_col);
         editor.select(
             usize_to_i32(start_line),
-            usize_to_i32(start_col),
+            usize_to_i32(start_editor_col),
             usize_to_i32(end_line),
-            usize_to_i32(end_col),
+            usize_to_i32(end_editor_col),
         );
         editor.delete_selection();
     }

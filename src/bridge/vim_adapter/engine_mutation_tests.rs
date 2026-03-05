@@ -7,7 +7,7 @@
 mod tests {
     use crate::bridge::vim_adapter::engine::VimEngine;
     use vim_core::domain::position::Position;
-    use vim_core::state::mode::Mode;
+    use vim_core::state::mode::{InsertMode, Mode, VisualKind};
 
     // ═══════════════════════════════════════════════════════════════════
     // Mode Transitions
@@ -18,7 +18,7 @@ mod tests {
         let mut engine = VimEngine::new();
         assert!(engine.is_normal());
 
-        engine.set_mode(Mode::Insert { count: 1 });
+        engine.set_mode(Mode::Insert(InsertMode::Standard { count: 1 }));
         assert!(engine.is_insert());
         assert!(!engine.is_normal());
     }
@@ -26,16 +26,16 @@ mod tests {
     #[test]
     fn set_mode_to_visual() {
         let mut engine = VimEngine::new();
-        engine.set_mode(Mode::Visual {
-            start: Position::new(0, 0),
-        });
+        engine.set_mode(Mode::Visual(VisualKind::Char {
+            start: Position::from_byte(0, 0),
+        }));
         assert!(engine.is_visual());
     }
 
     #[test]
     fn set_mode_roundtrip_back_to_normal() {
         let mut engine = VimEngine::new();
-        engine.set_mode(Mode::Insert { count: 1 });
+        engine.set_mode(Mode::Insert(InsertMode::Standard { count: 1 }));
         assert!(engine.is_insert());
         engine.set_mode(Mode::Normal);
         assert!(engine.is_normal());
@@ -48,8 +48,8 @@ mod tests {
     #[test]
     fn sync_cursor_updates_position() {
         let mut engine = VimEngine::new();
-        engine.sync_cursor(Position::new(7, 3));
-        assert_eq!(engine.cursor_pos(), Position::new(7, 3));
+        engine.sync_cursor(Position::from_byte(7, 3));
+        assert_eq!(engine.cursor_pos(), Position::from_byte(7, 3));
     }
 
     #[test]
@@ -57,8 +57,8 @@ mod tests {
         use crate::bridge::vim_adapter::core::cursor::CursorMoveType;
         let mut engine = VimEngine::new();
         engine.set_cursor(0, 0);
-        engine.move_cursor_tracked(Position::new(10, 5), CursorMoveType::Jump);
-        assert_eq!(engine.cursor_pos(), Position::new(10, 5));
+        engine.move_cursor_tracked(Position::from_byte(10, 5), CursorMoveType::Jump);
+        assert_eq!(engine.cursor_pos(), Position::from_byte(10, 5));
     }
 
     #[test]
@@ -66,17 +66,17 @@ mod tests {
         use crate::bridge::vim_adapter::core::cursor::CursorMoveType;
         let mut engine = VimEngine::new();
         engine.set_cursor(3, 7);
-        engine.move_cursor_tracked(Position::new(10, 0), CursorMoveType::Jump);
+        engine.move_cursor_tracked(Position::from_byte(10, 0), CursorMoveType::Jump);
         // The old position (3,7) should be in the jump list → accessible via last_jump_pos
-        assert_eq!(engine.last_jump_pos(), Some(Position::new(3, 7)));
+        assert_eq!(engine.last_jump_pos(), Some(Position::from_byte(3, 7)));
     }
 
     #[test]
     fn move_cursor_tracked_step_no_jump() {
         use crate::bridge::vim_adapter::core::cursor::CursorMoveType;
         let mut engine = VimEngine::new();
-        engine.move_cursor_tracked(Position::new(1, 0), CursorMoveType::Step);
-        assert_eq!(engine.cursor_pos(), Position::new(1, 0));
+        engine.move_cursor_tracked(Position::from_byte(1, 0), CursorMoveType::Step);
+        assert_eq!(engine.cursor_pos(), Position::from_byte(1, 0));
         // Step should not record a jump
         assert!(engine.last_jump_pos().is_none());
     }
@@ -84,8 +84,8 @@ mod tests {
     #[test]
     fn record_jump_at_saves_position() {
         let mut engine = VimEngine::new();
-        engine.record_jump_at(Position::new(42, 10));
-        assert_eq!(engine.last_jump_pos(), Some(Position::new(42, 10)));
+        engine.record_jump_at(Position::from_byte(42, 10));
+        assert_eq!(engine.last_jump_pos(), Some(Position::from_byte(42, 10)));
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -124,7 +124,7 @@ mod tests {
     fn record_insert_char_updates_cursor() {
         let mut engine = VimEngine::new();
         // Initialize quantum buffer at (0,0)
-        engine.init_quantum_buffer(Position::new(0, 0));
+        engine.init_quantum_buffer(Position::from_byte(0, 0));
         engine.record_insert_char('h');
         // After inserting 'h', cursor should advance to col 1
         assert_eq!(engine.cursor_pos().col, 1);
@@ -134,8 +134,8 @@ mod tests {
     fn init_quantum_buffer_resets_cursor() {
         let mut engine = VimEngine::new();
         engine.set_cursor(5, 5);
-        engine.init_quantum_buffer(Position::new(2, 3));
-        assert_eq!(engine.cursor_pos(), Position::new(2, 3));
+        engine.init_quantum_buffer(Position::from_byte(2, 3));
+        assert_eq!(engine.cursor_pos(), Position::from_byte(2, 3));
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -186,16 +186,16 @@ mod tests {
     #[test]
     fn set_mark_and_get_mark_roundtrip() {
         let mut engine = VimEngine::new();
-        engine.set_mark('a', Position::new(10, 5));
-        assert_eq!(engine.get_mark('a'), Some(Position::new(10, 5)));
+        engine.set_mark('a', Position::from_byte(10, 5));
+        assert_eq!(engine.get_mark('a'), Some(Position::from_byte(10, 5)));
     }
 
     #[test]
     fn set_mark_overwrite() {
         let mut engine = VimEngine::new();
-        engine.set_mark('b', Position::new(1, 1));
-        engine.set_mark('b', Position::new(2, 2));
-        assert_eq!(engine.get_mark('b'), Some(Position::new(2, 2)));
+        engine.set_mark('b', Position::from_byte(1, 1));
+        engine.set_mark('b', Position::from_byte(2, 2));
+        assert_eq!(engine.get_mark('b'), Some(Position::from_byte(2, 2)));
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -220,15 +220,15 @@ mod tests {
     #[test]
     fn set_last_change_roundtrip() {
         let mut engine = VimEngine::new();
-        engine.set_last_change(Position::new(5, 0));
-        assert_eq!(engine.last_change_pos(), Some(Position::new(5, 0)));
+        engine.set_last_change(Position::from_byte(5, 0));
+        assert_eq!(engine.last_change_pos(), Some(Position::from_byte(5, 0)));
     }
 
     #[test]
     fn set_last_insert_roundtrip() {
         let mut engine = VimEngine::new();
-        engine.set_last_insert(Position::new(8, 4));
-        assert_eq!(engine.last_insert_pos(), Some(Position::new(8, 4)));
+        engine.set_last_insert(Position::from_byte(8, 4));
+        assert_eq!(engine.last_insert_pos(), Some(Position::from_byte(8, 4)));
     }
 
     // ═══════════════════════════════════════════════════════════════════

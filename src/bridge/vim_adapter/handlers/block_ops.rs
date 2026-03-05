@@ -5,6 +5,7 @@
 //! Only transaction application and multi-caret cleanup are handled here.
 
 use crate::bridge::vim_adapter::core::cast::usize_to_i32;
+use crate::bridge::vim_adapter::core::column_codec;
 use crate::bridge::vim_wrapper::VimController;
 use godot::classes::CodeEdit;
 use godot::prelude::*;
@@ -85,7 +86,8 @@ impl BlockOpsHandler for VimController {
 
             // Position cursor at top-left of block for insert
             editor.set_caret_line(usize_to_i32(min_line));
-            editor.set_caret_column(usize_to_i32(col));
+            let editor_col = column_codec::byte_to_editor_col_in_editor(&editor, min_line, col);
+            editor.set_caret_column(usize_to_i32(editor_col));
 
             // The mode was already set to BlockInsert by the processor; synchronise here.
             self.engine.set_mode(Mode::Insert(InsertMode::BlockInsert {
@@ -119,7 +121,8 @@ impl BlockOpsHandler for VimController {
             // Position the cursor at the top line, after the block selection end (append).
             editor.set_caret_line(usize_to_i32(min_line));
             // Position at the append column (already calculated as selection_end + 1)
-            editor.set_caret_column(usize_to_i32(end_col));
+            let editor_col = column_codec::byte_to_editor_col_in_editor(&editor, min_line, end_col);
+            editor.set_caret_column(usize_to_i32(editor_col));
 
             // Set mode to BlockAppend so Esc triggers FinishBlockAppend (not FinishBlockInsert)
             self.engine.set_mode(Mode::Insert(InsertMode::BlockAppend {
@@ -152,7 +155,9 @@ impl BlockOpsHandler for VimController {
 
         // Position cursor at top-left of block (origin), matching Vim behavior
         editor.set_caret_line(usize_to_i32(origin.line));
-        editor.set_caret_column(usize_to_i32(origin.col));
+        let origin_col =
+            column_codec::byte_to_editor_col_in_editor(editor, origin.line, usize::from(origin.col));
+        editor.set_caret_column(usize_to_i32(origin_col));
     }
 
     fn handle_finish_block_append(
@@ -177,7 +182,9 @@ impl BlockOpsHandler for VimController {
 
         // Position cursor at top-left of block (origin), matching Vim behavior
         editor.set_caret_line(usize_to_i32(origin.line));
-        editor.set_caret_column(usize_to_i32(origin.col));
+        let origin_col =
+            column_codec::byte_to_editor_col_in_editor(editor, origin.line, usize::from(origin.col));
+        editor.set_caret_column(usize_to_i32(origin_col));
     }
 
     fn handle_block_insert_preview(
@@ -202,21 +209,20 @@ impl BlockOpsHandler for VimController {
 
         editor.begin_complex_operation();
 
-        // Calculate insert column (current position after previous chars)
-        // For first char: insert at col
-        // For subsequent: insert at col + (char_count - 1)
-        // Use char count for correct positioning with Unicode
         let text_char_count = text.chars().count();
-        let insert_col = col + text_char_count - 1;
 
         // First, add secondary carets on all lines except primary
         for line_idx in (start_line + 1)..=end_line {
+            let base_col = column_codec::byte_to_editor_col_in_editor(editor, line_idx, col);
+            let insert_col = base_col + text_char_count - 1;
             let line_len = editor.get_line(usize_to_i32(line_idx)).len();
             let actual_col = insert_col.min(line_len);
             editor.add_caret(usize_to_i32(line_idx), usize_to_i32(actual_col));
         }
 
         // Position primary caret
+        let primary_base_col = column_codec::byte_to_editor_col_in_editor(editor, start_line, col);
+        let insert_col = primary_base_col + text_char_count - 1;
         let primary_line_len = editor.get_line(usize_to_i32(start_line)).len();
         let primary_col = insert_col.min(primary_line_len);
         editor.set_caret_line(usize_to_i32(start_line));
@@ -232,8 +238,7 @@ impl BlockOpsHandler for VimController {
 
         // Keep primary caret at new position (after inserted char)
         editor.set_caret_line(usize_to_i32(start_line));
-        // Use char count for correct cursor positioning with Unicode
-        editor.set_caret_column(usize_to_i32(col + text.chars().count()));
+        editor.set_caret_column(usize_to_i32(primary_base_col + text_char_count));
 
         editor.end_complex_operation();
     }
@@ -257,13 +262,12 @@ impl BlockOpsHandler for VimController {
 
         editor.begin_complex_operation();
 
-        // Compute the deletion column from the char count of the remaining text prefix
-        // (Unicode-aware), accounting for the character that was removed at that position.
         let text_char_count = text.chars().count();
-        let delete_col = col + text_char_count;
 
         // Add secondary carets on all lines except primary
         for line_idx in (start_line + 1)..=end_line {
+            let base_col = column_codec::byte_to_editor_col_in_editor(editor, line_idx, col);
+            let delete_col = base_col + text_char_count;
             let line_len = editor.get_line(usize_to_i32(line_idx)).len();
             if delete_col < line_len {
                 // Position caret after the char to delete
@@ -272,6 +276,8 @@ impl BlockOpsHandler for VimController {
         }
 
         // Position primary caret after the char to delete
+        let primary_base_col = column_codec::byte_to_editor_col_in_editor(editor, start_line, col);
+        let delete_col = primary_base_col + text_char_count;
         let primary_line_len = editor.get_line(usize_to_i32(start_line)).len();
         if delete_col < primary_line_len {
             editor.set_caret_line(usize_to_i32(start_line));
@@ -286,8 +292,7 @@ impl BlockOpsHandler for VimController {
 
         // Position cursor correctly
         editor.set_caret_line(usize_to_i32(start_line));
-        // Use char count for correct cursor positioning with Unicode
-        editor.set_caret_column(usize_to_i32(col + text_char_count));
+        editor.set_caret_column(usize_to_i32(primary_base_col + text_char_count));
 
         editor.end_complex_operation();
     }

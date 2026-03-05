@@ -247,12 +247,10 @@ impl GodotVimPlugin {
                         );
                     }
                 }
-            } else {
-                if let Some(ref mut controller) = self.vim_controller {
-                    controller
-                        .bind_mut()
-                        .process_mapped_key(MappedAction::Command(cmd_str));
-                }
+            } else if let Some(ref mut controller) = self.vim_controller {
+                controller
+                    .bind_mut()
+                    .process_mapped_key(MappedAction::Command(cmd_str));
             }
         } else if !is_global {
             if let Some(ref mut controller) = self.vim_controller {

@@ -206,7 +206,7 @@ mod tests {
         let mut state = VimState::new();
         let snap = VisualTracker::snapshot(&state);
 
-        state.set_cursor_pos(Position::new(5, 0));
+        state.set_cursor_pos(Position::from_byte(5, 0));
 
         let dirty = tracker.diff(&snap, &state, false);
 
@@ -237,7 +237,7 @@ mod tests {
         let snap = VisualTracker::snapshot(&state);
 
         state.set_mode(Mode::Visual(VisualKind::Char {
-            start: Position::new(0, 0),
+            start: Position::from_byte(0, 0),
         }));
 
         let dirty = tracker.diff(&snap, &state, false);
@@ -251,11 +251,11 @@ mod tests {
         let mut tracker = VisualTracker::new();
         let mut state = VimState::new();
         state.set_mode(Mode::Visual(VisualKind::Char {
-            start: Position::new(0, 0),
+            start: Position::from_byte(0, 0),
         }));
         let snap = VisualTracker::snapshot(&state);
 
-        state.set_cursor_pos(Position::new(2, 0));
+        state.set_cursor_pos(Position::from_byte(2, 0));
 
         let dirty = tracker.diff(&snap, &state, false);
 

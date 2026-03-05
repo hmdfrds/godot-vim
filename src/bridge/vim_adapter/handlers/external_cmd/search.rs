@@ -1,6 +1,7 @@
 //! Search operations: SearchNext, SearchPrev, SearchWord*.
 
 use crate::bridge::vim_adapter::core::cast::{i32_to_usize, usize_to_i32};
+use crate::bridge::vim_adapter::core::column_codec;
 use crate::bridge::vim_adapter::core::cursor::CursorMoveType;
 use crate::bridge::vim_wrapper::VimController;
 use crate::bridge::vim_wrapper_util::extract_word_at_col;
@@ -31,7 +32,9 @@ impl VimController {
                 .set_caret_line_ex(usize_to_i32(pos.line))
                 .can_be_hidden(false)
                 .done();
-            editor.set_caret_column(usize_to_i32(pos.col));
+            let editor_col =
+                column_codec::byte_to_editor_col_in_editor(editor, pos.line, usize::from(pos.col));
+            editor.set_caret_column(usize_to_i32(editor_col));
             log::debug!("Search found pattern={} forward={}", pattern, forward);
         } else {
             log::debug!("Pattern '{}' not found", pattern);
@@ -61,7 +64,9 @@ impl VimController {
                 .set_caret_line_ex(usize_to_i32(pos.line))
                 .can_be_hidden(false)
                 .done();
-            editor.set_caret_column(usize_to_i32(pos.col));
+            let editor_col =
+                column_codec::byte_to_editor_col_in_editor(editor, pos.line, usize::from(pos.col));
+            editor.set_caret_column(usize_to_i32(editor_col));
             log::debug!("Word search found word={} forward={}", word, forward);
         } else {
             log::debug!("Word search: '{}' not found", word);
@@ -101,7 +106,10 @@ pub fn perform_search_and_locate(
 
     if result.x >= 0 && result.y >= 0 {
         if let Some((line, col)) = validate_search_position(editor, result.y, result.x) {
-            return Some(Position::new(i32_to_usize(line), i32_to_usize(col)));
+            let line_usize = i32_to_usize(line);
+            let byte_col =
+                column_codec::editor_col_to_byte_in_editor(editor, line_usize, i32_to_usize(col));
+            return Some(Position::from_byte(line_usize, byte_col));
         }
     }
 
@@ -118,7 +126,10 @@ pub fn perform_search_and_locate(
     if wrap_result.x >= 0 && wrap_result.y >= 0 {
         if let Some((line, col)) = validate_search_position(editor, wrap_result.y, wrap_result.x) {
             log::debug!("Found pattern={} (wrapped)", pattern);
-            return Some(Position::new(i32_to_usize(line), i32_to_usize(col)));
+            let line_usize = i32_to_usize(line);
+            let byte_col =
+                column_codec::editor_col_to_byte_in_editor(editor, line_usize, i32_to_usize(col));
+            return Some(Position::from_byte(line_usize, byte_col));
         }
     }
 

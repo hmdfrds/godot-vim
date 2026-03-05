@@ -3,25 +3,26 @@
 //! # ADR: Own Position Type
 //!
 //! **Context**: vim-core's `Position` has rkyv serialization, `derive_more::Display`,
-//! and many internal methods. The shell only needs (line, col) for caret placement.
+//! and many internal methods. The shell only needs (line, col) for core coordinates.
 //!
-//! **Decision**: `CursorPos` is a minimal (line, col) newtype. The adapter converts.
+//! **Decision**: `CursorPos` is a minimal (line, byte-col) newtype. The adapter converts at editor boundaries.
 //!
 //! **Consequence**: Shell components never import vim-core's `Position`. If vim-core
 //! changes `Position`, only `vim_adapter/convert.rs` updates.
 
 use std::cmp::Ordering;
 
-/// A cursor position in a document (0-indexed line and column).
+/// A cursor position in a document (0-indexed line and UTF-8 byte column).
 ///
 /// # Invariant
 ///
 /// `line` and `col` are 0-indexed and refer to logical (unwrapped) positions.
+/// `col` is a UTF-8 byte offset, not an editor character index.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
 pub struct CursorPos {
     /// Line number (0-indexed).
     pub line: usize,
-    /// Column number (0-indexed).
+    /// UTF-8 byte column (0-indexed).
     pub col: usize,
 }
 

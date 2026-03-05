@@ -3,6 +3,7 @@
 //! Handles character typing, motion execution, undo/redo, and paste operations.
 
 use crate::bridge::vim_adapter::core::cast::{i32_to_usize, usize_to_i32};
+use crate::bridge::vim_adapter::core::column_codec;
 use crate::bridge::vim_adapter::core::cursor::CursorMoveType;
 use crate::bridge::vim_adapter::handlers::edit::perform_paste;
 use crate::bridge::vim_adapter::handlers::motion;
@@ -33,7 +34,7 @@ impl VimController {
         let pos = Self::cursor_from_editor(&editor);
         self.engine.set_last_change(pos);
         let line = usize_to_i32(pos.line);
-        let col = usize_to_i32(pos.col);
+        let col = usize_to_i32(usize::from(pos.col));
 
         // Handle newline separately (special indentation logic)
         if c == '\n' {
@@ -80,11 +81,18 @@ impl VimController {
 
             for op in edits {
                 if let EditOp::Replace { start, end, text } = op {
+                    let start_col = column_codec::byte_to_editor_col_in_editor(
+                        &editor,
+                        start.line,
+                        usize::from(start.col),
+                    );
+                    let end_col =
+                        column_codec::byte_to_editor_col_in_editor(&editor, end.line, usize::from(end.col));
                     editor.remove_text(
                         usize_to_i32(start.line),
-                        usize_to_i32(start.col),
+                        usize_to_i32(start_col),
                         usize_to_i32(end.line),
-                        usize_to_i32(end.col),
+                        usize_to_i32(end_col),
                     );
                     editor.insert_text_at_caret(&*text);
                 }
@@ -196,14 +204,16 @@ impl VimController {
         let line_text = editor.get_line(line).to_string();
         let first_nonblank = line_text.find(|c: char| !c.is_whitespace()).unwrap_or(0);
 
-        let target = Position::new(i32_to_usize(line), first_nonblank);
+        let target = Position::from_byte(i32_to_usize(line), first_nonblank);
         self.engine
             .move_cursor_tracked(target, CursorMoveType::Step);
         editor
             .set_caret_line_ex(usize_to_i32(target.line))
             .can_be_hidden(false)
             .done();
-        editor.set_caret_column(usize_to_i32(target.col));
+        let editor_col =
+            column_codec::byte_to_editor_col_in_editor(editor, target.line, usize::from(target.col));
+        editor.set_caret_column(usize_to_i32(editor_col));
     }
 
     /// Handles insert at last position (gi command).
@@ -213,17 +223,18 @@ impl VimController {
                 // Clamp to valid buffer bounds before moving.
                 let line_count = i32_to_usize(editor.get_line_count());
                 let line = pos.line.min(line_count.saturating_sub(1));
-                let line_len = editor.get_line(usize_to_i32(line)).len();
-                let col = pos.col.min(line_len);
+                let line_len = editor.get_line(usize_to_i32(line)).to_string().len();
+                let col = usize::from(pos.col).min(line_len);
 
-                let target = Position::new(line, col);
+                let target = Position::from_byte(line, col);
                 self.engine
                     .move_cursor_tracked(target, CursorMoveType::Jump);
                 editor
                     .set_caret_line_ex(usize_to_i32(target.line))
                     .can_be_hidden(false)
                     .done();
-                editor.set_caret_column(usize_to_i32(target.col));
+                let editor_col = column_codec::byte_to_editor_col_in_editor(editor, target.line, col);
+                editor.set_caret_column(usize_to_i32(editor_col));
                 log::debug!("gi: jumped to last insert position line={} col={}", line, col);
             }
             None => {

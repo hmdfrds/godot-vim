@@ -7,6 +7,7 @@
 //! Only clipboard I/O and transaction application are handled here.
 
 use crate::bridge::vim_adapter::core::cast::i32_to_usize;
+use crate::bridge::vim_adapter::core::column_codec;
 use crate::bridge::vim_adapter::core::snapshot::GodotSnapshot;
 use crate::bridge::vim_adapter::core::transaction;
 use vim_core::domain::position::Position;
@@ -35,10 +36,10 @@ pub fn perform_paste(
         return;
     }
 
-    let cursor = Position::new(
-        i32_to_usize(editor.get_caret_line()),
-        i32_to_usize(editor.get_caret_column()),
-    );
+    let line = i32_to_usize(editor.get_caret_line());
+    let editor_col = i32_to_usize(editor.get_caret_column());
+    let byte_col = column_codec::editor_col_to_byte_in_editor(editor, line, editor_col);
+    let cursor = Position::from_byte(line, byte_col);
 
     let snapshot = GodotSnapshot::from_editor(editor);
     let tx = execute_paste(

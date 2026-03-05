@@ -31,8 +31,8 @@ impl MockEditor {
     pub fn new() -> Self {
         Self {
             lines: vec![String::new()],
-            cursor: Position::new(0, 0),
-            anchor: Position::new(0, 0),
+            cursor: Position::from_byte(0, 0),
+            anchor: Position::from_byte(0, 0),
             folded_lines: std::collections::HashSet::new(),
         }
     }
@@ -47,8 +47,8 @@ impl MockEditor {
         };
         Self {
             lines,
-            cursor: Position::new(0, 0),
-            anchor: Position::new(0, 0),
+            cursor: Position::from_byte(0, 0),
+            anchor: Position::from_byte(0, 0),
             folded_lines: std::collections::HashSet::new(),
         }
     }
@@ -57,7 +57,7 @@ impl MockEditor {
     pub fn set_cursor(&mut self, line: usize, col: usize) {
         let line = line.min(self.lines.len().saturating_sub(1));
         let col = col.min(self.line_len(line));
-        self.cursor = Position::new(line, col);
+        self.cursor = Position::from_byte(line, col);
         self.anchor = self.cursor;
     }
 
@@ -120,7 +120,7 @@ impl MockEditor {
     /// Inserts text at the current cursor position.
     pub fn insert_text(&mut self, text: &str) {
         let line = self.cursor.line;
-        let col = self.cursor.col;
+        let col = usize::from(self.cursor.col);
 
         // Handle multi-line insertion
         let insert_lines: Vec<&str> = text.split('\n').collect();
@@ -152,7 +152,7 @@ impl MockEditor {
 
             // Update cursor
             self.cursor.line = line + last_idx;
-            self.cursor.col = insert_lines[last_idx].len();
+            self.cursor.col = insert_lines[last_idx].len().into();
         }
 
         self.anchor = self.cursor;
@@ -164,7 +164,7 @@ impl MockEditor {
             // Delete single character at cursor
             if let Some(line) = self.lines.get_mut(self.cursor.line) {
                 if self.cursor.col < line.len() {
-                    line.remove(self.cursor.col);
+                    line.remove(usize::from(self.cursor.col));
                 }
             }
             return;
@@ -268,7 +268,7 @@ mod tests {
     fn test_set_cursor_clamps_to_bounds() {
         let mut editor = MockEditor::with_content("short");
         editor.set_cursor(100, 100);
-        assert_eq!(editor.cursor(), Position::new(0, 5));
+        assert_eq!(editor.cursor(), Position::from_byte(0, 5));
     }
 
     #[test]
@@ -283,7 +283,7 @@ mod tests {
     #[test]
     fn test_delete_selection() {
         let mut editor = MockEditor::with_content("hello world");
-        editor.set_selection(Position::new(0, 0), Position::new(0, 6));
+        editor.set_selection(Position::from_byte(0, 0), Position::from_byte(0, 6));
         editor.delete_selection();
         assert_eq!(editor.line(0).as_ref(), "world");
     }

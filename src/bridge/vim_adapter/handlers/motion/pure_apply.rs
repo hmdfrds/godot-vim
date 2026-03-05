@@ -1,4 +1,5 @@
 use crate::bridge::vim_adapter::core::cast::{i32_to_usize, usize_to_i32};
+use crate::bridge::vim_adapter::core::column_codec;
 use crate::bridge::vim_adapter::core::snapshot::GodotSnapshot;
 use crate::bridge::vim_adapter::handlers::visual;
 use crate::bridge::vim_wrapper::VimController;
@@ -48,12 +49,12 @@ fn resolve_current_pos(editor: &Gd<CodeEdit>, vim_state: &VimState) -> Position 
 
 fn build_selection_for_mode(vim_state: &VimState, current_pos: Position) -> Selection {
     match vim_state.mode() {
-        Mode::Visual(VisualKind::Char { start }) => Selection::new(Position::new(start.line, start.col), current_pos),
+        Mode::Visual(VisualKind::Char { start }) => Selection::new(Position::from_byte(start.line, start.col), current_pos),
         Mode::Visual(VisualKind::Line { start_line }) => {
-            Selection::new(Position::new(start_line, 0), current_pos)
+            Selection::new(Position::from_byte(start_line, 0), current_pos)
         }
         Mode::Visual(VisualKind::Block { start, cursor: _ }) => {
-            Selection::new(Position::new(start.line, start.col), current_pos)
+            Selection::new(Position::from_byte(start.line, start.col), current_pos)
         }
         _ => Selection::at(current_pos),
     }
@@ -100,14 +101,19 @@ fn apply_result_to_editor_and_state(
     move_cursor_with_tracking(
         editor,
         vim_state,
-        Position::new(target_line, new_sel.head.col),
+        Position::from_byte(target_line, new_sel.head.col),
         move_type,
     );
 
     if vim_state.mode().is_visual() {
         visual::render_visual_selection(editor, &vim_state.mode(), new_sel.head);
     } else {
-        editor.set_caret_column(usize_to_i32(new_sel.head.col));
+        let editor_col = column_codec::byte_to_editor_col_in_editor(
+            editor,
+            new_sel.head.line,
+            usize::from(new_sel.head.col),
+        );
+        editor.set_caret_column(usize_to_i32(editor_col));
     }
 
     if let Mode::Visual(VisualKind::Block { start, .. }) = vim_state.mode() {

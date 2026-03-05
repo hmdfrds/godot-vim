@@ -2,6 +2,7 @@
 
 use crate::bridge::godot::code_edit_ext::CodeEditExt;
 use crate::bridge::vim_adapter::core::cast::usize_to_i32;
+use crate::bridge::vim_adapter::core::column_codec;
 use crate::bridge::vim_adapter::controller::signals::SignalHandlersTrait;
 use crate::bridge::vim_adapter::managers::visual_tracker::{DirtyFlags, VisualSnapshot};
 use crate::bridge::vim_wrapper::VimController;
@@ -48,7 +49,9 @@ impl VimController {
     pub(crate) fn sync_cursor_to_editor(&mut self) {
         if let Some(mut editor) = self.get_editor() {
             let target = self.engine.cursor_pos();
-            editor.set_caret_unfold(usize_to_i32(target.line), usize_to_i32(target.col));
+            let editor_col =
+                column_codec::byte_to_editor_col_in_editor(&editor, target.line, usize::from(target.col));
+            editor.set_caret_unfold(usize_to_i32(target.line), usize_to_i32(editor_col));
         }
     }
 }

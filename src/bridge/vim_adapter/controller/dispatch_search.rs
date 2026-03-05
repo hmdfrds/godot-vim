@@ -6,6 +6,7 @@
 
 use crate::bridge::godot::code_edit_ext::CodeEditExt;
 use crate::bridge::vim_adapter::core::cast::{i32_to_usize, usize_to_i32};
+use crate::bridge::vim_adapter::core::column_codec;
 use crate::bridge::vim_wrapper::VimController;
 use godot::prelude::*;
 use vim_core::domain::position::Position;
@@ -18,7 +19,11 @@ impl VimController {
         };
 
         let cursor_pos = Self::cursor_from_editor(&editor);
-        let cursor = usize_to_i32(cursor_pos.col);
+        let cursor = usize_to_i32(column_codec::byte_to_editor_col_in_editor(
+            &editor,
+            cursor_pos.line,
+            usize::from(cursor_pos.col),
+        ));
         let line = usize_to_i32(cursor_pos.line);
 
         let mut flags = godot::classes::text_edit::SearchFlags::MATCH_CASE;
@@ -29,9 +34,15 @@ impl VimController {
         let result = editor.search(&GString::from(&pattern), flags, line, cursor);
         if result.x >= 0 {
             editor.set_caret_unfold(result.y, result.x);
-            self.engine.sync_cursor(Position::new(
-                i32_to_usize(result.y),
+            let result_line = i32_to_usize(result.y);
+            let result_col = column_codec::editor_col_to_byte_in_editor(
+                &editor,
+                result_line,
                 i32_to_usize(result.x),
+            );
+            self.engine.sync_cursor(Position::from_byte(
+                result_line,
+                result_col,
             ));
         } else {
             log::debug!("Search pattern not found: {}", pattern);

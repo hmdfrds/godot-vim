@@ -18,6 +18,7 @@ use godot::obj::Gd;
 use lru::LruCache;
 
 use crate::bridge::vim_adapter::core::cast::{i32_to_usize, usize_to_i32};
+use crate::bridge::vim_adapter::core::column_codec;
 use vim_core::domain::capabilities::viewport::ViewportCapability;
 use vim_core::domain::fold::{FoldProvider, VerticalDirection};
 use vim_core::domain::position::Position;
@@ -63,7 +64,9 @@ impl GodotSnapshot {
         // O(1) metadata capture
         let line_count = i32_to_usize(editor_clone.get_line_count());
         let cursor_line = i32_to_usize(editor_clone.get_caret_line());
-        let cursor_col = i32_to_usize(editor_clone.get_caret_column());
+        let cursor_editor_col = i32_to_usize(editor_clone.get_caret_column());
+        let cursor_col =
+            column_codec::editor_col_to_byte_in_editor(&editor_clone, cursor_line, cursor_editor_col);
 
         // Capture the visual selection if present.
         // Godot's selection end is exclusive (points past the last selected character).
@@ -72,32 +75,46 @@ impl GodotSnapshot {
         // The pure core adds +1 back via is_inclusive() when computing operation ranges.
         let (anchor, head) = if editor_clone.has_selection() {
             let sel_from_line = i32_to_usize(editor_clone.get_selection_from_line());
-            let sel_from_col = i32_to_usize(editor_clone.get_selection_from_column());
+            let sel_from_editor_col = i32_to_usize(editor_clone.get_selection_from_column());
             let sel_to_line = i32_to_usize(editor_clone.get_selection_to_line());
-            let sel_to_col = i32_to_usize(editor_clone.get_selection_to_column());
+            let sel_to_editor_col = i32_to_usize(editor_clone.get_selection_to_column());
+
+            let sel_from_col = column_codec::editor_col_to_byte_in_editor(
+                &editor_clone,
+                sel_from_line,
+                sel_from_editor_col,
+            );
 
             // Convert from Godot display format (exclusive end) to Vim logical format
             // by subtracting 1 from the end column (saturating to prevent underflow)
-            let logical_to_col = sel_to_col.saturating_sub(1);
+            let logical_to_col = if sel_to_editor_col > 0 {
+                column_codec::editor_col_to_byte_in_editor(
+                    &editor_clone,
+                    sel_to_line,
+                    sel_to_editor_col - 1,
+                )
+            } else {
+                0
+            };
 
             // Determine which end is anchor vs head based on cursor position
-            if (cursor_line, cursor_col) == (sel_to_line, sel_to_col) {
+            if (cursor_line, cursor_editor_col) == (sel_to_line, sel_to_editor_col) {
                 // Cursor at end = forward selection
                 (
-                    Position::new(sel_from_line, sel_from_col),
-                    Position::new(sel_to_line, logical_to_col),
+                    Position::from_byte(sel_from_line, sel_from_col),
+                    Position::from_byte(sel_to_line, logical_to_col),
                 )
             } else {
                 // Cursor at start = backward selection
                 // For a backward selection, the "from" position is numerically higher.
                 (
-                    Position::new(sel_to_line, logical_to_col),
-                    Position::new(sel_from_line, sel_from_col),
+                    Position::from_byte(sel_to_line, logical_to_col),
+                    Position::from_byte(sel_from_line, sel_from_col),
                 )
             }
         } else {
             // No selection = cursor only
-            let pos = Position::new(cursor_line, cursor_col);
+            let pos = Position::from_byte(cursor_line, cursor_col);
             (pos, pos)
         };
 
@@ -296,7 +313,11 @@ impl SearchProvider for GodotSnapshot {
             &godot::prelude::GString::from(pattern),
             flags,
             usize_to_i32(from.line),
-            usize_to_i32(from.col),
+            usize_to_i32(column_codec::byte_to_editor_col_in_editor(
+                &self.editor,
+                from.line,
+                usize::from(from.col),
+            )),
         );
 
         if result.x == -1 && wrap {
@@ -304,7 +325,7 @@ impl SearchProvider for GodotSnapshot {
                 (0, 0)
             } else {
                 let last_line = self.editor.get_line_count() - 1;
-                let last_col = self.editor.get_line(last_line).len() as i32;
+                let last_col = self.editor.get_line(last_line).to_string().chars().count() as i32;
                 (last_line, last_col)
             };
             result = self.editor.search(
@@ -319,10 +340,14 @@ impl SearchProvider for GodotSnapshot {
             return None;
         }
 
-        let match_start = Position::new(i32_to_usize(result.y), i32_to_usize(result.x));
+        let match_line = i32_to_usize(result.y);
+        let match_start_col =
+            column_codec::editor_col_to_byte_in_editor(&self.editor, match_line, i32_to_usize(result.x));
+        let match_start = Position::from_byte(match_line, match_start_col);
         let pattern_len = pattern.chars().count();
-        let end_col = i32_to_usize(result.x) + pattern_len.saturating_sub(1);
-        let match_end = Position::new(i32_to_usize(result.y), end_col);
+        let end_editor_col = i32_to_usize(result.x) + pattern_len.saturating_sub(1);
+        let end_col = column_codec::editor_col_to_byte_in_editor(&self.editor, match_line, end_editor_col);
+        let match_end = Position::from_byte(match_line, end_col);
 
         Some((match_start, match_end))
     }
@@ -403,12 +428,12 @@ mod tests {
     #[test]
     fn test_eager_snapshot_cursor() {
         let snap = EagerSnapshot::new(vec!["Hello".to_string()], Selection::cursor(0, 3));
-        assert_eq!(snap.cursor(), Position::new(0, 3));
+        assert_eq!(snap.cursor(), Position::from_byte(0, 3));
     }
 
     #[test]
     fn test_eager_snapshot_selection() {
-        let sel = Selection::new(Position::new(0, 0), Position::new(0, 5));
+        let sel = Selection::new(Position::from_byte(0, 0), Position::from_byte(0, 5));
         let snap = EagerSnapshot::new(vec!["Hello World".to_string()], sel);
         assert_eq!(snap.selection(), sel);
     }

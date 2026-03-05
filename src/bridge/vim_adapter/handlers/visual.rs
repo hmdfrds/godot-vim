@@ -1,5 +1,6 @@
 use crate::bridge::components::cmdline::VimCmdLine;
 use crate::bridge::vim_adapter::core::cast::usize_to_i32;
+use crate::bridge::vim_adapter::core::column_codec;
 use godot::classes::text_edit::CaretType;
 use godot::classes::CodeEdit;
 use godot::prelude::*;
@@ -38,9 +39,17 @@ pub fn render_visual_selection(editor: &mut Gd<CodeEdit>, mode: &Mode, head: Pos
     match mode {
         Mode::Visual(VisualKind::Char { start }) => {
             let start_line = usize_to_i32(start.line);
-            let start_col = usize_to_i32(start.col);
             let current_line = usize_to_i32(head.line);
-            let current_col = usize_to_i32(head.col);
+            let start_col = usize_to_i32(column_codec::byte_to_editor_col_in_editor(
+                editor,
+                start.line,
+                usize::from(start.col),
+            ));
+            let current_col = usize_to_i32(column_codec::byte_to_editor_col_in_editor(
+                editor,
+                head.line,
+                usize::from(head.col),
+            ));
 
             // Vim visual mode is INCLUSIVE on both ends.
             // Determine low and high positions.
@@ -91,8 +100,8 @@ pub fn render_visual_selection(editor: &mut Gd<CodeEdit>, mode: &Mode, head: Pos
 /// Updates visual block selection display.
 pub fn update_visual_block(mode: &Mode, editor: &mut Gd<CodeEdit>, head: Position) {
     if let Mode::Visual(VisualKind::Block { start, cursor: _ }) = mode {
-        let (start_line, start_col) = (start.line, start.col);
-        let (current_line, current_col) = (head.line, head.col);
+        let (start_line, start_col) = (start.line, usize::from(start.col));
+        let (current_line, current_col) = (head.line, usize::from(head.col));
 
         let min_line = start_line.min(current_line);
         let max_line = start_line.max(current_line);
@@ -114,13 +123,15 @@ pub fn update_visual_block(mode: &Mode, editor: &mut Gd<CodeEdit>, head: Positio
         //          Call: select(Max+1, Min)
 
         let current_line_i32 = usize_to_i32(current_line);
+        let current_min_col = column_codec::byte_to_editor_col_in_editor(editor, current_line, min_col);
+        let current_max_col = column_codec::byte_to_editor_col_in_editor(editor, current_line, max_col);
         let (render_anchor, render_head) = if current_col == min_col {
             // Backward
-            (usize_to_i32(max_col + 1), usize_to_i32(min_col))
+            (usize_to_i32(current_max_col + 1), usize_to_i32(current_min_col))
         } else {
             // Forward
             // The selection includes the cursor column (max_col).
-            (usize_to_i32(min_col), usize_to_i32(max_col + 1))
+            (usize_to_i32(current_min_col), usize_to_i32(current_max_col + 1))
         };
 
         // Primary caret
@@ -138,11 +149,20 @@ pub fn update_visual_block(mode: &Mode, editor: &mut Gd<CodeEdit>, head: Positio
             }
 
             let line_i32 = usize_to_i32(line);
-            let new_caret_idx = editor.add_caret(line_i32, usize_to_i32(current_col));
+            let line_min_col = column_codec::byte_to_editor_col_in_editor(editor, line, min_col);
+            let line_max_col = column_codec::byte_to_editor_col_in_editor(editor, line, max_col);
+            let line_caret_col =
+                column_codec::byte_to_editor_col_in_editor(editor, line, current_col);
+            let (line_render_anchor, line_render_head) = if current_col == min_col {
+                (usize_to_i32(line_max_col + 1), usize_to_i32(line_min_col))
+            } else {
+                (usize_to_i32(line_min_col), usize_to_i32(line_max_col + 1))
+            };
+            let new_caret_idx = editor.add_caret(line_i32, usize_to_i32(line_caret_col));
 
             if new_caret_idx >= 0 {
                 editor
-                    .select_ex(line_i32, render_anchor, line_i32, render_head)
+                    .select_ex(line_i32, line_render_anchor, line_i32, line_render_head)
                     .caret_index(new_caret_idx)
                     .done();
             }

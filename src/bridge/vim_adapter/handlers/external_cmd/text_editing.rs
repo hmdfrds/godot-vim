@@ -1,22 +1,18 @@
 //! Text editing operations: Backspace, ReplaceChar, Delete, Yank, Substitute.
 
 use crate::bridge::godot::names::regex;
-use crate::bridge::vim_adapter::core::cast::i32_to_usize;
+use crate::bridge::vim_adapter::core::column_codec;
 use crate::bridge::vim_adapter::core::snapshot::GodotSnapshot;
 use crate::bridge::vim_adapter::core::transaction;
 use crate::bridge::vim_adapter::handlers::mode::ModeHandler;
 use crate::bridge::vim_wrapper::VimController;
 use godot::classes::CodeEdit;
 use godot::prelude::*;
-use vim_core::domain::position::Position;
 use vim_core::runtime::pure::{execute_open_line, execute_replace_char};
 use vim_core::state::mode::{Mode, InsertMode};
 
 pub fn handle_replace_char(editor: &mut Gd<CodeEdit>, c: char) {
-    let cursor = Position::new(
-        i32_to_usize(editor.get_caret_line()),
-        i32_to_usize(editor.get_caret_column()),
-    );
+    let cursor = column_codec::caret_to_core_position(editor);
     let snapshot = GodotSnapshot::from_editor(editor);
     let tx = execute_replace_char(&snapshot, cursor, c, 1);
     transaction::apply_transaction(editor, &tx);
@@ -82,10 +78,7 @@ impl VimController {
         below: bool,
         count: usize,
     ) {
-        let cursor = Position::new(
-            i32_to_usize(editor.get_caret_line()),
-            i32_to_usize(editor.get_caret_column()),
-        );
+        let cursor = column_codec::caret_to_core_position(editor);
         let snapshot = GodotSnapshot::from_editor(editor);
         let tx = execute_open_line(&snapshot, cursor, below, count, &self.engine.config);
 
