@@ -95,7 +95,10 @@ pub fn render_visual_selection(editor: &mut Gd<CodeEdit>, mode: &Mode, head: Pos
         Mode::Visual(VisualKind::Block { .. }) => {
             update_visual_block(mode, editor, head);
         }
-        _ => {}
+        _ => {
+            editor.remove_secondary_carets();
+            editor.deselect();
+        }
     }
 }
 
