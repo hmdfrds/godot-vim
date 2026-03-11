@@ -8,7 +8,7 @@ use godot::classes::CodeEdit;
 use godot::prelude::*;
 
 const ALIGNMENT_EPSILON: f32 = 1.25;
-const MIN_CURSOR_WIDTH: f32 = 0.5;
+const MIN_CURSOR_WIDTH: f32 = 2.0;
 
 /// Overlay cursor geometry in editor-local coordinates.
 #[derive(Debug, Clone, Copy)]
@@ -51,9 +51,15 @@ pub(crate) fn compute_cursor_geometry(
     };
 
     let target_rect = editor.get_rect_at_line_column(line, col);
-    if is_invalid_rect(target_rect) {
-        // Godot reports (-1, -1) when the line drawing cache is stale.
-        return None;
+    if is_invalid_rect(target_rect) || (target_rect.position.y == 0 && line > 0) {
+        return compute_cursor_geometry_fallback(
+            editor,
+            line,
+            line_height,
+            fallback_char_width,
+            using_override,
+            native_caret_pos,
+        );
     }
 
     let alignment = resolve_editor_alignment(editor, current_line, current_col, native_caret_pos.x);
@@ -150,6 +156,50 @@ fn derive_cursor_width(
     );
 
     width_from_delta(mapped_current_x, Some(mapped_next_x), fallback_char_width)
+}
+
+/// Fallback geometry when `get_rect_at_line_column` returns (-1, -1).
+///
+/// Godot's TextServer caches glyph metrics lazily per zoom level. Until a
+/// character is rasterised at the current pixel size, position queries return
+/// (-1, -1). Rather than hiding the cursor, we place it at an approximate
+/// position:
+///   - x  : native caret draw X (always valid) for non-override positions;
+///           first-column rect X for visual-mode overrides
+///   - y  : first-column rect y of the same line (usually cached), or a
+///           scroll-based line estimate as a last resort
+///   - w/h: font-metric fallbacks already computed by the caller
+fn compute_cursor_geometry_fallback(
+    editor: &Gd<CodeEdit>,
+    line: i32,
+    line_height: f32,
+    fallback_char_width: f32,
+    using_override: bool,
+    native_caret_pos: Vector2,
+) -> Option<CursorGeometry> {
+    let col0_rect = editor.get_rect_at_line_column(line, 0);
+    let col0_valid = !is_invalid_rect(col0_rect);
+
+    let x = if !using_override {
+        native_caret_pos.x
+    } else if col0_valid {
+        col0_rect.position.x as f32
+    } else {
+        native_caret_pos.x
+    };
+
+    let y = if col0_valid && (col0_rect.position.y != 0 || line == 0) {
+        col0_rect.position.y as f32
+    } else {
+        let first_visible = editor.get_v_scroll() as f32;
+        (line as f32 - first_visible) * line_height
+    };
+
+    Some(CursorGeometry {
+        pos: Vector2::new(x, y),
+        height: line_height,
+        width: fallback_char_width,
+    })
 }
 
 fn is_invalid_rect(rect: Rect2i) -> bool {

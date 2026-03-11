@@ -30,7 +30,7 @@ impl KeyConsumer for CompletionConsumer {
             KeyCode::Enter => ConsumeResult::NotConsumed,
             KeyCode::Esc => {
                 ctx.mark_handled();
-                ConsumeResult::Consumed
+                ConsumeResult::Passthrough
             }
             _ => ConsumeResult::NotConsumed,
         }
