@@ -169,11 +169,25 @@ impl VimController {
             pending_keys: self.engine.pending_mapping_display(),
             pending_command: self.engine.pending_command_display(),
             substitute_preview: self.state.take_substitute_preview(),
-            vimdebug: crate::types::VimdebugSnapshot {
-                provenance: self.vimdebug.provenance().cloned(),
-                effects: self.vimdebug.effects_summary().cloned(),
-                range: self.vimdebug.range(),
-                step_status: self.vimdebug.step_status_line(),
+            vimdebug: match (self.vimdebug.provenance().cloned(), self.vimdebug.effects_summary().cloned()) {
+                (Some(provenance), Some(effects)) => {
+                    match self.vimdebug.step_status_line() {
+                        Some(step_status) => crate::types::VimdebugSnapshot::Step {
+                            provenance,
+                            effects,
+                            range: self.vimdebug.range(),
+                            step_status,
+                        },
+                        None => crate::types::VimdebugSnapshot::Watch {
+                            provenance,
+                            effects,
+                            range: self.vimdebug.range(),
+                        },
+                    }
+                }
+                // Either field alone (or both absent) means vimdebug is inactive
+                // or has not captured anything yet this cycle.
+                _ => crate::types::VimdebugSnapshot::Inactive,
             },
             highlight_yank: self.state.take_highlight_yank(),
         }

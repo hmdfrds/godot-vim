@@ -288,7 +288,7 @@ impl UiCoordinator {
         let pending_changed = self.cache.last_pending_command.as_deref() != Some(snap.pending_command.as_str())
             || self.cache.last_pending_keys.as_deref() != Some(snap.pending_keys.as_str());
         let cmdline_active = snap.cmdline.prompt.is_some();
-        let vimdebug_active = snap.vimdebug.provenance.is_some() || snap.vimdebug.effects.is_some();
+        let vimdebug_active = snap.vimdebug.is_active();
 
         if mode_changed || message_changed || recording_changed || pending_changed || cmdline_active || vimdebug_active {
             if let Some(ref mut bar) = self.status_bar {
@@ -376,14 +376,14 @@ impl UiCoordinator {
         }
 
         // ── 7. Debug range overlay ───────────────────────────────────────
-        match snap.vimdebug.range {
-            Some(ref range) => {
+        match snap.vimdebug.range() {
+            Some(range) => {
                 if let Some(ref mut overlay) = self.debug_overlay {
                     overlay.bind_mut().show_range(range.start, range.end, editor);
                 }
             }
             // Only clear when vimdebug is fully inactive, not just range-less.
-            None if snap.vimdebug.provenance.is_none() && snap.vimdebug.effects.is_none() => {
+            None if !snap.vimdebug.is_active() => {
                 self.clear_debug_overlay();
             }
             _ => {}

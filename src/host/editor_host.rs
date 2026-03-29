@@ -241,15 +241,30 @@ pub(super) mod mock {
     use crate::host::error::HostError;
     use std::collections::HashMap;
 
+    /// Lifecycle state of the mock buffer, replacing three booleans
+    /// (`modified`, `saved`, `closed`) whose 8 combinations included 5
+    /// illegal states (e.g. `modified=true, closed=true, saved=false`).
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub(in crate::host) enum MockBufferState {
+        /// Clean buffer — no unsaved changes, not yet saved or closed.
+        Unmodified,
+        /// Buffer has unsaved changes.
+        Modified,
+        /// `tag_saved_version()` was called — buffer is clean and persisted.
+        Saved,
+        /// `close_tab()` was called — buffer is gone.
+        Closed,
+    }
+
     /// Test double for `EditorHost`. All fields are public for direct scenario setup.
     pub(in crate::host) struct MockEditorHost {
         pub text: String,
         pub script_path: Option<String>,
-        pub modified: bool,
-        /// Set to `true` when `tag_saved_version()` is called.
-        pub saved: bool,
-        /// Set to `true` when `close_tab()` is called.
-        pub closed: bool,
+        pub buffer_state: MockBufferState,
+        /// Audit trail: `true` if `tag_saved_version()` was ever called.
+        /// Separate from `buffer_state` because a subsequent `close_tab()`
+        /// transitions the state to `Closed`, losing the save information.
+        pub save_called: bool,
         /// Override for `save_script()`. `None` = default behavior.
         pub save_result: Option<Result<String, HostError>>,
         /// Override for `open_script()`. `None` = default behavior.
@@ -267,9 +282,8 @@ pub(super) mod mock {
             Self {
                 text: text.to_string(),
                 script_path: script_path.map(|s| s.to_string()),
-                modified: false,
-                saved: false,
-                closed: false,
+                buffer_state: MockBufferState::Unmodified,
+                save_called: false,
                 save_result: None,
                 open_result: None,
                 files: HashMap::new(),
@@ -289,12 +303,12 @@ pub(super) mod mock {
         }
 
         fn is_modified(&self) -> bool {
-            self.modified
+            matches!(self.buffer_state, MockBufferState::Modified)
         }
 
         fn tag_saved_version(&mut self) {
-            self.saved = true;
-            self.modified = false;
+            self.buffer_state = MockBufferState::Saved;
+            self.save_called = true;
         }
 
         fn set_text(&mut self, text: &str) {
@@ -302,7 +316,7 @@ pub(super) mod mock {
         }
 
         fn close_tab(&mut self) {
-            self.closed = true;
+            self.buffer_state = MockBufferState::Closed;
         }
 
         fn notify_name_changed(&self) {
@@ -321,8 +335,8 @@ pub(super) mod mock {
                     let saved_path = r.as_ref().unwrap();
                     let is_same_path = self.script_path.as_deref() == Some(saved_path.as_str());
                     if is_same_path || explicit_path.is_none() {
-                        self.saved = true;
-                        self.modified = false;
+                        self.buffer_state = MockBufferState::Saved;
+                        self.save_called = true;
                     }
                 }
                 return r;
@@ -336,8 +350,8 @@ pub(super) mod mock {
                     }
                 }
             };
-            self.saved = true;
-            self.modified = false;
+            self.buffer_state = MockBufferState::Saved;
+            self.save_called = true;
             Ok(path)
         }
 

@@ -502,7 +502,7 @@ impl ProcessContext<'_> {
                     scrolloff: crate::bridge::codec::usize_to_i32(self.engine.options().scrolloff()),
                     highlight_yank_duration_ms: self.highlight_yank_duration_ms,
                     syntax_query: Box::new(move |line, col| {
-                        bridge::SyntaxContext::from_editor(&editor_for_syntax, line, col)
+                        bridge::SyntaxRegion::from_editor(&editor_for_syntax, line, col)
                     }),
                 },
                 text_ref,

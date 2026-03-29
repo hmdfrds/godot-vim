@@ -338,7 +338,7 @@ fn read_via_godot(path: &str) -> Result<String, HostError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::host::editor_host::mock::MockEditorHost;
+    use crate::host::editor_host::mock::{MockBufferState, MockEditorHost};
     use crate::settings::FileAccessScope;
     use vim_core::execution::HostRequestId;
 
@@ -602,7 +602,7 @@ mod tests {
         assert!(msg.contains("res://main.gd"), "message={msg}");
         assert!(msg.contains("3L"), "message={msg}");
         assert!(msg.contains("written"), "message={msg}");
-        assert!(editor.saved);
+        assert!(editor.save_called);
     }
 
     #[test]
@@ -779,41 +779,39 @@ mod tests {
     #[test]
     fn handle_quit_unsaved_no_force_returns_e37() {
         let mut editor = MockEditorHost::new("unsaved", Some("res://script.gd"));
-        editor.modified = true;
+        editor.buffer_state = MockBufferState::Modified;
         let result = handle_quit(test_id(), &mut editor, ForceOverride::Normal);
         assert_failure(&result);
         assert!(failure_msg(&result).contains("E37"));
-        assert!(!editor.closed, "tab should NOT be closed");
+        assert!(!matches!(editor.buffer_state, MockBufferState::Closed), "tab should NOT be closed");
     }
 
     #[test]
     fn handle_quit_unsaved_with_force_closes() {
         let mut editor = MockEditorHost::new("unsaved", Some("res://script.gd"));
-        editor.modified = true;
+        editor.buffer_state = MockBufferState::Modified;
         let result = handle_quit(test_id(), &mut editor, ForceOverride::Force);
         assert_success(&result);
-        assert!(editor.saved, "tag_saved_version should be called");
-        assert!(editor.closed, "tab should be closed");
+        assert!(editor.save_called, "tag_saved_version should be called");
+        assert!(matches!(editor.buffer_state, MockBufferState::Closed), "tab should be closed");
     }
 
     #[test]
     fn handle_quit_saved_closes_without_tagging() {
         let mut editor = MockEditorHost::new("clean", Some("res://script.gd"));
-        editor.modified = false;
         let result = handle_quit(test_id(), &mut editor, ForceOverride::Normal);
         assert_success(&result);
-        assert!(editor.closed, "tab should be closed");
-        assert!(!editor.saved, "tag_saved_version should NOT be called for non-force quit of clean buffer");
+        assert!(matches!(editor.buffer_state, MockBufferState::Closed), "tab should be closed");
+        assert!(!editor.save_called, "tag_saved_version should NOT be called for non-force quit of clean buffer");
     }
 
     #[test]
     fn handle_quit_force_on_clean_buffer_tags_and_closes() {
         let mut editor = MockEditorHost::new("clean", Some("res://script.gd"));
-        editor.modified = false;
         let result = handle_quit(test_id(), &mut editor, ForceOverride::Force);
         assert_success(&result);
-        assert!(editor.saved, "tag_saved_version should be called with force");
-        assert!(editor.closed);
+        assert!(editor.save_called, "tag_saved_version should be called with force");
+        assert!(matches!(editor.buffer_state, MockBufferState::Closed));
     }
 
     #[test]
@@ -821,8 +819,8 @@ mod tests {
         let mut editor = MockEditorHost::new("content", Some("res://script.gd"));
         let result = handle_write_quit(test_id(), &mut editor, ForceOverride::Normal);
         assert_success(&result);
-        assert!(editor.saved);
-        assert!(editor.closed);
+        assert!(editor.save_called);
+        assert!(matches!(editor.buffer_state, MockBufferState::Closed));
     }
 
     #[test]
@@ -836,7 +834,7 @@ mod tests {
         assert_failure(&result);
         assert!(failure_msg(&result).contains("E514"));
         assert!(!failure_msg(&result).contains("use :q!"));
-        assert!(!editor.closed, "tab should NOT be closed on save failure");
+        assert!(!matches!(editor.buffer_state, MockBufferState::Closed), "tab should NOT be closed on save failure");
     }
 
     #[test]
@@ -849,7 +847,7 @@ mod tests {
         let result = handle_write_quit(test_id(), &mut editor, ForceOverride::Force);
         assert_failure(&result);
         assert!(failure_msg(&result).contains("use :q! to discard changes"), "msg={}", failure_msg(&result));
-        assert!(!editor.closed, "tab should NOT be closed on save failure");
+        assert!(!matches!(editor.buffer_state, MockBufferState::Closed), "tab should NOT be closed on save failure");
     }
 
     #[test]
@@ -858,7 +856,7 @@ mod tests {
         let result = handle_write_quit(test_id(), &mut editor, ForceOverride::Normal);
         assert_failure(&result);
         assert!(failure_msg(&result).contains("E32"));
-        assert!(!editor.closed);
+        assert!(!matches!(editor.buffer_state, MockBufferState::Closed));
     }
 
     #[test]
@@ -891,14 +889,14 @@ mod tests {
         );
         assert_success(&result);
         assert_eq!(editor.text, "new disk text\nline2");
-        assert!(editor.saved, "tag_saved_version should be called after reload");
+        assert!(editor.save_called, "tag_saved_version should be called after reload");
         assert!(editor.script_source_updated.is_some(), "script source should be updated");
     }
 
     #[test]
     fn handle_edit_file_different_path_unsaved_no_force_returns_e37() {
         let mut editor = MockEditorHost::new("unsaved", Some("res://current.gd"));
-        editor.modified = true;
+        editor.buffer_state = MockBufferState::Modified;
         let result = handle_edit_file(
             test_id(),
             &mut editor,
@@ -913,7 +911,7 @@ mod tests {
     #[test]
     fn handle_edit_file_different_path_unsaved_with_force_opens() {
         let mut editor = MockEditorHost::new("unsaved", Some("res://current.gd"));
-        editor.modified = true;
+        editor.buffer_state = MockBufferState::Modified;
         let result = handle_edit_file(
             test_id(),
             &mut editor,

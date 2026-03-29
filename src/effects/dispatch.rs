@@ -12,7 +12,7 @@ use vim_core::effects::Effect;
 use super::{auto_brace, compound::{CompoundAction, LineNumber, WindowNavAction}, cursor, messages, mode, navigation, registers, scroll, search, text, undo};
 use crate::bridge::codec::{usize_to_i32, DocumentView, LineIndex};
 use crate::bridge::port::{FoldCapable, IdeCapable, NavigationCapable, TextEditorPort};
-use crate::bridge::{AutoBraceSnapshot, SyntaxContext};
+use crate::bridge::{AutoBraceSnapshot, SyntaxRegion};
 use crate::state::ShellState;
 use crate::types::{HighlightYank, MatchRange, RemapPolicy};
 
@@ -44,8 +44,8 @@ pub(crate) struct DispatchContext<'a> {
     /// Yank highlight duration in ms (0 = disabled). Overrides the engine's value.
     pub(crate) highlight_yank_duration_ms: u32,
     /// Position-dependent syntax query (string/comment context). Production
-    /// captures `Gd<CodeEdit>` for FFI; tests return `SyntaxContext::default_context()`.
-    pub(crate) syntax_query: Box<dyn Fn(i32, i32) -> SyntaxContext + 'a>,
+    /// captures `Gd<CodeEdit>` for FFI; tests return `SyntaxRegion::code()`.
+    pub(crate) syntax_query: Box<dyn Fn(i32, i32) -> SyntaxRegion + 'a>,
 }
 
 /// State machine tracking SetSelection → SetCursor effect pairing.

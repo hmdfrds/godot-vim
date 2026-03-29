@@ -13,7 +13,7 @@ use std::rc::Rc;
 
 use crate::bridge::codec::{i32_to_usize, usize_to_i32, DocumentView};
 use crate::bridge::port::TextEditorPort;
-use crate::bridge::{AutoBraceSnapshot, SyntaxContext};
+use crate::bridge::{AutoBraceSnapshot, SyntaxRegion};
 use crate::effects::text::insert_at;
 use crate::types::CharLineCol;
 
@@ -43,7 +43,7 @@ pub(super) fn handle_insert_with_auto_brace(
     offset: usize,
     ch: char,
     auto_brace: &AutoBraceSnapshot,
-    syntax: &SyntaxContext,
+    syntax: &SyntaxRegion,
 ) -> AutoBraceResult {
     let lc = doc.line_index.byte_to_line_col(doc.text, offset);
     let line = lc.line;
@@ -94,10 +94,10 @@ pub(super) fn handle_insert_with_auto_brace(
     }
 
     // Branch 4: Inside comment, or inside string and char is string delimiter.
-    // Uses pre-captured syntax context from the snapshot (matching Godot's
+    // Uses pre-captured syntax region from the snapshot (matching Godot's
     // code_edit.cpp:793 which passes `is_in_string(cl, char_col)`).
-    if syntax.is_in_comment
-        || (syntax.is_in_string && auto_brace.has_string_delimiter(ch_str))
+    if matches!(syntax, SyntaxRegion::Comment)
+        || (matches!(syntax, SyntaxRegion::String) && auto_brace.has_string_delimiter(ch_str))
     {
         log::trace!("auto_brace: branch=in_comment_or_string ch='{}'", ch);
         insert_at(editor, line, col, ch_str);
