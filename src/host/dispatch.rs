@@ -230,7 +230,7 @@ pub(crate) fn execute(
 
         HostRequest::ReadConfigFile { meta: _, path } => {
             if let Err(e) = super::file::validate_path_scope(path.as_str(), policy.file_access_scope) {
-                return host_failure(request.id(), e);
+                return host_failure(request.id(), e.to_string());
             }
             let gpath = GString::from(path.as_str());
             match godot::classes::FileAccess::open(&gpath, godot::classes::file_access::ModeFlags::READ) {

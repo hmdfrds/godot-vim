@@ -11,6 +11,7 @@ use compact_str::CompactString;
 use vim_core::execution::{HostRequestId, HostResult};
 
 use super::editor_host::EditorHost;
+use super::error::HostError;
 use super::{host_failure, host_success};
 use crate::settings::FileAccessScope;
 use crate::types::ForceOverride;
@@ -39,31 +40,36 @@ pub(super) fn is_godot_path(path: &str) -> bool {
 }
 
 /// Enforce file access scope: `ProjectOnly` restricts to `res://`/`user://` paths.
-pub(super) fn validate_path_scope(path: &str, scope: FileAccessScope) -> Result<(), String> {
+pub(super) fn validate_path_scope(path: &str, scope: FileAccessScope) -> Result<(), HostError> {
     if scope == FileAccessScope::Unrestricted {
         return Ok(());
     }
     if is_godot_path(path) {
         return Ok(());
     }
-    Err(format!(
-        "E484: Access denied — path \"{}\" is outside the project. \
-         Set security/file_access_scope to Unrestricted in Editor Settings to allow.",
-        path
-    ))
+    Err(HostError::CantOpenFile {
+        path: CompactString::from(path),
+        detail: Some(CompactString::from(
+            "Access denied — path is outside the project. \
+             Set security/file_access_scope to Unrestricted in Editor Settings to allow.",
+        )),
+    })
 }
 
 /// Pre-read size check for filesystem paths (not Godot virtual paths, which
 /// are checked via `FileAccess::get_length()` in `EditorHost::read_file`).
-pub(super) fn check_fs_file_size(path: &str) -> Result<(), String> {
+pub(super) fn check_fs_file_size(path: &str) -> Result<(), HostError> {
     match std::fs::metadata(path) {
         Ok(meta) => {
             let size = usize::try_from(meta.len()).unwrap_or(usize::MAX);
             if size > MAX_READ_FILE_SIZE {
-                Err(format!(
-                    "E484: File too large (>10MB): \"{}\" ({} bytes)",
-                    path, size
-                ))
+                Err(HostError::CantOpenFile {
+                    path: CompactString::from(path),
+                    detail: Some(CompactString::from(format!(
+                        "File too large (>10MB): {} bytes",
+                        size
+                    ))),
+                })
             } else {
                 Ok(())
             }
@@ -94,17 +100,17 @@ pub(super) fn handle_write_file(
             return host_failure(id, "E32: No file name");
         }
         if let Err(e) = validate_path_scope(p, scope) {
-            return host_failure(id, e);
+            return host_failure(id, e.to_string());
         }
         if !is_godot_path(p) {
             // Symlink attack prevention: symlink_metadata (lstat) does NOT follow
             // the link, making is_symlink() reliable. `:w!` overrides this check.
             if let Ok(meta) = std::fs::symlink_metadata(p) {
                 if meta.file_type().is_symlink() && !force.is_force() {
-                    return host_failure(
-                        id,
-                        format!("E166: Can't open linked file for writing: \"{}\"", p),
-                    );
+                    let err = HostError::SymlinkWrite {
+                        path: CompactString::from(p),
+                    };
+                    return host_failure(id, err.to_string());
                 }
             }
             let text = editor.get_text();
@@ -122,6 +128,10 @@ pub(super) fn handle_write_file(
                     }
                 }
                 Err(e) => {
+                    let err = HostError::WriteFailed {
+                        path: CompactString::from(p),
+                        detail: Some(CompactString::from(e.to_string())),
+                    };
                     if force.is_force() {
                         log::warn!(
                             "file::write_external: force flag set but permission override \
@@ -131,13 +141,14 @@ pub(super) fn handle_write_file(
                         host_failure(
                             id,
                             format!(
-                                "E514: Failed to write \"{p}\": {e} \
+                                "{} \
                                  (force-write cannot override filesystem permissions for \
-                                 external paths; use a Godot res:// path to benefit from :w!)"
+                                 external paths; use a Godot res:// path to benefit from :w!)",
+                                err
                             ),
                         )
                     } else {
-                        host_failure(id, format!("E514: Failed to write \"{p}\": {e}"))
+                        host_failure(id, err.to_string())
                     }
                 }
             };
@@ -158,7 +169,7 @@ pub(super) fn handle_write_file(
                 ))),
             }
         }
-        Err(e) => host_failure(id, e),
+        Err(e) => host_failure(id, e.to_string()),
     }
 }
 
@@ -198,7 +209,7 @@ pub(super) fn handle_write_quit(
             // `:wq!` = force-write, NOT force-discard. Write failure is still an error.
             host_failure(id, format!("{} (use :q! to discard changes)", e))
         }
-        Err(e) => host_failure(id, e),
+        Err(e) => host_failure(id, e.to_string()),
     }
 }
 
@@ -212,7 +223,7 @@ pub(super) fn handle_edit_file(
 ) -> HostResult {
     log::debug!("file::edit: path={} force={}", path, force.is_force());
     if let Err(e) = validate_path_scope(path, scope) {
-        return host_failure(id, e);
+        return host_failure(id, e.to_string());
     }
     let current_path = editor.current_script_path();
     let is_same_file = current_path.as_deref() == Some(path);
@@ -237,7 +248,7 @@ pub(super) fn handle_edit_file(
     } else {
         match editor.open_script(path) {
             Ok(()) => host_success(id),
-            Err(e) => host_failure(id, e),
+            Err(e) => host_failure(id, e.to_string()),
         }
     }
 }
@@ -251,7 +262,7 @@ fn reload_from_disk(
 ) -> HostResult {
     let text = match editor.read_file(path) {
         Ok(t) => t,
-        Err(e) => return host_failure(id, e),
+        Err(e) => return host_failure(id, e.to_string()),
     };
 
     editor.update_script_source(&text);
@@ -276,14 +287,17 @@ pub(super) fn handle_read_file(
 ) -> HostResult {
     log::debug!("file::read: path={}", path);
     if let Err(e) = validate_path_scope(path, scope) {
-        return host_failure(id, e);
+        return host_failure(id, e.to_string());
     }
     let result = if is_godot_path(path) {
         read_via_godot(path)
     } else {
         check_fs_file_size(path).and_then(|_| {
             std::fs::read_to_string(path)
-                .map_err(|e| format!("E484: Can't open file \"{path}\": {e}"))
+                .map_err(|e| HostError::CantOpenFile {
+                    path: CompactString::from(path),
+                    detail: Some(CompactString::from(e.to_string())),
+                })
         })
     };
 
@@ -293,23 +307,29 @@ pub(super) fn handle_read_file(
             data: CompactString::from(data),
             offset: after_line.map(|l| l as usize), // u32→usize: always safe
         },
-        Err(e) => host_failure(id, e),
+        Err(e) => host_failure(id, e.to_string()),
     }
 }
 
-fn read_via_godot(path: &str) -> Result<String, String> {
+fn read_via_godot(path: &str) -> Result<String, HostError> {
     use godot::classes::file_access::ModeFlags;
     use godot::classes::FileAccess;
     use godot::prelude::*;
 
     let file = FileAccess::open(&GString::from(path), ModeFlags::READ)
-        .ok_or_else(|| format!("E484: Can't open file \"{path}\""))?;
+        .ok_or_else(|| HostError::CantOpenFile {
+            path: CompactString::from(path),
+            detail: None,
+        })?;
     let length = usize::try_from(file.get_length()).unwrap_or(usize::MAX);
     if length > MAX_READ_FILE_SIZE {
-        return Err(format!(
-            "E484: File too large (>10MB): \"{}\" ({} bytes)",
-            path, length
-        ));
+        return Err(HostError::CantOpenFile {
+            path: CompactString::from(path),
+            detail: Some(CompactString::from(format!(
+                "File too large (>10MB): {} bytes",
+                length
+            ))),
+        });
     }
     let text = file.get_as_text().to_string();
     Ok(text)
@@ -711,7 +731,10 @@ mod tests {
     #[test]
     fn handle_write_file_save_failure_returns_error() {
         let mut editor = MockEditorHost::new("content", Some("res://broken.gd"));
-        editor.save_result = Some(Err("E514: Failed to save \"res://broken.gd\": FAILED".to_string()));
+        editor.save_result = Some(Err(HostError::WriteFailed {
+            path: CompactString::from("res://broken.gd"),
+            detail: Some(CompactString::from("FAILED")),
+        }));
         let result = handle_write_file(
             test_id(),
             &mut editor,
@@ -805,7 +828,10 @@ mod tests {
     #[test]
     fn handle_write_quit_save_failure_no_force_returns_error() {
         let mut editor = MockEditorHost::new("content", Some("res://script.gd"));
-        editor.save_result = Some(Err("E514: save failed".to_string()));
+        editor.save_result = Some(Err(HostError::WriteFailed {
+            path: CompactString::from("res://script.gd"),
+            detail: Some(CompactString::from("save failed")),
+        }));
         let result = handle_write_quit(test_id(), &mut editor, ForceOverride::Normal);
         assert_failure(&result);
         assert!(failure_msg(&result).contains("E514"));
@@ -816,7 +842,10 @@ mod tests {
     #[test]
     fn handle_write_quit_save_failure_with_force_returns_error_with_hint() {
         let mut editor = MockEditorHost::new("content", Some("res://script.gd"));
-        editor.save_result = Some(Err("E514: save failed".to_string()));
+        editor.save_result = Some(Err(HostError::WriteFailed {
+            path: CompactString::from("res://script.gd"),
+            detail: Some(CompactString::from("save failed")),
+        }));
         let result = handle_write_quit(test_id(), &mut editor, ForceOverride::Force);
         assert_failure(&result);
         assert!(failure_msg(&result).contains("use :q! to discard changes"), "msg={}", failure_msg(&result));
@@ -927,7 +956,10 @@ mod tests {
     #[test]
     fn handle_edit_file_open_failure_returns_error() {
         let mut editor = MockEditorHost::new("clean", Some("res://current.gd"));
-        editor.open_result = Some(Err("E484: Can't open file \"res://nonexistent.gd\"".to_string()));
+        editor.open_result = Some(Err(HostError::CantOpenFile {
+            path: CompactString::from("res://nonexistent.gd"),
+            detail: None,
+        }));
         let result = handle_edit_file(
             test_id(),
             &mut editor,
