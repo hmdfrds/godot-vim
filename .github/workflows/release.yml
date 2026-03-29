@@ -1,0 +1,136 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag (e.g. v1.0.0)"
+        required: true
+        type: string
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure private repo access
+        shell: bash
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-gnu
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: linux
+
+      - run: cargo build --release --locked --target x86_64-unknown-linux-gnu
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libgodot_vim.so
+          path: target/x86_64-unknown-linux-gnu/release/libgodot_vim.so
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure private repo access
+        shell: bash
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: windows
+
+      - run: cargo build --release --locked --target x86_64-pc-windows-msvc
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: godot_vim.dll
+          path: target/x86_64-pc-windows-msvc/release/godot_vim.dll
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure private repo access
+        shell: bash
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: macos
+
+      - name: Build ARM64
+        run: cargo build --release --locked --target aarch64-apple-darwin
+
+      - name: Build x86_64
+        run: cargo build --release --locked --target x86_64-apple-darwin
+
+      - name: Create universal binary
+        run: |
+          lipo -create \
+            target/aarch64-apple-darwin/release/libgodot_vim.dylib \
+            target/x86_64-apple-darwin/release/libgodot_vim.dylib \
+            -output libgodot_vim.dylib
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libgodot_vim.dylib
+          path: libgodot_vim.dylib
+
+  release:
+    needs: [build-linux, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Assemble addon
+        run: |
+          mkdir -p addons/godot_vim/bin
+          cp artifacts/libgodot_vim.so/libgodot_vim.so addons/godot_vim/bin/
+          cp artifacts/godot_vim.dll/godot_vim.dll addons/godot_vim/bin/
+          cp artifacts/libgodot_vim.dylib/libgodot_vim.dylib addons/godot_vim/bin/
+
+      - name: Create addon zip
+        env:
+          VERSION: ${{ inputs.version }}
+        run: zip -r "godot-vim-${VERSION}.zip" addons/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.version }}
+          name: GodotVim ${{ inputs.version }}
+          files: |
+            godot-vim-${{ inputs.version }}.zip
+            addons/godot_vim/bin/libgodot_vim.so
+            addons/godot_vim/bin/godot_vim.dll
+            addons/godot_vim/bin/libgodot_vim.dylib
+          generate_release_notes: true

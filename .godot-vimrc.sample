@@ -1,0 +1,93 @@
+" GodotVim — Quick Start & Reference
+" Copy to your project root as .godot-vimrc (or use :mappings for a GUI).
+" The plugin works with zero config — everything below is opt-in.
+
+" ══ Godot Commands ════════════════════════════════════════════════════════
+" :save :saveall :savescene          Save file / all / current scene
+" :run :runcurrent :stop :pause      Scene playback (F5/F6 equivalents)
+" :GodotBreakpoint                   Toggle breakpoint on current line
+" :GodotContinue :GodotNext          Debugger continue / step over
+" :GodotStepIn :GodotStepOut         Debugger step into / out
+" :FileSystem :Inspector :Scene      Focus dock by name
+" :Script :Output                    Switch to Script editor / Output panel
+" :zen :unzen                        Distraction-free mode toggle
+" :mappings                          Open key mapping dialog (GUI)
+" :actionlist [filter]               Discover all available commands
+"
+" ── Navigation (built-in, no config needed) ───────────────────────────────
+" Ctrl-h/j/k/l                       Move focus between panels (spatial)
+" Ctrl-W w / Ctrl-W W                Cycle focus forward / backward
+" h/j/k/l in docks                   Navigate Tree/ItemList items
+" / in docks                          Jump to search box
+" gd                                 Go to definition (LSP)
+" K                                  Hover documentation (LSP)
+
+" ══ Configuration ═════════════════════════════════════════════════════════
+" Leader must come before any <Leader> mappings.
+let mapleader = " "
+set timeoutlen=1000
+
+" ══ Presets (uncomment to enable) ═════════════════════════════════════════
+" Managed by :mappings dialog. Manual edits here are preserved on save.
+"
+" ── Insert Escapes ────────────────────────────────────────────────────────
+" preset:disabled
+" inoremap jk <Esc>
+" preset:disabled
+" inoremap jj <Esc>
+"
+" ── File / Buffer ─────────────────────────────────────────────────────────
+" preset:disabled
+" nnoremap <Space>w :save<CR>
+" preset:disabled
+" nnoremap <Space>W :saveall<CR>
+" preset:disabled
+" nnoremap <Space>n :bn<CR>
+" preset:disabled
+" nnoremap <Space>p :bp<CR>
+"
+" ── Scene & Debugging ─────────────────────────────────────────────────────
+" preset:disabled
+" nnoremap <Space>r :run<CR>
+" preset:disabled
+" nnoremap <Space>R :runcurrent<CR>
+" preset:disabled
+" nnoremap <Space>S :stop<CR>
+" preset:disabled
+" nnoremap <Space>db :GodotBreakpoint<CR>
+" preset:disabled
+" nnoremap <Space>dc :GodotContinue<CR>
+" preset:disabled
+" nnoremap <Space>dn :GodotNext<CR>
+" preset:disabled
+" nnoremap <Space>di :GodotStepIn<CR>
+" preset:disabled
+" nnoremap <Space>do :GodotStepOut<CR>
+"
+" ── Navigation & Editor ───────────────────────────────────────────────────
+" preset:disabled
+" nnoremap <Space>e :FileSystem<CR>
+" preset:disabled
+" nnoremap <Space>i :Inspector<CR>
+" preset:disabled
+" nnoremap <Space>s :Script<CR>
+" preset:disabled
+" nnoremap <Space>z :zen<CR>
+" preset:disabled
+" nnoremap <Space>Z :unzen<CR>
+"
+" ── Search ────────────────────────────────────────────────────────────────
+" preset:disabled
+" nnoremap <Esc> :noh<CR>
+
+" ══ Your Mappings ═════════════════════════════════════════════════════════
+" nnoremap Y y$
+" vnoremap < <gv
+" vnoremap > >gv
+" nnoremap n nzz
+" nnoremap N Nzz
+
+" ══ Settings & Help ═══════════════════════════════════════════════════════
+" Editor Settings → Plugins → GodotVim   enabled toggle, scrolloff, etc.
+" :mappings                               GUI for managing all key bindings
+" :actionlist                             Discover every available command

@@ -1,0 +1,6 @@
+/target
+.DS_Store
+.idea/
+.vscode/
+.env
+.godot/
