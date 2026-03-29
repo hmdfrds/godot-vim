@@ -73,6 +73,12 @@ impl GodotVimPlugin {
             sync_indent_from_editor(&editor, controller);
         }
 
+        // Sync auto-brace pairs so the engine handles pairing during both
+        // normal execution and shadow macro replay.
+        if let Some(controller) = &mut self.controller {
+            controller.sync_auto_pairs(&editor);
+        }
+
         self.ui.attach(&mut editor);
 
         if let Some(ref snapshot) = self.settings {

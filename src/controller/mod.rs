@@ -91,7 +91,7 @@ pub(crate) struct VimController {
 impl VimController {
     #[must_use]
     pub(crate) fn new() -> Self {
-        Self {
+        let mut ctrl = Self {
             engine: VimEngine::new(),
             state: ShellState::default(),
             undo_depth: crate::effects::UndoDepth::new(),
@@ -108,7 +108,9 @@ impl VimController {
             vimdebug: vimdebug::VimdebugState::default(),
             pending_step_effects: None,
             highlight_yank_duration_ms: u32::try_from(crate::settings::defaults::HIGHLIGHT_YANK_DURATION).unwrap_or(150),
-        }
+        };
+        ctrl.engine.set_shadow_execution(true);
+        ctrl
     }
 
     // ── Configuration setters ─────────────────────────────────────────
@@ -196,6 +198,40 @@ impl VimController {
     /// for GDScript) so the `gc` commentary operator uses the right format.
     pub(crate) fn set_commentstring(&mut self, cs: &str) {
         self.engine.options_mut().set_commentstring(cs);
+    }
+
+    /// Sync auto-brace pairs from CodeEdit so the engine handles auto-pairing
+    /// during both normal execution and shadow macro replay.
+    pub(crate) fn sync_auto_pairs(&mut self, editor: &Gd<godot::classes::CodeEdit>) {
+        use vim_core::primitives::{AutoPairs, Pair};
+
+        if !editor.is_auto_brace_completion_enabled() {
+            self.engine.options_mut().set_auto_pairs(None);
+            return;
+        }
+
+        let dict = editor.get_auto_brace_completion_pairs();
+        let mut pairs = Vec::new();
+        for (k, v) in dict.iter_shared() {
+            let open_str = k.to_string();
+            let close_str = v.to_string();
+            // Engine auto-pairs only supports single-char pairs; skip multi-char
+            // (e.g., `/*` / `*/`). Host-side auto-brace handles those.
+            let mut open_chars = open_str.chars();
+            let mut close_chars = close_str.chars();
+            if let (Some(open), None, Some(close), None) = (
+                open_chars.next(),
+                open_chars.next(),
+                close_chars.next(),
+                close_chars.next(),
+            ) {
+                pairs.push(Pair { open, close });
+            }
+        }
+
+        self.engine
+            .options_mut()
+            .set_auto_pairs(Some(AutoPairs { pairs: pairs.into() }));
     }
 
     /// Persist buffer-local mappings to shell state so they survive detach/reattach.
