@@ -38,11 +38,7 @@ pub(crate) fn read_all(settings: &EditorSettings) -> SettingsSnapshot {
             command: read_color(settings, keys::CURSOR_COMMAND, defaults::cursor_command()),
             enabled: read_bool(settings, keys::CURSOR_ENABLED, defaults::CURSOR_ENABLED),
             lerp_speed: read_float(settings, keys::CURSOR_LERP_SPEED, defaults::CURSOR_LERP_SPEED),
-            blink_speed: read_float(settings, keys::CURSOR_BLINK_SPEED, defaults::CURSOR_BLINK_SPEED),
-            beam_width: read_float(settings, keys::CURSOR_BEAM_WIDTH, defaults::CURSOR_BEAM_WIDTH),
             underline_height: read_float(settings, keys::CURSOR_UNDERLINE_HEIGHT, defaults::CURSOR_UNDERLINE_HEIGHT),
-            line_highlight_enabled: read_bool(settings, keys::CURSOR_LINE_HIGHLIGHT_ENABLED, defaults::CURSOR_LINE_HIGHLIGHT_ENABLED),
-            line_highlight_color: read_color(settings, keys::CURSOR_LINE_HIGHLIGHT_COLOR, defaults::cursor_line_highlight_color()),
         },
         status_bar: StatusBarColors {
             normal_bg: read_color(settings, keys::STATUS_BAR_NORMAL_BG, defaults::status_bar_normal_bg()),

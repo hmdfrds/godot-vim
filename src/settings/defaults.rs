@@ -69,16 +69,7 @@ pub(crate) fn cursor_command() -> Color {
 
 pub(crate) const CURSOR_ENABLED: bool = true;
 pub(crate) const CURSOR_LERP_SPEED: f64 = 25.0;
-pub(crate) const CURSOR_BLINK_SPEED: f64 = 4.0;
-pub(crate) const CURSOR_BEAM_WIDTH: f64 = 2.0;
 pub(crate) const CURSOR_UNDERLINE_HEIGHT: f64 = 4.0;
-pub(crate) const CURSOR_LINE_HIGHLIGHT_ENABLED: bool = false;
-
-/// Very low alpha — the highlight must be barely visible so it doesn't
-/// obscure syntax highlighting on the current line.
-pub(crate) fn cursor_line_highlight_color() -> Color {
-    Color::from_rgba(1.0, 1.0, 1.0, 0.06)
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Key mapping

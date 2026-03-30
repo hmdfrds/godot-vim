@@ -494,7 +494,8 @@ impl Default for CursorAnimation {
             target_pos: Vector2::ZERO,
             current_pos: Vector2::ZERO,
             lerp_speed: defaults::CURSOR_LERP_SPEED,
-            blink_speed: defaults::CURSOR_BLINK_SPEED,
+            // No blink until apply_settings reads from Godot's native caret_blink.
+            blink_speed: 0.0,
             blink_time: 0.0,
             positioned: false,
             last_alpha: -1.0,
