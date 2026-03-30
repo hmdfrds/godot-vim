@@ -259,7 +259,9 @@ pub(crate) fn execute(
         }
 
         HostRequest::RequestCompletion { .. } => {
-            editor.request_code_completion_ex().force(false).done();
+            if editor.is_code_completion_enabled() {
+                editor.request_code_completion_ex().force(false).done();
+            }
             host_success(request.id())
         }
 

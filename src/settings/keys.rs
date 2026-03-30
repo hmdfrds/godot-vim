@@ -63,6 +63,14 @@ pub(crate) const TIMEOUTLEN: &str = "plugins/GodotVim/mapping/timeoutlen";
 pub(crate) const CONFIG_FILE_PATH: &str = "plugins/GodotVim/mapping/config_file_path";
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Native Godot settings (read-only — NOT registered by GodotVim)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Whether the user wants code completion to auto-trigger as they type.
+/// This is Godot's native EditorSetting, not a GodotVim setting.
+pub(crate) const CODE_COMPLETE_ENABLED: &str = "text_editor/completion/code_complete_enabled";
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Input
 // ─────────────────────────────────────────────────────────────────────────────
 

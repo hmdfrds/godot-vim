@@ -25,6 +25,7 @@ pub(crate) fn read_all(settings: &EditorSettings) -> SettingsSnapshot {
         clipboard_enabled: read_bool(settings, keys::CLIPBOARD_ENABLED, defaults::CLIPBOARD_ENABLED),
         ignorecase: read_bool(settings, keys::IGNORECASE, defaults::IGNORECASE),
         smartcase: read_bool(settings, keys::SMARTCASE, defaults::SMARTCASE),
+        code_complete_enabled: read_bool(settings, keys::CODE_COMPLETE_ENABLED, defaults::CODE_COMPLETE_ENABLED),
         line_number_mode: read_line_number_mode(settings),
         inccommand: read_inccommand(settings),
         highlight_yank_duration: read_int(settings, keys::HIGHLIGHT_YANK_DURATION, defaults::HIGHLIGHT_YANK_DURATION).max(0).min(u32::MAX as i64) as u32,

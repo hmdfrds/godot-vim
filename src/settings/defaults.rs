@@ -91,6 +91,14 @@ pub(crate) const TIMEOUTLEN_MAX: i64 = 5000;
 pub(crate) const CONFIG_FILE_PATH: &str = "";
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Native Godot settings (read-only fallback defaults)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Fallback when the native `text_editor/completion/code_complete_enabled`
+/// setting is missing or has an unexpected type. Godot defaults this to `true`.
+pub(crate) const CODE_COMPLETE_ENABLED: bool = true;
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Input
 // ─────────────────────────────────────────────────────────────────────────────
 

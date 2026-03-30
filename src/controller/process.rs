@@ -65,7 +65,7 @@ impl ProcessContext<'_> {
         self.drain_pending(editor);
         self.ensure_undo_balanced(editor);
 
-        completion::maybe_retrigger_completion(self.engine, key, editor);
+        completion::maybe_retrigger_completion(self.engine, key, editor, self.code_complete_enabled);
 
         consumed
     }

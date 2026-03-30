@@ -86,6 +86,9 @@ pub(crate) struct VimController {
     pending_step_effects: Option<Vec<vim_core::effects::Effect>>,
     /// 0 = disabled.
     highlight_yank_duration_ms: u32,
+    /// Whether Godot's native code completion should auto-trigger on typing.
+    /// Mirrors `text_editor/completion/code_complete_enabled` from EditorSettings.
+    code_complete_enabled: bool,
 }
 
 impl VimController {
@@ -108,6 +111,7 @@ impl VimController {
             vimdebug: vimdebug::VimdebugState::default(),
             pending_step_effects: None,
             highlight_yank_duration_ms: u32::try_from(crate::settings::defaults::HIGHLIGHT_YANK_DURATION).unwrap_or(150),
+            code_complete_enabled: true,
         };
         ctrl.engine.set_shadow_execution(true);
         ctrl
@@ -136,6 +140,7 @@ impl VimController {
             project_vimrc: snapshot.project_vimrc,
         });
         self.set_highlight_yank_duration(snapshot.highlight_yank_duration);
+        self.code_complete_enabled = snapshot.code_complete_enabled;
     }
 
     // ── Public accessors ─────────────────────────────────────────────
@@ -541,6 +546,7 @@ impl VimController {
             security_policy: &self.security_policy,
             highlight_yank_duration_ms: self.highlight_yank_duration_ms,
             passthrough_keys: &self.passthrough_keys,
+            code_complete_enabled: self.code_complete_enabled,
         }
     }
 }

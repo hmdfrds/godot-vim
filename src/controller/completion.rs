@@ -42,6 +42,9 @@ pub(crate) fn try_handle_completion(
         && key.modifiers().contains(Modifiers::CTRL)
         && key.key() == Key::Char(' ')
     {
+        if !editor.is_code_completion_enabled() {
+            return None;
+        }
         editor.request_code_completion_ex().force(true).done();
         return Some(true);
     }
@@ -52,11 +55,17 @@ pub(crate) fn try_handle_completion(
     if in_insert && key.modifiers().contains(Modifiers::CTRL) {
         match key.key() {
             Key::Char('n') if !is_completion_active(editor) => {
+                if !editor.is_code_completion_enabled() {
+                    return None;
+                }
                 // Godot auto-selects index 0 — matches Vim's Ctrl+N (forward).
                 editor.request_code_completion_ex().force(true).done();
                 return Some(true);
             }
             Key::Char('p') if !is_completion_active(editor) => {
+                if !editor.is_code_completion_enabled() {
+                    return None;
+                }
                 editor.request_code_completion_ex().force(true).done();
                 // Vim's Ctrl+P selects the *last* item (backward search).
                 if is_completion_active(editor) {
@@ -120,11 +129,20 @@ pub(crate) fn try_handle_completion(
 
 /// After the engine processes an insert-mode key, re-trigger CodeEdit's
 /// completion heuristic so the popup can appear, filter, or dismiss.
+///
+/// Gated on `code_complete_enabled` (the user's EditorSetting for auto-trigger).
+/// When the user disables auto-completion, typing should not pop up the
+/// completion menu; only explicit triggers (Ctrl+Space, Ctrl+N, Ctrl+P) should.
 pub(crate) fn maybe_retrigger_completion(
     engine: &VimEngine,
     key: KeyEvent,
     editor: &mut Gd<CodeEdit>,
+    code_complete_enabled: bool,
 ) {
+    if !code_complete_enabled {
+        return;
+    }
+
     let mode = engine.mode();
     if !mode.is_insert() && !mode.is_replace() {
         return;
