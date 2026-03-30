@@ -33,7 +33,7 @@
 This is a complete rewrite — settings, config format, and internals are all new.
 
 1. **Remove the old `addons/godot_vim/` folder** from your Godot project before installing
-2. **Clear old EditorSettings** (optional): old GodotVim keys in `editor_settings-4.tres` are harmless — the new version ignores them — but you can delete lines starting with `godot_vim/` in that file for a clean slate. The file is located at:
+2. **Clear old EditorSettings** (optional): old GodotVim keys in `editor_settings-4.tres` are harmless — the new version ignores them — but you can delete lines starting with `plugins/GodotVim` in that file for a clean slate. The file is located at:
    - **Windows:** `%APPDATA%\Godot\editor_settings-4.tres`
    - **Linux:** `~/.config/godot/editor_settings-4.tres`
    - **macOS:** `~/Library/Application Support/Godot/editor_settings-4.tres`
