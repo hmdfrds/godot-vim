@@ -3,8 +3,25 @@
 //! These types model the content of a `.godot-vimrc` file, preserving
 //! structure for faithful roundtrip serialization.
 
+use bitflags::bitflags;
 use vim_core::grammar::MapModePrefix;
 use vim_core::keymap::MappingKind;
+
+bitflags! {
+    /// Compact set of Vim modes, used for mapping mode checkboxes.
+    ///
+    /// Each bit represents one mode. The `NVO` convenience constant matches
+    /// Vim's `:map` semantics (normal + visual + operator-pending).
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+    pub(crate) struct ModeSet: u8 {
+        const NORMAL   = 1 << 0;
+        const INSERT   = 1 << 1;
+        const VISUAL   = 1 << 2;
+        const OPERATOR = 1 << 3;
+        const COMMAND  = 1 << 4;
+        const NVO = Self::NORMAL.bits() | Self::VISUAL.bits() | Self::OPERATOR.bits();
+    }
+}
 
 pub(crate) fn parse_mode_prefix(prefix: &str) -> Option<MapModePrefix> {
     match prefix {
@@ -56,68 +73,65 @@ pub(crate) fn mode_prefix_display(mode: MapModePrefix) -> &'static str {
     }
 }
 
-pub(crate) const fn mode_includes_normal(mode: MapModePrefix) -> bool {
-    matches!(mode, MapModePrefix::All | MapModePrefix::Normal)
-}
-
-pub(crate) const fn mode_includes_insert(mode: MapModePrefix) -> bool {
-    matches!(mode, MapModePrefix::Insert)
-}
-
-pub(crate) const fn mode_includes_visual(mode: MapModePrefix) -> bool {
-    matches!(mode, MapModePrefix::All | MapModePrefix::Visual)
-}
-
-pub(crate) const fn mode_includes_operator(mode: MapModePrefix) -> bool {
-    matches!(mode, MapModePrefix::All | MapModePrefix::Operator)
-}
-
-pub(crate) const fn mode_includes_command(mode: MapModePrefix) -> bool {
-    matches!(mode, MapModePrefix::Command)
-}
-
-/// Convert mode-checkbox booleans to the minimal set of `MapModePrefix` values.
+/// Convert a single `MapModePrefix` into the `ModeSet` flags it covers.
 ///
-/// Returns a `Vec` because arbitrary checkbox combos (e.g., normal + insert)
+/// `MapModePrefix::All` maps to `NVO` (normal + visual + operator-pending),
+/// matching Vim's `:map` semantics where `:map` does NOT include insert or
+/// command modes.
+pub(crate) fn mode_set_from_prefix(prefix: MapModePrefix) -> ModeSet {
+    match prefix {
+        MapModePrefix::All => ModeSet::NVO,
+        MapModePrefix::Normal => ModeSet::NORMAL,
+        MapModePrefix::Insert => ModeSet::INSERT,
+        MapModePrefix::Visual => ModeSet::VISUAL,
+        MapModePrefix::Operator => ModeSet::OPERATOR,
+        MapModePrefix::Command => ModeSet::COMMAND,
+        _ => {
+            log::error!(
+                "mode_set_from_prefix: unhandled MapModePrefix variant {:?}",
+                prefix
+            );
+            ModeSet::empty()
+        }
+    }
+}
+
+/// Convert a `ModeSet` to the minimal set of `MapModePrefix` values.
+///
+/// Returns a `Vec` because arbitrary flag combos (e.g., normal + insert)
 /// require separate mapping commands -- Vim has no single prefix for them.
 ///
-/// `{normal, visual, operator}` collapses to `All` (`:map`), matching Vim
+/// `{NORMAL, VISUAL, OPERATOR}` collapses to `All` (`:map`), matching Vim
 /// semantics where `:map` covers N+V+O but NOT insert or command.
 ///
 /// Empty `Vec` means no mode selected -- caller decides whether to disable
 /// or delete.
-pub(crate) fn mode_prefixes_from_bools(
-    normal: bool,
-    insert: bool,
-    visual: bool,
-    operator: bool,
-    command: bool,
-) -> Vec<MapModePrefix> {
-    let has_all_nvo = normal && visual && operator;
+pub(crate) fn mode_prefixes_from_set(modes: ModeSet) -> Vec<MapModePrefix> {
+    let has_all_nvo = modes.contains(ModeSet::NVO);
 
     let mut prefixes = Vec::new();
 
-    if has_all_nvo && !insert {
+    if has_all_nvo && !modes.contains(ModeSet::INSERT) {
         prefixes.push(MapModePrefix::All);
-    } else if has_all_nvo && insert {
+    } else if has_all_nvo && modes.contains(ModeSet::INSERT) {
         prefixes.push(MapModePrefix::All);
         prefixes.push(MapModePrefix::Insert);
     } else {
-        if normal {
+        if modes.contains(ModeSet::NORMAL) {
             prefixes.push(MapModePrefix::Normal);
         }
-        if insert {
+        if modes.contains(ModeSet::INSERT) {
             prefixes.push(MapModePrefix::Insert);
         }
-        if visual {
+        if modes.contains(ModeSet::VISUAL) {
             prefixes.push(MapModePrefix::Visual);
         }
-        if operator {
+        if modes.contains(ModeSet::OPERATOR) {
             prefixes.push(MapModePrefix::Operator);
         }
     }
 
-    if command {
+    if modes.contains(ModeSet::COMMAND) {
         prefixes.push(MapModePrefix::Command);
     }
 
@@ -331,32 +345,69 @@ mod tests {
     }
 
     #[test]
-    fn mode_prefixes_all_false_returns_empty() {
-        let prefixes = mode_prefixes_from_bools(false, false, false, false, false);
+    fn mode_prefixes_empty_returns_empty() {
+        let prefixes = mode_prefixes_from_set(ModeSet::empty());
         assert!(prefixes.is_empty());
     }
 
     #[test]
     fn mode_prefixes_single_mode() {
         assert_eq!(
-            mode_prefixes_from_bools(true, false, false, false, false),
+            mode_prefixes_from_set(ModeSet::NORMAL),
             vec![MapModePrefix::Normal]
         );
         assert_eq!(
-            mode_prefixes_from_bools(false, true, false, false, false),
+            mode_prefixes_from_set(ModeSet::INSERT),
             vec![MapModePrefix::Insert]
         );
         assert_eq!(
-            mode_prefixes_from_bools(false, false, true, false, false),
+            mode_prefixes_from_set(ModeSet::VISUAL),
             vec![MapModePrefix::Visual]
         );
         assert_eq!(
-            mode_prefixes_from_bools(false, false, false, true, false),
+            mode_prefixes_from_set(ModeSet::OPERATOR),
             vec![MapModePrefix::Operator]
         );
         assert_eq!(
-            mode_prefixes_from_bools(false, false, false, false, true),
+            mode_prefixes_from_set(ModeSet::COMMAND),
             vec![MapModePrefix::Command]
         );
+    }
+
+    #[test]
+    fn mode_prefixes_nvo_collapses_to_all() {
+        assert_eq!(
+            mode_prefixes_from_set(ModeSet::NVO),
+            vec![MapModePrefix::All]
+        );
+    }
+
+    #[test]
+    fn mode_prefixes_nvo_plus_insert() {
+        assert_eq!(
+            mode_prefixes_from_set(ModeSet::NVO | ModeSet::INSERT),
+            vec![MapModePrefix::All, MapModePrefix::Insert]
+        );
+    }
+
+    #[test]
+    fn mode_set_from_prefix_roundtrips() {
+        for prefix in [
+            MapModePrefix::Normal,
+            MapModePrefix::Insert,
+            MapModePrefix::Visual,
+            MapModePrefix::Operator,
+            MapModePrefix::Command,
+        ] {
+            let set = mode_set_from_prefix(prefix);
+            let back = mode_prefixes_from_set(set);
+            assert_eq!(back, vec![prefix]);
+        }
+    }
+
+    #[test]
+    fn mode_set_from_prefix_all_gives_nvo() {
+        let set = mode_set_from_prefix(MapModePrefix::All);
+        assert_eq!(set, ModeSet::NVO);
     }
 }

@@ -5,7 +5,12 @@
 
 /// Process Vim double-quoted string escape sequences (`\n`, `\t`, `\\`, `\"`,
 /// `\r`, `\e`, `\b`). Unknown escapes are preserved verbatim (matching Vim).
-fn unescape_vim_double_quote(s: &str) -> String {
+fn unescape_vim_double_quote(s: &str) -> std::borrow::Cow<'_, str> {
+    // Fast path: no backslash means no escapes to process.
+    if !s.contains('\\') {
+        return std::borrow::Cow::Borrowed(s);
+    }
+
     let mut result = String::with_capacity(s.len());
     let mut chars = s.chars();
     while let Some(ch) = chars.next() {
@@ -28,7 +33,7 @@ fn unescape_vim_double_quote(s: &str) -> String {
             result.push(ch);
         }
     }
-    result
+    std::borrow::Cow::Owned(result)
 }
 
 /// Evaluate a subset of VimL expressions sufficient for practical `<expr>`
@@ -37,32 +42,32 @@ fn unescape_vim_double_quote(s: &str) -> String {
 /// Intentionally limited: covers string/int literals, `mode()`, `nr2char(N)`,
 /// and register references — not a full VimL interpreter. Returns `E15` for
 /// anything outside this subset.
-pub(super) fn eval_simple_expression(expr: &str, mode_str: &str) -> Result<String, String> {
+pub(super) fn eval_simple_expression<'a>(expr: &'a str, mode_str: &'a str) -> Result<std::borrow::Cow<'a, str>, String> {
     let expr = expr.trim();
 
     if let Some(inner) = expr.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')) {
-        return Ok(inner.to_owned());
+        return Ok(std::borrow::Cow::Borrowed(inner));
     }
     if let Some(inner) = expr.strip_prefix('"').and_then(|s| s.strip_suffix('"')) {
         return Ok(unescape_vim_double_quote(inner));
     }
 
     if let Ok(n) = expr.parse::<i64>() {
-        return Ok(n.to_string());
+        return Ok(std::borrow::Cow::Owned(n.to_string()));
     }
 
     if expr == "mode()" || expr == "mode(1)" {
-        return Ok(mode_str.to_owned());
+        return Ok(std::borrow::Cow::Borrowed(mode_str));
     }
 
     // nr2char(0) returns "" (not NUL), matching real Vim behavior.
     if let Some(inner) = expr.strip_prefix("nr2char(").and_then(|s| s.strip_suffix(')')) {
         if let Ok(n) = inner.trim().parse::<u32>() {
             if n == 0 {
-                return Ok(String::new());
+                return Ok(std::borrow::Cow::Borrowed(""));
             }
             if let Some(ch) = char::from_u32(n) {
-                return Ok(ch.to_string());
+                return Ok(std::borrow::Cow::Owned(ch.to_string()));
             }
         }
         return Err(format!("E474: Invalid argument: {}", expr));
@@ -80,11 +85,11 @@ mod tests {
     use super::*;
 
     fn dq(s: &str) -> String {
-        eval_simple_expression(&format!("\"{}\"", s), "n").unwrap()
+        eval_simple_expression(&format!("\"{}\"", s), "n").unwrap().into_owned()
     }
 
     fn sq(s: &str) -> String {
-        eval_simple_expression(&format!("'{}'", s), "n").unwrap()
+        eval_simple_expression(&format!("'{}'", s), "n").unwrap().into_owned()
     }
 
     #[test]

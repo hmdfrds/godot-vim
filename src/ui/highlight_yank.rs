@@ -17,6 +17,24 @@ const HIGHLIGHT_ALPHA: f32 = 0.4;
 /// Bounds draw cost for yanks spanning thousands of lines (e.g. `yG` at top of file).
 const MAX_HIGHLIGHT_RECTS: usize = 500;
 
+/// Three-phase lifecycle for the yank highlight animation.
+///
+/// Replaces `active: bool` + `rects_computed: bool` — those two booleans had
+/// four combinations but only three were legal (`active=false, rects_computed=true`
+/// was nonsensical). This enum makes the illegal state unrepresentable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum AnimationPhase {
+    /// No animation running. Process callback is disabled.
+    #[default]
+    Inactive,
+    /// `show_yank()` was called but `_draw()` hasn't computed pixel rects yet.
+    /// First draw will transition to `Drawing`.
+    WaitingForRects,
+    /// Pixel rects are cached; fade-out is in progress. Timeout transitions
+    /// back to `Inactive`.
+    Drawing,
+}
+
 #[derive(GodotClass)]
 #[class(base=Control)]
 pub(crate) struct HighlightYankOverlay {
@@ -26,15 +44,12 @@ pub(crate) struct HighlightYankOverlay {
     alpha: f32,
     fade_duration: f32,
     elapsed: f32,
-    active: bool,
+    phase: AnimationPhase,
     /// Pixel rectangles computed once on the first `_draw()` of each animation
     /// cycle, then reused for every subsequent frame. This avoids per-frame FFI
     /// calls to `get_rect_at_line_column` -- the gutter layout doesn't change
     /// within a single 150ms fade-out.
     cached_rects: Vec<Rect2>,
-    /// Separate from `cached_rects.is_empty()` because offscreen ranges produce
-    /// zero rects legitimately; without this flag we'd re-attempt FFI every frame.
-    rects_computed: bool,
 }
 
 #[godot_api]
@@ -47,23 +62,21 @@ impl IControl for HighlightYankOverlay {
             alpha: 0.0,
             fade_duration: 0.15,
             elapsed: 0.0,
-            active: false,
+            phase: AnimationPhase::Inactive,
             cached_rects: Vec::new(),
-            rects_computed: false,
         }
     }
 
     fn process(&mut self, delta: f64) {
         panic_guard(|| {
-            if !self.active {
+            if matches!(self.phase, AnimationPhase::Inactive) {
                 return;
             }
             self.elapsed += delta as f32;
             if self.elapsed >= self.fade_duration {
-                self.active = false;
+                self.phase = AnimationPhase::Inactive;
                 self.alpha = 0.0;
                 self.cached_rects.clear();
-                self.rects_computed = false;
                 self.base_mut().queue_redraw();
                 self.base_mut().set_process(false);
                 return;
@@ -75,15 +88,15 @@ impl IControl for HighlightYankOverlay {
 
     fn draw(&mut self) {
         panic_guard(|| {
-            if !self.active {
+            if matches!(self.phase, AnimationPhase::Inactive) {
                 return;
             }
 
             let color = Color::from_rgba(1.0, 1.0, 0.0, self.alpha);
 
             // Lazy-compute on first draw frame of this animation cycle.
-            if !self.rects_computed {
-                self.rects_computed = true;
+            if matches!(self.phase, AnimationPhase::WaitingForRects) {
+                self.phase = AnimationPhase::Drawing;
                 let Some(parent) = self.base().get_parent() else { return };
                 let Ok(editor) = parent.try_cast::<CodeEdit>() else { return };
 
@@ -119,9 +132,8 @@ impl HighlightYankOverlay {
         self.fade_duration = (duration_ms as f32 / 1000.0).max(0.01);
         self.elapsed = 0.0;
         self.alpha = HIGHLIGHT_ALPHA;
-        self.active = true;
+        self.phase = AnimationPhase::WaitingForRects;
         self.cached_rects.clear();
-        self.rects_computed = false;
 
         self.base_mut().set_process(true);
         self.base_mut().queue_redraw();

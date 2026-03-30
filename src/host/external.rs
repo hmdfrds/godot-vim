@@ -13,6 +13,8 @@ use godot::prelude::*;
 use vim_core::execution::{HostRequestId, HostResult};
 use vim_core::primitives::Range;
 
+use crate::bridge::code_edit_ext::CodeEditExt;
+
 use super::host_failure;
 
 static FILTER_COUNTER: AtomicU32 = AtomicU32::new(0);
@@ -206,7 +208,7 @@ pub(super) fn handle_reindent(
     let start_line = crate::bridge::codec::usize_to_i32(full_text[..start_byte].matches('\n').count());
 
     let use_spaces = editor.is_indent_using_spaces();
-    let indent_size = crate::bridge::codec::i32_to_usize(editor.get_indent_size().max(1));
+    let indent_size = editor.safe_indent_size();
     let one_indent = if use_spaces {
         " ".repeat(indent_size)
     } else {
@@ -252,10 +254,10 @@ fn reindent_lines(
             continue;
         }
 
-        let base_indent = if i == 0 {
+        let base_indent: std::borrow::Cow<'_, str> = if i == 0 {
             match ref_line_before_range {
                 Some(ref_text) => compute_indent_from_ref(ref_text, one_indent),
-                None => String::new(),
+                None => std::borrow::Cow::Borrowed(""),
             }
         } else {
             // Use the last non-empty reindented line as reference.
@@ -268,7 +270,7 @@ fn reindent_lines(
                 // All preceding lines are empty — fall back to pre-range reference.
                 None => match ref_line_before_range {
                     Some(ref_text) => compute_indent_from_ref(ref_text, one_indent),
-                    None => String::new(),
+                    None => std::borrow::Cow::Borrowed(""),
                 },
             }
         };
@@ -279,7 +281,7 @@ fn reindent_lines(
         {
             strip_one_indent(&base_indent, one_indent)
         } else {
-            std::borrow::Cow::Owned(base_indent)
+            base_indent
         };
 
         result_lines.push(format!("{indent}{trimmed_content}"));
@@ -291,7 +293,7 @@ fn reindent_lines(
 /// Derive indent for a new line from the reference (previous) line: inherits
 /// the reference's leading whitespace, adding one level if it ends with a
 /// block opener (`:`, `{`, `(`, `[`).
-fn compute_indent_from_ref(ref_line: &str, one_indent: &str) -> String {
+fn compute_indent_from_ref<'a>(ref_line: &'a str, one_indent: &str) -> std::borrow::Cow<'a, str> {
     // Indent chars are always ASCII, so byte iteration is safe here.
     let indent_len = ref_line.bytes().take_while(|&b| b == b' ' || b == b'\t').count();
     let base = &ref_line[..indent_len];
@@ -302,9 +304,9 @@ fn compute_indent_from_ref(ref_line: &str, one_indent: &str) -> String {
         || trimmed.ends_with('[');
 
     if opens_block {
-        format!("{base}{one_indent}")
+        std::borrow::Cow::Owned(format!("{base}{one_indent}"))
     } else {
-        base.to_string()
+        std::borrow::Cow::Borrowed(base)
     }
 }
 

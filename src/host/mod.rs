@@ -11,6 +11,7 @@ mod clipboard;
 mod custom_commands;
 mod dispatch;
 pub(crate) mod editor_host;
+pub(crate) mod error;
 mod eval;
 mod external;
 pub(crate) mod file;

@@ -5,6 +5,8 @@
 //! This trait extracts exactly the Godot API surface those handlers need, enabling
 //! `MockEditorHost` for deterministic unit testing without a running Godot instance.
 
+use super::error::HostError;
+
 /// Narrow abstraction over Godot editor operations used by file I/O handlers.
 ///
 /// Methods map 1:1 to Godot API calls. The surface is deliberately minimal —
@@ -30,15 +32,15 @@ pub(crate) trait EditorHost {
     fn notify_name_changed(&self);
 
     /// Save pipeline: editor text -> Script resource -> ResourceSaver -> disk.
-    /// Returns the actual save path, or an error.
-    fn save_script(&mut self, explicit_path: Option<&str>) -> Result<String, String>;
+    /// Returns the actual save path, or a typed `HostError`.
+    fn save_script(&mut self, explicit_path: Option<&str>) -> Result<String, HostError>;
 
     /// Open a script in the editor via ResourceLoader -> edit_script().
-    fn open_script(&mut self, path: &str) -> Result<(), String>;
+    fn open_script(&mut self, path: &str) -> Result<(), HostError>;
 
     /// Read file contents. Routes through Godot's `FileAccess` for virtual
     /// paths (`res://`, `user://`) and `std::fs` for filesystem paths.
-    fn read_file(&self, path: &str) -> Result<String, String>;
+    fn read_file(&self, path: &str) -> Result<String, HostError>;
 
     /// Update the in-memory Script resource without saving to disk. Used by
     /// `reload_from_disk` to keep the Script resource in sync after a reload.
@@ -46,6 +48,7 @@ pub(crate) trait EditorHost {
 }
 
 mod godot_impl {
+    use compact_str::CompactString;
     use godot::classes::file_access::ModeFlags;
     use godot::classes::{
         CodeEdit, EditorInterface, FileAccess, ResourceLoader, ResourceSaver, Script,
@@ -54,6 +57,7 @@ mod godot_impl {
     use godot::prelude::*;
 
     use super::EditorHost;
+    use crate::host::error::HostError;
 
     /// Production `EditorHost` wrapping a live `Gd<CodeEdit>`.
     pub(crate) struct GodotEditorHost<'a>(pub(crate) &'a mut Gd<CodeEdit>);
@@ -85,15 +89,21 @@ mod godot_impl {
 
     const MAX_READ_FILE_SIZE: usize = 10 * 1024 * 1024;
 
-    fn read_via_godot(path: &str) -> Result<String, String> {
+    fn read_via_godot(path: &str) -> Result<String, HostError> {
         let file = FileAccess::open(&GString::from(path), ModeFlags::READ)
-            .ok_or_else(|| format!("E484: Can't open file \"{path}\""))?;
+            .ok_or_else(|| HostError::CantOpenFile {
+                path: CompactString::from(path),
+                detail: None,
+            })?;
         let length = usize::try_from(file.get_length()).unwrap_or(usize::MAX);
         if length > MAX_READ_FILE_SIZE {
-            return Err(format!(
-                "E484: File too large (>10MB): \"{}\" ({} bytes)",
-                path, length
-            ));
+            return Err(HostError::CantOpenFile {
+                path: CompactString::from(path),
+                detail: Some(CompactString::from(format!(
+                    "File too large (>10MB): {} bytes",
+                    length
+                ))),
+            });
         }
         let text = file.get_as_text().to_string();
         Ok(text)
@@ -139,9 +149,9 @@ mod godot_impl {
             emit_name_changed();
         }
 
-        fn save_script(&mut self, explicit_path: Option<&str>) -> Result<String, String> {
+        fn save_script(&mut self, explicit_path: Option<&str>) -> Result<String, HostError> {
             let mut script =
-                current_script().ok_or_else(|| "E32: No file name".to_string())?;
+                current_script().ok_or(HostError::NoFileName)?;
 
             let text = self.0.get_text();
             script.set_source_code(&text);
@@ -151,7 +161,7 @@ mod godot_impl {
                 None => {
                     let script_path = script.get_path().to_string();
                     if script_path.is_empty() {
-                        return Err("E32: No file name".to_string());
+                        return Err(HostError::NoFileName);
                     }
                     script_path
                 }
@@ -164,7 +174,10 @@ mod godot_impl {
                 .path(&GString::from(&save_path))
                 .done();
             if err != godot::global::Error::OK {
-                return Err(format!("E514: Failed to save \"{save_path}\": {err:?}"));
+                return Err(HostError::WriteFailed {
+                    path: CompactString::from(&save_path),
+                    detail: Some(CompactString::from(format!("{err:?}"))),
+                });
             }
 
             if save_path == original_path || explicit_path.is_none() {
@@ -176,7 +189,7 @@ mod godot_impl {
             Ok(save_path)
         }
 
-        fn open_script(&mut self, path: &str) -> Result<(), String> {
+        fn open_script(&mut self, path: &str) -> Result<(), HostError> {
             let mut loader = ResourceLoader::singleton();
             let resource = loader.load_ex(&GString::from(path)).done();
             match resource {
@@ -185,20 +198,29 @@ mod godot_impl {
                         EditorInterface::singleton().edit_script(&script);
                         Ok(())
                     } else {
-                        Err(format!("E484: Resource is not a script: \"{path}\""))
+                        Err(HostError::CantOpenFile {
+                            path: CompactString::from(path),
+                            detail: Some(CompactString::from("Resource is not a script")),
+                        })
                     }
                 }
-                None => Err(format!("E484: Can't open file \"{path}\"")),
+                None => Err(HostError::CantOpenFile {
+                    path: CompactString::from(path),
+                    detail: None,
+                }),
             }
         }
 
-        fn read_file(&self, path: &str) -> Result<String, String> {
+        fn read_file(&self, path: &str) -> Result<String, HostError> {
             if crate::host::file::is_godot_path(path) {
                 read_via_godot(path)
             } else {
                 crate::host::file::check_fs_file_size(path)?;
                 std::fs::read_to_string(path)
-                    .map_err(|e| format!("E484: Can't open file \"{path}\": {e}"))
+                    .map_err(|e| HostError::CantOpenFile {
+                        path: CompactString::from(path),
+                        detail: Some(CompactString::from(e.to_string())),
+                    })
             }
         }
 
@@ -214,22 +236,39 @@ pub(crate) use godot_impl::GodotEditorHost;
 
 #[cfg(test)]
 pub(super) mod mock {
+    use compact_str::CompactString;
     use super::EditorHost;
+    use crate::host::error::HostError;
     use std::collections::HashMap;
+
+    /// Lifecycle state of the mock buffer, replacing three booleans
+    /// (`modified`, `saved`, `closed`) whose 8 combinations included 5
+    /// illegal states (e.g. `modified=true, closed=true, saved=false`).
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub(in crate::host) enum MockBufferState {
+        /// Clean buffer — no unsaved changes, not yet saved or closed.
+        Unmodified,
+        /// Buffer has unsaved changes.
+        Modified,
+        /// `tag_saved_version()` was called — buffer is clean and persisted.
+        Saved,
+        /// `close_tab()` was called — buffer is gone.
+        Closed,
+    }
 
     /// Test double for `EditorHost`. All fields are public for direct scenario setup.
     pub(in crate::host) struct MockEditorHost {
         pub text: String,
         pub script_path: Option<String>,
-        pub modified: bool,
-        /// Set to `true` when `tag_saved_version()` is called.
-        pub saved: bool,
-        /// Set to `true` when `close_tab()` is called.
-        pub closed: bool,
+        pub buffer_state: MockBufferState,
+        /// Audit trail: `true` if `tag_saved_version()` was ever called.
+        /// Separate from `buffer_state` because a subsequent `close_tab()`
+        /// transitions the state to `Closed`, losing the save information.
+        pub save_called: bool,
         /// Override for `save_script()`. `None` = default behavior.
-        pub save_result: Option<Result<String, String>>,
+        pub save_result: Option<Result<String, HostError>>,
         /// Override for `open_script()`. `None` = default behavior.
-        pub open_result: Option<Result<(), String>>,
+        pub open_result: Option<Result<(), HostError>>,
         /// Virtual filesystem for `read_file()`.
         pub files: HashMap<String, String>,
         /// Records the path passed to `open_script()`.
@@ -243,9 +282,8 @@ pub(super) mod mock {
             Self {
                 text: text.to_string(),
                 script_path: script_path.map(|s| s.to_string()),
-                modified: false,
-                saved: false,
-                closed: false,
+                buffer_state: MockBufferState::Unmodified,
+                save_called: false,
                 save_result: None,
                 open_result: None,
                 files: HashMap::new(),
@@ -265,12 +303,12 @@ pub(super) mod mock {
         }
 
         fn is_modified(&self) -> bool {
-            self.modified
+            matches!(self.buffer_state, MockBufferState::Modified)
         }
 
         fn tag_saved_version(&mut self) {
-            self.saved = true;
-            self.modified = false;
+            self.buffer_state = MockBufferState::Saved;
+            self.save_called = true;
         }
 
         fn set_text(&mut self, text: &str) {
@@ -278,7 +316,7 @@ pub(super) mod mock {
         }
 
         fn close_tab(&mut self) {
-            self.closed = true;
+            self.buffer_state = MockBufferState::Closed;
         }
 
         fn notify_name_changed(&self) {
@@ -288,7 +326,7 @@ pub(super) mod mock {
             // fully trackable.
         }
 
-        fn save_script(&mut self, explicit_path: Option<&str>) -> Result<String, String> {
+        fn save_script(&mut self, explicit_path: Option<&str>) -> Result<String, HostError> {
             if let Some(ref result) = self.save_result {
                 let r = result.clone();
                 if r.is_ok() {
@@ -297,8 +335,8 @@ pub(super) mod mock {
                     let saved_path = r.as_ref().unwrap();
                     let is_same_path = self.script_path.as_deref() == Some(saved_path.as_str());
                     if is_same_path || explicit_path.is_none() {
-                        self.saved = true;
-                        self.modified = false;
+                        self.buffer_state = MockBufferState::Saved;
+                        self.save_called = true;
                     }
                 }
                 return r;
@@ -308,16 +346,16 @@ pub(super) mod mock {
                 None => {
                     match &self.script_path {
                         Some(sp) if !sp.is_empty() => sp.clone(),
-                        _ => return Err("E32: No file name".to_string()),
+                        _ => return Err(HostError::NoFileName),
                     }
                 }
             };
-            self.saved = true;
-            self.modified = false;
+            self.buffer_state = MockBufferState::Saved;
+            self.save_called = true;
             Ok(path)
         }
 
-        fn open_script(&mut self, path: &str) -> Result<(), String> {
+        fn open_script(&mut self, path: &str) -> Result<(), HostError> {
             self.opened_path = Some(path.to_string());
             if let Some(ref result) = self.open_result {
                 return result.clone();
@@ -325,7 +363,7 @@ pub(super) mod mock {
             Ok(())
         }
 
-        fn read_file(&self, path: &str) -> Result<String, String> {
+        fn read_file(&self, path: &str) -> Result<String, HostError> {
             if let Some(content) = self.files.get(path) {
                 return Ok(content.clone());
             }
@@ -334,9 +372,15 @@ pub(super) mod mock {
             if !path.starts_with("res://") && !path.starts_with("user://") {
                 crate::host::file::check_fs_file_size(path)?;
                 std::fs::read_to_string(path)
-                    .map_err(|e| format!("E484: Can't open file \"{path}\": {e}"))
+                    .map_err(|e| HostError::CantOpenFile {
+                        path: CompactString::from(path),
+                        detail: Some(CompactString::from(e.to_string())),
+                    })
             } else {
-                Err(format!("E484: Can't open file \"{path}\""))
+                Err(HostError::CantOpenFile {
+                    path: CompactString::from(path),
+                    detail: None,
+                })
             }
         }
 

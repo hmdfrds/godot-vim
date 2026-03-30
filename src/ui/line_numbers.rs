@@ -25,7 +25,7 @@
 
 use godot::classes::image::Format;
 use godot::classes::text_edit::GutterType;
-use godot::classes::{CodeEdit, INode, Image, ImageTexture, Node, Texture2D};
+use godot::classes::{CodeEdit, EditorInterface, INode, Image, ImageTexture, Node, Texture2D};
 use godot::global::HorizontalAlignment;
 use godot::prelude::*;
 
@@ -78,6 +78,14 @@ pub struct LineNumberManager {
 
     mode: LineNumberMode,
 
+    /// Whether Godot's native `show_line_numbers` EditorSetting was enabled
+    /// at attach time. When false, we skip custom gutter creation entirely
+    /// and leave the native gutters untouched.
+    native_line_numbers_enabled: bool,
+    /// Whether Godot's native `show_code_folding_button` EditorSetting was
+    /// enabled at attach time. Same early-exit logic as line numbers.
+    native_fold_gutter_enabled: bool,
+
     // ── Dirty-flag state ────────────────────────────────────────────
     // These caches let us skip redundant gutter repaints. See the
     // module-level doc for the per-mode skip rules.
@@ -102,6 +110,8 @@ impl INode for LineNumberManager {
             fold_gutter_index: -1,
             empty_icon: None,
             mode: LineNumberMode::default(),
+            native_line_numbers_enabled: true,
+            native_fold_gutter_enabled: true,
             last_line_count: -1,
             gutter_digits: 1,
             last_caret_line: -1,
@@ -141,6 +151,14 @@ impl LineNumberManager {
         }
 
         self.editor = Some(editor.clone());
+
+        // ── Snapshot native gutter settings ────────────────────────────────
+        // Read Godot's EditorSettings to check if the user had line numbers
+        // and/or fold gutter enabled natively. If disabled, we respect that
+        // choice and skip custom gutter creation entirely.
+        let (native_ln, native_fold) = read_native_gutter_settings();
+        self.native_line_numbers_enabled = native_ln;
+        self.native_fold_gutter_enabled = native_fold;
 
         // ── Connect signals ────────────────────────────────────────────────
 
@@ -198,13 +216,20 @@ impl LineNumberManager {
     }
 
     /// Detach from the current editor, restoring its native gutters.
+    ///
+    /// Only re-enables each native gutter if it was originally enabled before
+    /// we attached. This respects the user's Godot EditorSettings choices.
     pub fn detach(&mut self) {
         if let Some(mut editor) = self.editor.take() {
             if editor.is_instance_valid() {
                 self.disconnect_signals(editor.clone());
                 self.clear_custom_gutters(editor.clone());
-                editor.set_draw_line_numbers(true);
-                editor.set_draw_fold_gutter(true);
+                if self.native_line_numbers_enabled {
+                    editor.set_draw_line_numbers(true);
+                }
+                if self.native_fold_gutter_enabled {
+                    editor.set_draw_fold_gutter(true);
+                }
             }
         }
     }
@@ -352,10 +377,11 @@ impl LineNumberManager {
         }
 
         // Floating windows can re-enable Godot's built-in gutters; suppress them.
-        if editor.is_draw_line_numbers_enabled() {
+        // Only re-suppress if we actually replaced them (native was originally on).
+        if self.native_line_numbers_enabled && editor.is_draw_line_numbers_enabled() {
             editor.set_draw_line_numbers(false);
         }
-        if editor.is_drawing_fold_gutter() {
+        if self.native_fold_gutter_enabled && editor.is_drawing_fold_gutter() {
             editor.set_draw_fold_gutter(false);
         }
 
@@ -532,13 +558,24 @@ impl LineNumberManager {
     /// Disable built-in gutters and create (or reuse) custom STRING + ICON
     /// gutters. Reuses existing gutters by name to avoid duplicates when
     /// re-attaching to the same editor (e.g. after hot-reload).
+    ///
+    /// Respects native Godot settings: if the user disabled line numbers or
+    /// the fold gutter in EditorSettings, we skip the corresponding custom
+    /// gutter entirely rather than overriding their preference.
     fn setup_gutters(&mut self) {
         let Some(mut editor) = self.editor.clone() else {
             return;
         };
 
-        editor.set_draw_line_numbers(false);
-        editor.set_draw_fold_gutter(false);
+        // Only disable native gutters that we're going to replace with
+        // custom ones. If the user had them off in EditorSettings, leave
+        // them off and skip custom gutter creation.
+        if self.native_line_numbers_enabled {
+            editor.set_draw_line_numbers(false);
+        }
+        if self.native_fold_gutter_enabled {
+            editor.set_draw_fold_gutter(false);
+        }
 
         self.line_gutter_index = -1;
         self.fold_gutter_index = -1;
@@ -553,14 +590,14 @@ impl LineNumberManager {
             }
         }
 
-        if self.line_gutter_index == -1 {
+        if self.native_line_numbers_enabled && self.line_gutter_index == -1 {
             editor.add_gutter();
             self.line_gutter_index = editor.get_gutter_count() - 1;
             editor.set_gutter_name(self.line_gutter_index, LINE_GUTTER_NAME);
             editor.set_gutter_type(self.line_gutter_index, GutterType::STRING);
         }
 
-        if self.fold_gutter_index == -1 {
+        if self.native_fold_gutter_enabled && self.fold_gutter_index == -1 {
             editor.add_gutter();
             self.fold_gutter_index = editor.get_gutter_count() - 1;
             editor.set_gutter_name(self.fold_gutter_index, FOLD_GUTTER_NAME);
@@ -620,5 +657,50 @@ impl LineNumberManager {
                 scroll.disconnect(SIG_VALUE_CHANGED, &callable_scroll);
             }
         }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Free functions
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Read the native gutter visibility settings from Godot's `EditorSettings`.
+///
+/// Returns `(show_line_numbers, show_code_folding_button)`. Defaults to
+/// `(true, true)` if the settings are unavailable (e.g. during unit tests or
+/// if the EditorSettings singleton hasn't been created yet).
+fn read_native_gutter_settings() -> (bool, bool) {
+    let Some(settings) = EditorInterface::singleton().get_editor_settings() else {
+        return (true, true);
+    };
+
+    let show_line_numbers = read_bool_setting(
+        &settings,
+        "text_editor/appearance/gutters/show_line_numbers",
+        true,
+    );
+    let show_fold_gutter = read_bool_setting(
+        &settings,
+        "text_editor/appearance/gutters/show_code_folding_button",
+        true,
+    );
+
+    (show_line_numbers, show_fold_gutter)
+}
+
+/// Read a single boolean from `EditorSettings`, falling back to `default` if
+/// the key doesn't exist or the value isn't convertible to `bool`.
+fn read_bool_setting(
+    settings: &godot::classes::EditorSettings,
+    key: &str,
+    default: bool,
+) -> bool {
+    if settings.has_setting(key) {
+        settings
+            .get_setting(key)
+            .try_to::<bool>()
+            .unwrap_or(default)
+    } else {
+        default
     }
 }

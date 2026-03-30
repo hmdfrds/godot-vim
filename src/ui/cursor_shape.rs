@@ -18,6 +18,7 @@ use godot::prelude::*;
 
 use vim_core::primitives::Mode;
 
+use crate::bridge::code_edit_ext::CodeEditExt;
 use crate::safety::panic_guard;
 use crate::types::CharLineCol;
 
@@ -76,7 +77,7 @@ pub(crate) fn compute_cursor_geometry(
     editor: &Gd<CodeEdit>,
     override_pos: Option<CharLineCol>,
 ) -> Option<CursorGeometry> {
-    let line_height = (editor.get_line_height() as f32).max(1.0);
+    let line_height = editor.safe_line_height() as f32;
     let font = editor.get_theme_font("font")?;
     let font_size = editor.get_theme_font_size("font_size");
     let fallback_char_width = font.get_char_size('m' as u32, font_size).x.max(1.0);
@@ -288,7 +289,7 @@ impl ShapedTextCache {
         let rid = ts.create_shaped_text();
         ts.shaped_text_add_string(rid, &line_text, &font_rids, font_size as i64);
 
-        let tab_size = editor.get_tab_size();
+        let tab_size = editor.safe_tab_size();
         let space_w = font.get_char_size(' ' as u32, font_size).x;
         let tab_px = space_w * tab_size as f32;
         let tab_stops = PackedFloat32Array::from(&[tab_px]);
@@ -493,7 +494,8 @@ impl Default for CursorAnimation {
             target_pos: Vector2::ZERO,
             current_pos: Vector2::ZERO,
             lerp_speed: defaults::CURSOR_LERP_SPEED,
-            blink_speed: defaults::CURSOR_BLINK_SPEED,
+            // No blink until apply_settings reads from Godot's native caret_blink.
+            blink_speed: 0.0,
             blink_time: 0.0,
             positioned: false,
             last_alpha: -1.0,

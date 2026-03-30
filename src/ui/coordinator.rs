@@ -36,8 +36,6 @@ use crate::types::{CharLineCol, StatusMessage, UiSnapshot};
 #[derive(Default)]
 struct SavedEditorState {
     caret_color: Option<Color>,
-    highlight_line: Option<bool>,
-    line_highlight_color: Option<Color>,
     caret_type: Option<CaretType>,
 }
 
@@ -145,6 +143,7 @@ impl UiCoordinator {
             vim_cursor.force_snap();
         }
         self.cursor = Some(cursor);
+        self.cursor_enabled = true;
 
         // ── 4. Hide native caret ─────────────────────────────────────────
         // Save the existing override (or None for theme-inherited) so detach
@@ -160,15 +159,8 @@ impl UiCoordinator {
             Color::from_rgba(0.0, 0.0, 0.0, 0.0),
         );
 
-        // ── 4b. Cache caret type and line highlight state ────────────────
+        // ── 4b. Cache caret type ───────────────────────────────────────
         self.saved.caret_type = Some(editor.get_caret_type());
-        self.saved.highlight_line = Some(editor.is_highlight_current_line_enabled());
-        self.saved.line_highlight_color =
-            if editor.has_theme_color_override("current_line_color") {
-                Some(editor.get_theme_color("current_line_color"))
-            } else {
-                None
-            };
 
         // ── 5. Line numbers ─────────────────────────────────────────────
         let mut line_numbers = LineNumberManager::new_alloc();
@@ -211,15 +203,6 @@ impl UiCoordinator {
 
         if let Some(caret_type) = self.saved.caret_type.take() {
             editor.set_caret_type(caret_type);
-        }
-
-        if let Some(val) = self.saved.highlight_line.take() {
-            editor.set_highlight_current_line(val);
-        }
-        if let Some(color) = self.saved.line_highlight_color.take() {
-            editor.add_theme_color_override("current_line_color", color);
-        } else {
-            editor.remove_theme_color_override("current_line_color");
         }
 
         // ── 2b. Inccommand overlay ───────────────────────────────────────
@@ -288,7 +271,7 @@ impl UiCoordinator {
         let pending_changed = self.cache.last_pending_command.as_deref() != Some(snap.pending_command.as_str())
             || self.cache.last_pending_keys.as_deref() != Some(snap.pending_keys.as_str());
         let cmdline_active = snap.cmdline.prompt.is_some();
-        let vimdebug_active = snap.vimdebug.provenance.is_some() || snap.vimdebug.effects.is_some();
+        let vimdebug_active = snap.vimdebug.is_active();
 
         if mode_changed || message_changed || recording_changed || pending_changed || cmdline_active || vimdebug_active {
             if let Some(ref mut bar) = self.status_bar {
@@ -376,14 +359,14 @@ impl UiCoordinator {
         }
 
         // ── 7. Debug range overlay ───────────────────────────────────────
-        match snap.vimdebug.range {
-            Some(ref range) => {
+        match snap.vimdebug.range() {
+            Some(range) => {
                 if let Some(ref mut overlay) = self.debug_overlay {
                     overlay.bind_mut().show_range(range.start, range.end, editor);
                 }
             }
             // Only clear when vimdebug is fully inactive, not just range-less.
-            None if snap.vimdebug.provenance.is_none() && snap.vimdebug.effects.is_none() => {
+            None if !snap.vimdebug.is_active() => {
                 self.clear_debug_overlay();
             }
             _ => {}
@@ -423,11 +406,15 @@ impl UiCoordinator {
             // Force repaint now so color is correct before the next keystroke.
             vim_cursor.set_mode(current_mode);
 
-            vim_cursor.set_animation(snapshot.cursor.lerp_speed, snapshot.cursor.blink_speed);
-            vim_cursor.set_dimensions(
-                snapshot.cursor.beam_width as f32,
-                snapshot.cursor.underline_height as f32,
-            );
+            // Blink speed: derive from Godot's native caret_blink settings.
+            let blink_speed = if editor.is_caret_blink_enabled() {
+                let interval = editor.get_caret_blink_interval() as f64;
+                if interval > 0.0 { std::f64::consts::PI / interval } else { 0.0 }
+            } else {
+                0.0
+            };
+            vim_cursor.set_animation(snapshot.cursor.lerp_speed, blink_speed);
+            vim_cursor.set_dimensions(2.0, snapshot.cursor.underline_height as f32);
         }
 
         // ── Cursor enable/disable toggle ────────────────────────────────
@@ -455,23 +442,6 @@ impl UiCoordinator {
                 }
             }
             self.cursor_enabled = snapshot.cursor.enabled;
-        }
-
-        if snapshot.cursor.line_highlight_enabled {
-            editor.set_highlight_current_line(true);
-            editor.add_theme_color_override(
-                "current_line_color",
-                snapshot.cursor.line_highlight_color,
-            );
-        } else {
-            editor.set_highlight_current_line(
-                self.saved.highlight_line.unwrap_or(false),
-            );
-            if let Some(color) = self.saved.line_highlight_color {
-                editor.add_theme_color_override("current_line_color", color);
-            } else {
-                editor.remove_theme_color_override("current_line_color");
-            }
         }
 
         if let Some(ref mut ln) = self.line_numbers {

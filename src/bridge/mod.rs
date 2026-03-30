@@ -20,4 +20,4 @@ pub(crate) mod input;
 pub(crate) mod port;
 pub(crate) mod port_impl;
 
-pub(crate) use port_impl::{AutoBraceSnapshot, SyntaxContext};
+pub(crate) use port_impl::{AutoBraceSnapshot, SyntaxRegion};

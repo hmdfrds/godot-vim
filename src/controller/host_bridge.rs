@@ -123,7 +123,7 @@ impl ProcessContext<'_> {
             let mode_str = mode_to_vim_string(self.engine.mode());
             let result = crate::host::execute(request, editor, self.security_policy, mode_str);
 
-            let result = sandbox_config_result(request, result, self.security_policy.sandbox_sourced_configs);
+            let result = sandbox_config_result(request, result, self.security_policy.project_vimrc == crate::settings::ProjectVimrc::Sandbox);
 
             if let Some(msg) = result_message(&result) {
                 log::debug!("Host result: {}", msg);
@@ -156,7 +156,7 @@ impl ProcessContext<'_> {
                     _ => editor.get_text().to_string(),
                 }
             };
-            self.apply_effects(sub_effects, editor, false, &text, None);
+            self.apply_effects(sub_effects, editor, crate::effects::dispatch::AutoBraceMode::Ineligible, &text, None);
         }
         let sub_requests = response.take_host_requests();
         if !sub_requests.is_empty() {

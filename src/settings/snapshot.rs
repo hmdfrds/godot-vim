@@ -107,17 +107,13 @@ pub(crate) struct CursorSettings {
     pub(crate) replace: Color,
     pub(crate) operator: Color,
     pub(crate) command: Color,
-    pub(crate) line_highlight_color: Color,
 
     // ── Dimensions / animation ──────────────────────────────────────────
     pub(crate) lerp_speed: f64,
-    pub(crate) blink_speed: f64,
-    pub(crate) beam_width: f64,
     pub(crate) underline_height: f64,
 
     // ── Toggles ─────────────────────────────────────────────────────────
     pub(crate) enabled: bool,
-    pub(crate) line_highlight_enabled: bool,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -171,6 +167,10 @@ pub(crate) struct SettingsSnapshot {
     pub(crate) clipboard_enabled: bool,
     pub(crate) ignorecase: bool,
     pub(crate) smartcase: bool,
+    /// Whether Godot's native code completion should auto-trigger on typing.
+    /// Read from `text_editor/completion/code_complete_enabled` (native Godot
+    /// EditorSetting, not registered by GodotVim).
+    pub(crate) code_complete_enabled: bool,
     pub(crate) inccommand: InccommandMode,
     pub(crate) log_level: crate::logging::LogLevel,
     pub(crate) line_number_mode: LineNumberMode,
@@ -228,6 +228,7 @@ mod tests {
             clipboard_enabled: false,
             ignorecase: false,
             smartcase: false,
+            code_complete_enabled: true,
             line_number_mode: LineNumberMode::Hybrid,
             inccommand: InccommandMode::Nosplit,
             highlight_yank_duration: 150,
@@ -240,11 +241,7 @@ mod tests {
                 command: Color::WHITE,
                 enabled: true,
                 lerp_speed: 25.0,
-                blink_speed: 4.0,
-                beam_width: 2.0,
                 underline_height: 4.0,
-                line_highlight_enabled: false,
-                line_highlight_color: Color::from_rgba(1.0, 1.0, 1.0, 0.06),
             },
             status_bar: StatusBarColors {
                 normal_bg: Color::from_rgb(0.5, 0.6, 0.8),
@@ -392,33 +389,9 @@ mod tests {
     }
 
     #[test]
-    fn cursor_blink_speed_default_is_4() {
-        let snap = make_snapshot(5, 80, 1000);
-        assert_eq!(snap.cursor.blink_speed, 4.0);
-    }
-
-    #[test]
-    fn cursor_beam_width_default_is_2() {
-        let snap = make_snapshot(5, 80, 1000);
-        assert_eq!(snap.cursor.beam_width, 2.0);
-    }
-
-    #[test]
     fn cursor_underline_height_default_is_4() {
         let snap = make_snapshot(5, 80, 1000);
         assert_eq!(snap.cursor.underline_height, 4.0);
-    }
-
-    #[test]
-    fn cursor_line_highlight_disabled_by_default() {
-        let snap = make_snapshot(5, 80, 1000);
-        assert!(!snap.cursor.line_highlight_enabled);
-    }
-
-    #[test]
-    fn cursor_line_highlight_color_default_alpha_is_subtle() {
-        let snap = make_snapshot(5, 80, 1000);
-        assert!(snap.cursor.line_highlight_color.a < 0.1);
     }
 
     // The UI range slider caps these, but the engine must handle any i64.

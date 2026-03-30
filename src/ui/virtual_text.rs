@@ -13,6 +13,7 @@ use compact_str::CompactString;
 use godot::classes::{CodeEdit, Control, IControl};
 use godot::prelude::*;
 
+use crate::bridge::code_edit_ext::CodeEditExt;
 use crate::safety::panic_guard;
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -147,7 +148,7 @@ impl VirtualTextOverlay {
     fn rebuild_draw_list(&mut self, editor: &Gd<CodeEdit>) {
         self.draw_list.clear();
 
-        let line_height = editor.get_line_height().max(1);
+        let line_height = editor.safe_line_height();
         let editor_width = editor.get_size().x;
         let char_width = (line_height as f32 * 0.6).max(1.0);
 

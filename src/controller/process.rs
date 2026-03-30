@@ -20,6 +20,7 @@ use compact_str::CompactString;
 use godot::classes::CodeEdit;
 use godot::prelude::*;
 use vim_core::document::Providers;
+use vim_core::execution::MacroOutput;
 use vim_core::keymap::KeyEvent;
 use vim_core::primitives::SelectionRange;
 
@@ -64,7 +65,7 @@ impl ProcessContext<'_> {
         self.drain_pending(editor);
         self.ensure_undo_balanced(editor);
 
-        completion::maybe_retrigger_completion(self.engine, key, editor);
+        completion::maybe_retrigger_completion(self.engine, key, editor, self.code_complete_enabled);
 
         consumed
     }
@@ -151,7 +152,11 @@ impl ProcessContext<'_> {
             } else {
                 // Auto-brace is safe: dot-repeat completes within process() and
                 // returns to Normal, so is_insert() is false during replay.
-                let auto_brace_eligible = self.engine.mode().is_insert();
+                let auto_brace = if self.engine.mode().is_insert() {
+                    crate::effects::dispatch::AutoBraceMode::Eligible
+                } else {
+                    crate::effects::dispatch::AutoBraceMode::Ineligible
+                };
 
                 // Reuse the pre-built line index when no text mutations will
                 // invalidate it; otherwise let dispatch rebuild after mutations.
@@ -160,7 +165,7 @@ impl ProcessContext<'_> {
                 } else {
                     Some(doc.into_line_index())
                 };
-                self.apply_effects(effects, editor, auto_brace_eligible, &text, line_index_hint)
+                self.apply_effects(effects, editor, auto_brace, &text, line_index_hint)
             };
 
         let host_requests = response.take_host_requests();
@@ -171,11 +176,11 @@ impl ProcessContext<'_> {
 
         let total_elapsed = total_start.elapsed();
         self.perf.record(perf::FrameMetrics {
-            context_build_us: perf::Microseconds(ctx_elapsed.as_micros().min(u64::MAX as u128) as u64),
-            engine_process_us: perf::Microseconds(eng_elapsed.as_micros().min(u64::MAX as u128) as u64),
-            effects_dispatch_us: perf::Microseconds(fx_elapsed.as_micros().min(u64::MAX as u128) as u64),
+            context_build_us: perf::Microseconds(u64::try_from(ctx_elapsed.as_micros()).unwrap_or(u64::MAX)),
+            engine_process_us: perf::Microseconds(u64::try_from(eng_elapsed.as_micros()).unwrap_or(u64::MAX)),
+            effects_dispatch_us: perf::Microseconds(u64::try_from(fx_elapsed.as_micros()).unwrap_or(u64::MAX)),
             ui_update_us: perf::Microseconds(0),
-            total_us: perf::Microseconds(total_elapsed.as_micros().min(u64::MAX as u128) as u64),
+            total_us: perf::Microseconds(u64::try_from(total_elapsed.as_micros()).unwrap_or(u64::MAX)),
         });
 
         // Compound actions and host requests can mutate text outside the
@@ -283,7 +288,11 @@ impl ProcessContext<'_> {
         let (pass1, pass2) = crate::effects::dispatch::split_effects_by_pass(effects);
 
         let pass1_had_compounds = if !pass1.is_empty() {
-            let auto_brace = self.engine.mode().is_insert();
+            let auto_brace = if self.engine.mode().is_insert() {
+                crate::effects::dispatch::AutoBraceMode::Eligible
+            } else {
+                crate::effects::dispatch::AutoBraceMode::Ineligible
+            };
             let result = self.apply_effects(pass1, editor, auto_brace, text_ref, None);
             *self.persistent_text = None;
             result
@@ -411,16 +420,16 @@ impl ProcessContext<'_> {
 
     pub(super) fn drain_pending(&mut self, editor: &mut Gd<CodeEdit>) {
         let mut iterations: u32 = 0;
-        while let Some(key) = self.engine.drain_next_key() {
+        while let Some(output) = self.engine.drain_next_key() {
             iterations += 1;
             if iterations > MAX_DRAIN_ITERATIONS || *self.operations_this_cycle > MAX_DRAIN_ITERATIONS {
                 log::error!(
-                    "Drain exceeded {} iterations (local={}, cycle={}, last_key={}) — \
+                    "Drain exceeded {} iterations (local={}, cycle={}, last_output={:?}) — \
                      aborting replay to break potential infinite loop",
                     MAX_DRAIN_ITERATIONS,
                     iterations,
                     *self.operations_this_cycle,
-                    key,
+                    output,
                 );
                 self.state.globals_mut().set_error(
                     "E223: Mapping/macro replay exceeded iteration limit — aborted",
@@ -428,8 +437,56 @@ impl ProcessContext<'_> {
                 self.engine.abort_replay();
                 return;
             }
-            self.process_single_key(key, editor);
+            match output {
+                MacroOutput::Key(key) => {
+                    self.process_single_key(key, editor);
+                }
+                MacroOutput::TextBlock { text, cursor_offset } => {
+                    self.apply_text_block(&text, cursor_offset, editor);
+                }
+            }
         }
+    }
+
+    /// Insert a text block directly at the cursor, bypassing insert dispatch.
+    /// Used for completion text, paste, and IME input during macro replay.
+    fn apply_text_block(&mut self, text: &str, cursor_offset: usize, editor: &mut Gd<CodeEdit>) {
+        let line = editor.get_caret_line();
+        let col = editor.get_caret_column();
+
+        // Insert the text at the caret. Godot's insert_text_at_caret moves the
+        // caret to the end of the inserted text after the call.
+        editor.insert_text_at_caret(&GString::from(text));
+
+        // Position cursor at the correct offset within the inserted text.
+        // cursor_offset is a byte offset relative to the insertion start.
+        //
+        // After insertion, the buffer contains the new text. We rebuild the
+        // line index on the post-insertion text and compute the target position:
+        //   target_byte = (caret_byte_after_insert - text.len()) + cursor_offset
+        // because the caret is at the END of the inserted text.
+        let full_text = editor.get_text().to_string();
+        let line_index = crate::bridge::codec::LineIndex::new(&full_text);
+
+        let caret_after = line_index.line_col_to_byte(
+            &full_text,
+            editor.get_caret_line(),
+            editor.get_caret_column(),
+        );
+        let target_byte = caret_after.saturating_sub(text.len()) + cursor_offset;
+        let target_pos = line_index.byte_to_line_col(&full_text, target_byte);
+
+        editor.set_caret_line(target_pos.line);
+        editor.set_caret_column(target_pos.col);
+
+        // Invalidate the text cache since we mutated text.
+        *self.persistent_text = None;
+        *self.operations_this_cycle = self.operations_this_cycle.saturating_add(1);
+
+        log::debug!(
+            "apply_text_block: inserted {}b at ({},{}) cursor_offset={} -> ({},{})",
+            text.len(), line, col, cursor_offset, target_pos.line, target_pos.col
+        );
     }
 
     /// Returns `true` if compound actions were generated, which means text
@@ -438,7 +495,7 @@ impl ProcessContext<'_> {
         &mut self,
         effects: Vec<vim_core::effects::Effect>,
         editor: &mut Gd<CodeEdit>,
-        auto_brace_eligible: bool,
+        auto_brace: crate::effects::dispatch::AutoBraceMode,
         text_ref: &str,
         line_index_hint: Option<crate::bridge::codec::LineIndex>,
     ) -> bool {
@@ -470,11 +527,7 @@ impl ProcessContext<'_> {
         }
 
         let editor_id = editor.instance_id();
-        let auto_brace = if auto_brace_eligible {
-            crate::effects::dispatch::AutoBraceMode::Eligible
-        } else {
-            crate::effects::dispatch::AutoBraceMode::Ineligible
-        };
+        let auto_brace_eligible = matches!(auto_brace, crate::effects::dispatch::AutoBraceMode::Eligible);
         let auto_brace_snapshot = if auto_brace_eligible {
             bridge::AutoBraceSnapshot::from_editor(editor)
         } else {
@@ -498,7 +551,7 @@ impl ProcessContext<'_> {
                     scrolloff: crate::bridge::codec::usize_to_i32(self.engine.options().scrolloff()),
                     highlight_yank_duration_ms: self.highlight_yank_duration_ms,
                     syntax_query: Box::new(move |line, col| {
-                        bridge::SyntaxContext::from_editor(&editor_for_syntax, line, col)
+                        bridge::SyntaxRegion::from_editor(&editor_for_syntax, line, col)
                     }),
                 },
                 text_ref,

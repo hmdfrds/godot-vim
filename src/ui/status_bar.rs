@@ -201,7 +201,7 @@ impl VimStatusBar {
         // vimdebug > command-line > message > recording > showcmd > pending keys > mode name.
         self.display_buffer.clear();
 
-        let text_color = if let Some(ref step) = snap.vimdebug.step_status {
+        let text_color = if let Some(step) = snap.vimdebug.step_status() {
             write!(self.display_buffer, "{step}").ok();
             self.theme.text_fg
         } else if let Some(ref prompt) = snap.cmdline.prompt {
@@ -233,10 +233,10 @@ impl VimStatusBar {
         };
 
         // Vimdebug annotations are appended regardless of which priority arm was taken.
-        if let Some(ref prov) = snap.vimdebug.provenance {
+        if let Some(prov) = snap.vimdebug.provenance() {
             write!(self.display_buffer, "  [{prov}]").ok();
         }
-        if let Some(ref fx) = snap.vimdebug.effects {
+        if let Some(fx) = snap.vimdebug.effects() {
             write!(self.display_buffer, "  fx: {fx}").ok();
         }
 

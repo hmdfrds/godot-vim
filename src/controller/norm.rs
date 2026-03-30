@@ -5,6 +5,7 @@ use godot::prelude::*;
 
 use super::context::ProcessContext;
 use crate::bridge;
+use crate::bridge::code_edit_ext::CodeEditExt;
 use crate::bridge::port_impl::CodeEditPort;
 use crate::effects::CompoundAction;
 
@@ -55,7 +56,7 @@ impl ProcessContext<'_> {
             crate::effects::undo::handle_begin_undo_group(&mut port, self.undo_depth);
         }
 
-        let line_count = bridge::codec::i32_to_usize(editor.get_line_count().max(1));
+        let line_count = editor.safe_line_count();
         let lo = start_line.get().min(end_line.get()).min(line_count - 1);
         let hi = start_line.get().max(end_line.get()).min(line_count - 1);
         let remap_bool = matches!(remap, crate::types::RemapPolicy::Remap);
@@ -73,7 +74,7 @@ impl ProcessContext<'_> {
         let end = hi;
 
         while current <= end {
-            let actual_line_count = bridge::codec::i32_to_usize(editor.get_line_count().max(1));
+            let actual_line_count = editor.safe_line_count();
             if current >= actual_line_count {
                 break;
             }

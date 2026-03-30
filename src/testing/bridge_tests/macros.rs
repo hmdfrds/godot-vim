@@ -277,7 +277,7 @@ impl DispatchCtx {
                 line_index_hint: None,
                 scrolloff: 0,
                 highlight_yank_duration_ms: 150,
-                syntax_query: Box::new(|_, _| crate::bridge::SyntaxContext::default_context()),
+                syntax_query: Box::new(|_, _| crate::bridge::SyntaxRegion::code()),
             },
             &text,
         );

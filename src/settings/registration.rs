@@ -70,11 +70,7 @@ pub(crate) fn register_all(settings: &mut EditorSettings) {
     // ── Cursor behavior ─────────────────────────────────────────────────────
     register_bool(settings, keys::CURSOR_ENABLED, defaults::CURSOR_ENABLED);
     register_float_range(settings, keys::CURSOR_LERP_SPEED, defaults::CURSOR_LERP_SPEED, 1.0, 100.0, 0.1);
-    register_float_range(settings, keys::CURSOR_BLINK_SPEED, defaults::CURSOR_BLINK_SPEED, 0.0, 20.0, 0.1);
-    register_float_range(settings, keys::CURSOR_BEAM_WIDTH, defaults::CURSOR_BEAM_WIDTH, 1.0, 10.0, 0.5);
     register_float_range(settings, keys::CURSOR_UNDERLINE_HEIGHT, defaults::CURSOR_UNDERLINE_HEIGHT, 1.0, 10.0, 0.5);
-    register_bool(settings, keys::CURSOR_LINE_HIGHLIGHT_ENABLED, defaults::CURSOR_LINE_HIGHLIGHT_ENABLED);
-    register_color(settings, keys::CURSOR_LINE_HIGHLIGHT_COLOR, defaults::cursor_line_highlight_color());
 
     // ── Key mapping ─────────────────────────────────────────────────────
     register_int_range(settings, keys::TIMEOUTLEN, defaults::TIMEOUTLEN, defaults::TIMEOUTLEN_MIN, defaults::TIMEOUTLEN_MAX);

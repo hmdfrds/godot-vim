@@ -4,6 +4,8 @@
 use godot::classes::CodeEdit;
 use godot::prelude::*;
 
+use crate::bridge::code_edit_ext::CodeEditExt;
+
 use super::GodotVimPlugin;
 use super::signals::{connect_deferred, connect_immediate, safe_disconnect};
 
@@ -71,6 +73,12 @@ impl GodotVimPlugin {
         // Godot is the source of truth for tab/space mode and indent size.
         if let Some(controller) = &mut self.controller {
             sync_indent_from_editor(&editor, controller);
+        }
+
+        // Sync auto-brace pairs so the engine handles pairing during both
+        // normal execution and shadow macro replay.
+        if let Some(controller) = &mut self.controller {
+            controller.sync_auto_pairs(&editor);
         }
 
         self.ui.attach(&mut editor);
@@ -238,8 +246,8 @@ pub(super) fn sync_indent_from_editor(
     controller: &mut crate::controller::VimController,
 ) {
     let use_spaces = editor.is_indent_using_spaces();
-    let indent_size = crate::bridge::codec::i32_to_usize(editor.get_indent_size().max(1));
-    let tab_size = crate::bridge::codec::i32_to_usize(editor.get_tab_size().max(1));
+    let indent_size = editor.safe_indent_size();
+    let tab_size = editor.safe_tab_size();
 
     controller.sync_indent(use_spaces, indent_size, tab_size);
 

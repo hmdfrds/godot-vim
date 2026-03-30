@@ -34,6 +34,7 @@ use godot::builtin::PackedInt64Array;
 use crate::config::mapping_service::{
     MappingGroupId, MappingService, PresetId, UserMappingRow, row_passes_mode_filter,
 };
+use crate::config::types::ModeSet;
 use crate::config::writer;
 use crate::safety::panic_guard;
 use vim_core::keymap::MappingKind;
@@ -237,14 +238,13 @@ impl MappingDialog {
                         svc.edit_rhs(&id, &new_text);
                     }
                     COL_N | COL_I | COL_V | COL_O | COL_C => {
-                        svc.update_modes(
-                            &id,
-                            item.is_checked(COL_N),
-                            item.is_checked(COL_I),
-                            item.is_checked(COL_V),
-                            item.is_checked(COL_O),
-                            item.is_checked(COL_C),
-                        );
+                        let mut modes = ModeSet::empty();
+                        if item.is_checked(COL_N) { modes |= ModeSet::NORMAL; }
+                        if item.is_checked(COL_I) { modes |= ModeSet::INSERT; }
+                        if item.is_checked(COL_V) { modes |= ModeSet::VISUAL; }
+                        if item.is_checked(COL_O) { modes |= ModeSet::OPERATOR; }
+                        if item.is_checked(COL_C) { modes |= ModeSet::COMMAND; }
+                        svc.update_modes(&id, modes);
                     }
                     _ => return,
                 }
@@ -304,7 +304,7 @@ impl MappingDialog {
     fn on_timeout_changed(&mut self, value: f64) {
         panic_guard(
             || {
-                let ms = value.round() as u32;
+                let ms = value.round().max(0.0).min(u32::MAX as f64) as u32;
                 if let Some(svc) = &mut self.service {
                     svc.set_timeoutlen(ms);
                     self.save_and_reload();
@@ -574,7 +574,7 @@ impl MappingDialog {
     fn read_doc_indices(item: &Gd<godot::classes::TreeItem>) -> Vec<usize> {
         let metadata = item.get_metadata(0);
         if let Ok(arr) = metadata.try_to::<PackedInt64Array>() {
-            (0..arr.len()).map(|i| arr[i].max(0) as usize).collect()
+            (0..arr.len()).map(|i| usize::try_from(arr[i].max(0)).unwrap_or(0)).collect()
         } else if let Ok(single) = metadata.try_to::<i64>() {
             if single >= 0 { vec![single as usize] } else { Vec::new() }
         } else {
@@ -622,7 +622,7 @@ impl MappingDialog {
     /// to prevent a feedback loop (set_value would trigger on_timeout_changed).
     fn update_timeout_spinbox(&mut self, svc: &MappingService) {
         let Some(spinbox) = &mut self.timeout_spinbox else { return };
-        let ms = svc.timeoutlen().unwrap_or(crate::settings::defaults::TIMEOUTLEN as u32);
+        let ms = svc.timeoutlen().unwrap_or(u32::try_from(crate::settings::defaults::TIMEOUTLEN).unwrap_or(1000));
 
         spinbox.set_block_signals(true);
         spinbox.set_value(ms as f64);
@@ -684,11 +684,11 @@ impl MappingDialog {
         item.set_editable(COL_RHS, true);
 
         for (col, checked) in [
-            (COL_N, row.normal),
-            (COL_I, row.insert),
-            (COL_V, row.visual),
-            (COL_O, row.operator),
-            (COL_C, row.command),
+            (COL_N, row.modes.contains(ModeSet::NORMAL)),
+            (COL_I, row.modes.contains(ModeSet::INSERT)),
+            (COL_V, row.modes.contains(ModeSet::VISUAL)),
+            (COL_O, row.modes.contains(ModeSet::OPERATOR)),
+            (COL_C, row.modes.contains(ModeSet::COMMAND)),
         ] {
             item.set_cell_mode(col, godot::classes::tree_item::TreeCellMode::CHECK);
             item.set_checked(col, checked);

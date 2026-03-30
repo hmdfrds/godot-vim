@@ -45,15 +45,7 @@ pub(crate) const CURSOR_COMMAND: &str = "plugins/GodotVim/cursor/command_mode_co
 pub(crate) const CURSOR_ENABLED: &str = "plugins/GodotVim/cursor/enabled";
 
 pub(crate) const CURSOR_LERP_SPEED: &str = "plugins/GodotVim/cursor/lerp_speed";
-pub(crate) const CURSOR_BLINK_SPEED: &str = "plugins/GodotVim/cursor/blink_speed";
-pub(crate) const CURSOR_BEAM_WIDTH: &str = "plugins/GodotVim/cursor/beam_width";
 pub(crate) const CURSOR_UNDERLINE_HEIGHT: &str = "plugins/GodotVim/cursor/underline_height";
-
-pub(crate) const CURSOR_LINE_HIGHLIGHT_ENABLED: &str =
-    "plugins/GodotVim/cursor/line_highlight_enabled";
-
-pub(crate) const CURSOR_LINE_HIGHLIGHT_COLOR: &str =
-    "plugins/GodotVim/cursor/line_highlight_color";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Key mapping
@@ -61,6 +53,14 @@ pub(crate) const CURSOR_LINE_HIGHLIGHT_COLOR: &str =
 
 pub(crate) const TIMEOUTLEN: &str = "plugins/GodotVim/mapping/timeoutlen";
 pub(crate) const CONFIG_FILE_PATH: &str = "plugins/GodotVim/mapping/config_file_path";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Native Godot settings (read-only — NOT registered by GodotVim)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Whether the user wants code completion to auto-trigger as they type.
+/// This is Godot's native EditorSetting, not a GodotVim setting.
+pub(crate) const CODE_COMPLETE_ENABLED: &str = "text_editor/completion/code_complete_enabled";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Input

@@ -66,7 +66,7 @@ pub(super) fn handle_switch_buffer(id: HostRequestId, delta: i32) -> HostResult 
     if target < 0 {
         return host_failure(id, "E88: Cannot go before first buffer");
     }
-    let next = target as i32;
+    let next = i32::try_from(target).expect("bounds-checked above");
     tabs.set_current_tab(next);
     defer_focus_to_new_tab(&tabs);
 

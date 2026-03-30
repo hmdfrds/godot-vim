@@ -13,9 +13,8 @@ use vim_core::keymap::MappingKind;
 use super::parser;
 use super::presets::{PresetDefinition, PRESETS};
 use super::types::{
-    mode_includes_command, mode_includes_insert, mode_includes_normal, mode_includes_operator,
-    mode_includes_visual, mode_prefix_display, mode_prefixes_from_bools, ConfigDocument,
-    ConfigLine, MappingPayload, ParsedMapping,
+    mode_prefix_display, mode_prefixes_from_set, mode_set_from_prefix, ConfigDocument, ConfigLine,
+    MappingPayload, ModeSet, ParsedMapping,
 };
 use super::writer;
 
@@ -43,11 +42,7 @@ pub(crate) struct UserMappingRow {
     pub lhs: String,
     pub rhs: String,
     pub kind: MappingKind,
-    pub normal: bool,
-    pub insert: bool,
-    pub visual: bool,
-    pub operator: bool,
-    pub command: bool,
+    pub modes: ModeSet,
 }
 
 /// A visual row in the presets tree.
@@ -123,24 +118,14 @@ impl MappingService {
             if let Some(&group_idx) = index.get(&key) {
                 let group = &mut groups[group_idx];
                 if *enabled {
-                    group.normal |= mode_includes_normal(parsed.modes);
-                    group.insert |= mode_includes_insert(parsed.modes);
-                    group.visual |= mode_includes_visual(parsed.modes);
-                    group.operator |= mode_includes_operator(parsed.modes);
-                    group.command |= mode_includes_command(parsed.modes);
+                    group.modes |= mode_set_from_prefix(parsed.modes);
                 }
                 group.id.0.push(doc_idx);
             } else {
-                let (n, i, v, o, c) = if *enabled {
-                    (
-                        mode_includes_normal(parsed.modes),
-                        mode_includes_insert(parsed.modes),
-                        mode_includes_visual(parsed.modes),
-                        mode_includes_operator(parsed.modes),
-                        mode_includes_command(parsed.modes),
-                    )
+                let modes = if *enabled {
+                    mode_set_from_prefix(parsed.modes)
                 } else {
-                    (false, false, false, false, false)
+                    ModeSet::empty()
                 };
                 let group_idx = groups.len();
                 index.insert(key, group_idx);
@@ -149,11 +134,7 @@ impl MappingService {
                     lhs: parsed.lhs.clone(),
                     rhs: parsed.rhs.clone(),
                     kind: parsed.kind,
-                    normal: n,
-                    insert: i,
-                    visual: v,
-                    operator: o,
-                    command: c,
+                    modes,
                 });
             }
         }
@@ -238,16 +219,8 @@ impl MappingService {
     /// Reconcile mode checkboxes: replaces the group's config lines with one
     /// line per required Vim mode prefix. All-unchecked disables rather than
     /// deletes, preserving the mapping for re-enabling later.
-    pub fn update_modes(
-        &mut self,
-        id: &MappingGroupId,
-        n: bool,
-        i: bool,
-        v: bool,
-        o: bool,
-        c: bool,
-    ) {
-        let prefixes = mode_prefixes_from_bools(n, i, v, o, c);
+    pub fn update_modes(&mut self, id: &MappingGroupId, modes: ModeSet) {
+        let prefixes = mode_prefixes_from_set(modes);
 
         if prefixes.is_empty() {
             for &idx in &id.0 {
@@ -327,11 +300,11 @@ fn find_preset_category(parsed: &ParsedMapping) -> &'static str {
 pub(crate) fn row_passes_mode_filter(row: &UserMappingRow, filter_idx: i32) -> bool {
     match filter_idx {
         0 => true,
-        1 => row.normal,
-        2 => row.insert,
-        3 => row.visual,
-        4 => row.operator,
-        5 => row.command,
+        1 => row.modes.contains(ModeSet::NORMAL),
+        2 => row.modes.contains(ModeSet::INSERT),
+        3 => row.modes.contains(ModeSet::VISUAL),
+        4 => row.modes.contains(ModeSet::OPERATOR),
+        5 => row.modes.contains(ModeSet::COMMAND),
         _ => true,
     }
 }
@@ -377,11 +350,11 @@ nnoremap <Space>w :save<CR>
         let jk_row = &users[0];
         assert_eq!(jk_row.lhs, "jk");
         assert_eq!(jk_row.rhs, "<Esc>");
-        assert!(jk_row.normal);
-        assert!(jk_row.insert);
-        assert!(!jk_row.visual);
-        assert!(!jk_row.operator);
-        assert!(!jk_row.command);
+        assert!(jk_row.modes.contains(ModeSet::NORMAL));
+        assert!(jk_row.modes.contains(ModeSet::INSERT));
+        assert!(!jk_row.modes.contains(ModeSet::VISUAL));
+        assert!(!jk_row.modes.contains(ModeSet::OPERATOR));
+        assert!(!jk_row.modes.contains(ModeSet::COMMAND));
         // Two doc lines contribute to this group.
         assert_eq!(jk_row.id.0.len(), 2);
     }
@@ -458,16 +431,12 @@ nnoremap <Space>w :save<CR>
         let users = svc.user_mappings("");
         let jk_id = users[0].id.clone();
 
-        svc.update_modes(&jk_id, false, false, false, false, false);
+        svc.update_modes(&jk_id, ModeSet::empty());
 
-        // All modes unchecked: row still exists but all bools are false.
+        // All modes unchecked: row still exists but modes is empty.
         let after = svc.user_mappings("");
         let jk = &after[0];
-        assert!(!jk.normal);
-        assert!(!jk.insert);
-        assert!(!jk.visual);
-        assert!(!jk.operator);
-        assert!(!jk.command);
+        assert!(jk.modes.is_empty());
     }
 
     #[test]
@@ -477,15 +446,15 @@ nnoremap <Space>w :save<CR>
         let jk_id = users[0].id.clone();
 
         // Change from N+I to N+V+O (which collapses to All).
-        svc.update_modes(&jk_id, true, false, true, true, false);
+        svc.update_modes(&jk_id, ModeSet::NVO);
 
         let after = svc.user_mappings("");
         let jk = &after[0];
-        assert!(jk.normal);
-        assert!(!jk.insert);
-        assert!(jk.visual);
-        assert!(jk.operator);
-        assert!(!jk.command);
+        assert!(jk.modes.contains(ModeSet::NORMAL));
+        assert!(!jk.modes.contains(ModeSet::INSERT));
+        assert!(jk.modes.contains(ModeSet::VISUAL));
+        assert!(jk.modes.contains(ModeSet::OPERATOR));
+        assert!(!jk.modes.contains(ModeSet::COMMAND));
     }
 
     #[test]
@@ -528,11 +497,7 @@ nnoremap <Space>w :save<CR>
             assert_eq!(a.lhs, b.lhs);
             assert_eq!(a.rhs, b.rhs);
             assert_eq!(a.kind, b.kind);
-            assert_eq!(a.normal, b.normal);
-            assert_eq!(a.insert, b.insert);
-            assert_eq!(a.visual, b.visual);
-            assert_eq!(a.operator, b.operator);
-            assert_eq!(a.command, b.command);
+            assert_eq!(a.modes, b.modes);
         }
     }
 
@@ -543,11 +508,7 @@ nnoremap <Space>w :save<CR>
             lhs: "x".into(),
             rhs: "y".into(),
             kind: MappingKind::NonRecursive,
-            normal: true,
-            insert: false,
-            visual: false,
-            operator: false,
-            command: false,
+            modes: ModeSet::NORMAL,
         };
         assert!(row_passes_mode_filter(&row, 0)); // All modes
         assert!(row_passes_mode_filter(&row, 1)); // Normal

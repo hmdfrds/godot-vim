@@ -104,7 +104,7 @@ impl IndentProvider for GodotIndentProvider<'_> {
 
         if should_indent {
             let use_spaces = self.editor.is_indent_using_spaces();
-            let indent_size = codec::i32_to_usize(self.editor.get_indent_size().max(1));
+            let indent_size = self.editor.safe_indent_size();
             if use_spaces {
                 compact_str::format_compact!("{indent}{}", " ".repeat(indent_size))
             } else {
@@ -155,7 +155,7 @@ pub(crate) fn build_context<'a>(
     }
 
     let first_line = codec::i32_to_usize(editor.get_first_visible_line());
-    let height = codec::i32_to_usize(editor.get_visible_line_count()).max(1);
+    let height = editor.safe_visible_line_count();
     let width = approximate_viewport_width(editor);
     ctx = ctx.with_viewport(ViewportInfo {
         first_line,

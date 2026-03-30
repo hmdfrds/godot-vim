@@ -114,34 +114,42 @@ impl AutoBraceSnapshot {
     }
 }
 
-/// Syntax context (string/comment) at a cursor position, captured in 2 FFI calls.
+/// Syntax region at a cursor position, replacing two booleans
+/// (`is_in_string`, `is_in_comment`) whose four combinations included one
+/// illegal state (simultaneously in both a string and a comment).
 ///
 /// Used to suppress auto-brace and other syntax-aware behaviors when the
 /// cursor is inside a string literal or comment.
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct SyntaxContext {
-    pub(crate) is_in_string: bool,
-    pub(crate) is_in_comment: bool,
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SyntaxRegion {
+    /// Normal code — not inside any special syntax region.
+    Code,
+    /// Inside a string literal (Godot's `is_in_string_ex` returned >= 0).
+    String,
+    /// Inside a comment (Godot's `is_in_comment_ex` returned >= 0).
+    Comment,
 }
 
-impl SyntaxContext {
-    /// Capture syntax context at `(line, col)` via Godot FFI.
+impl SyntaxRegion {
+    /// Capture syntax region at `(line, col)` via Godot FFI.
     ///
     /// Godot's `is_in_string_ex`/`is_in_comment_ex` return the delimiter index
-    /// (>= 0) when inside a region, or -1 when outside.
+    /// (>= 0) when inside a region, or -1 when outside. Comment takes priority
+    /// over string when both report true (shouldn't happen, but defensive).
     pub(crate) fn from_editor(editor: &Gd<CodeEdit>, line: i32, col: i32) -> Self {
-        Self {
-            is_in_string: editor.is_in_string_ex(line).column(col).done() != -1,
-            is_in_comment: editor.is_in_comment_ex(line).column(col).done() != -1,
+        if editor.is_in_comment_ex(line).column(col).done() != -1 {
+            Self::Comment
+        } else if editor.is_in_string_ex(line).column(col).done() != -1 {
+            Self::String
+        } else {
+            Self::Code
         }
     }
 
+    /// Default context for tests and contexts without syntax analysis.
     #[allow(dead_code)] // Used by test infrastructure (bridge_tests::macros::DispatchCtx)
-    pub(crate) fn default_context() -> Self {
-        Self {
-            is_in_string: false,
-            is_in_comment: false,
-        }
+    pub(crate) fn code() -> Self {
+        Self::Code
     }
 }
 

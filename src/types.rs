@@ -231,13 +231,74 @@ pub(crate) struct CommandLineState {
     pub(crate) cursor: usize,
 }
 
-/// Diagnostic overlay state, only meaningful when `:vimdebug` is active.
+/// Diagnostic overlay state for `:vimdebug`.
+///
+/// Sum type replacing four `Option` fields. The previous struct had 16
+/// representable combinations (`2^4`) but only three were legal: all `None`
+/// (inactive), provenance+effects+range without step (watch mode), or all
+/// four populated (step mode). This enum collapses to exactly those three.
 #[derive(Debug, Clone, Default)]
-pub(crate) struct VimdebugSnapshot {
-    pub(crate) provenance: Option<CompactString>,
-    pub(crate) effects: Option<CompactString>,
-    pub(crate) range: Option<MatchRange>,
-    pub(crate) step_status: Option<CompactString>,
+pub(crate) enum VimdebugSnapshot {
+    /// No vimdebug session active. All display annotations suppressed.
+    #[default]
+    Inactive,
+    /// `:vimdebug watch` — status bar shows provenance and effect summary.
+    Watch {
+        provenance: CompactString,
+        effects: CompactString,
+        range: Option<MatchRange>,
+    },
+    /// `:vimdebug step` — additionally shows step navigation status line.
+    Step {
+        provenance: CompactString,
+        effects: CompactString,
+        range: Option<MatchRange>,
+        step_status: CompactString,
+    },
+}
+
+impl VimdebugSnapshot {
+    /// Whether any vimdebug annotations should be displayed.
+    #[must_use]
+    pub(crate) const fn is_active(&self) -> bool {
+        !matches!(self, Self::Inactive)
+    }
+
+    /// Provenance string (e.g. "dd", "ciw") if vimdebug is active.
+    #[must_use]
+    pub(crate) fn provenance(&self) -> Option<&str> {
+        match self {
+            Self::Inactive => None,
+            Self::Watch { provenance, .. } | Self::Step { provenance, .. } => Some(provenance.as_str()),
+        }
+    }
+
+    /// Effect summary string if vimdebug is active.
+    #[must_use]
+    pub(crate) fn effects(&self) -> Option<&str> {
+        match self {
+            Self::Inactive => None,
+            Self::Watch { effects, .. } | Self::Step { effects, .. } => Some(effects.as_str()),
+        }
+    }
+
+    /// Highlighted range (substitute preview or vimdebug range) if present.
+    #[must_use]
+    pub(crate) fn range(&self) -> Option<&MatchRange> {
+        match self {
+            Self::Inactive => None,
+            Self::Watch { range, .. } | Self::Step { range, .. } => range.as_ref(),
+        }
+    }
+
+    /// Step navigation status line, only present in step mode.
+    #[must_use]
+    pub(crate) fn step_status(&self) -> Option<&str> {
+        match self {
+            Self::Step { step_status, .. } => Some(step_status.as_str()),
+            _ => None,
+        }
+    }
 }
 
 /// Immutable snapshot of engine state, built once per keystroke by the

@@ -53,4 +53,6 @@ pub(super) struct ProcessContext<'a> {
     pub(super) highlight_yank_duration_ms: u32,
     /// Keys that bypass Vim entirely (read-only).
     pub(super) passthrough_keys: &'a HashSet<KeyEvent>,
+    /// Whether Godot's native code completion should auto-trigger on typing.
+    pub(super) code_complete_enabled: bool,
 }

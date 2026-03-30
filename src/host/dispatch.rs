@@ -8,7 +8,7 @@ use godot::prelude::*;
 use vim_core::execution::{HostRequest, HostRequestId, HostResult};
 
 use super::{host_failure, host_success};
-use crate::settings::{FileAccessScope, ShellExecution};
+use crate::settings::{FileAccessScope, ProjectVimrc, ShellExecution};
 use crate::types::ForceOverride;
 
 /// Security policy governing dangerous host operations.
@@ -20,12 +20,13 @@ use crate::types::ForceOverride;
 pub(crate) struct SecurityPolicy {
     pub(crate) shell_execution: ShellExecution,
     pub(crate) file_access_scope: FileAccessScope,
-    /// Whether `:source`-loaded config files are stripped of dangerous patterns.
+    /// Controls how project-level vimrc files are treated when sourced.
     ///
-    /// This mirrors the `ProjectVimrc::Sandbox` policy. Consumed by
+    /// `ProjectVimrc::Sandbox` strips dangerous patterns (`:!` commands);
+    /// `ProjectVimrc::Disabled` prevents sourcing entirely. Consumed by
     /// `controller/host_bridge.rs` after `ReadConfigFile` returns — dispatch
     /// returns raw file text and the controller owns sandboxing responsibility.
-    pub(crate) sandbox_sourced_configs: bool,
+    pub(crate) project_vimrc: ProjectVimrc,
 }
 
 /// Gate for shell execution — enforced before `:!cmd` and `:{range}!cmd`.
@@ -49,7 +50,7 @@ fn eval_to_host_result(id: HostRequestId, expr: &str, mode_str: &str) -> HostRes
     match super::eval::eval_simple_expression(expr, mode_str) {
         Ok(value) => HostResult::Data {
             id,
-            data: CompactString::from(value),
+            data: CompactString::from(value.as_ref()),
             offset: None,
         },
         Err(e) => host_failure(id, e),
@@ -188,12 +189,12 @@ pub(crate) fn execute(
 
         HostRequest::BufferNext { meta: _, count }
         | HostRequest::TabNext { meta: _, count } => {
-            super::buffer::handle_switch_buffer(request.id(), i32::try_from((*count).min(i32::MAX as u32)).unwrap_or(i32::MAX))
+            super::buffer::handle_switch_buffer(request.id(), crate::bridge::codec::u32_to_i32_sat(*count))
         }
 
         HostRequest::BufferPrev { meta: _, count }
         | HostRequest::TabPrev { meta: _, count } => {
-            super::buffer::handle_switch_buffer(request.id(), -i32::try_from((*count).min(i32::MAX as u32)).unwrap_or(i32::MAX))
+            super::buffer::handle_switch_buffer(request.id(), -crate::bridge::codec::u32_to_i32_sat(*count))
         }
 
         HostRequest::BufferFirst { meta: _ } => {
@@ -230,7 +231,7 @@ pub(crate) fn execute(
 
         HostRequest::ReadConfigFile { meta: _, path } => {
             if let Err(e) = super::file::validate_path_scope(path.as_str(), policy.file_access_scope) {
-                return host_failure(request.id(), e);
+                return host_failure(request.id(), e.to_string());
             }
             let gpath = GString::from(path.as_str());
             match godot::classes::FileAccess::open(&gpath, godot::classes::file_access::ModeFlags::READ) {
@@ -258,7 +259,9 @@ pub(crate) fn execute(
         }
 
         HostRequest::RequestCompletion { .. } => {
-            editor.request_code_completion_ex().force(false).done();
+            if editor.is_code_completion_enabled() {
+                editor.request_code_completion_ex().force(false).done();
+            }
             host_success(request.id())
         }
 
