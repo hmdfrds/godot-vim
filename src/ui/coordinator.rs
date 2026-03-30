@@ -145,6 +145,7 @@ impl UiCoordinator {
             vim_cursor.force_snap();
         }
         self.cursor = Some(cursor);
+        self.cursor_enabled = true;
 
         // ── 4. Hide native caret ─────────────────────────────────────────
         // Save the existing override (or None for theme-inherited) so detach
