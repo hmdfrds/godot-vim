@@ -51,14 +51,13 @@ mod godot_impl {
     use compact_str::CompactString;
     use godot::classes::file_access::ModeFlags;
     use godot::classes::{
-        CodeEdit, EditorInterface, FileAccess, MenuButton, PopupMenu, ResourceLoader,
+        CodeEdit, EditorInterface, FileAccess, InputEventShortcut, ResourceLoader,
         ResourceSaver, Script, ScriptEditorBase,
     };
     use godot::prelude::*;
 
     use super::EditorHost;
     use crate::host::error::HostError;
-    use crate::scene_tree::{find_descendant, MAX_DISCOVERY_DEPTH};
 
     /// Production `EditorHost` wrapping a live `Gd<CodeEdit>`.
     pub(crate) struct GodotEditorHost<'a>(pub(crate) &'a mut Gd<CodeEdit>);
@@ -81,85 +80,46 @@ mod godot_impl {
 
     /// Trigger ScriptEditor's native "File → Close" action.
     ///
-    /// Godot's `ScriptEditor::_close_tab()` manages history, menu bar sync,
-    /// script list updates, and layout persistence — none of which happen if
-    /// we just `queue_free()` the ScriptEditorBase. Since `_close_tab()` is
-    /// private (not exposed via ClassDB), we reach it through the same public
-    /// entry point Godot's own UI uses: emitting `id_pressed` on the File
-    /// menu's PopupMenu with the "Close" item's ID.
-    ///
-    /// The emission is **deferred** (`call_deferred`) so the close happens at
-    /// end-of-frame. This is critical: Godot's `_close_tab()` calls
-    /// `memdelete()` (synchronous deletion) on the ScriptEditorBase and its
-    /// child CodeEdit. If we emitted immediately, the CodeEdit would be freed
-    /// while our `process_cycle` still holds a reference to it, causing a
-    /// use-after-free panic on the subsequent `ui_snapshot()` / `ui.update()`.
-    ///
-    /// Discovery is language-independent: the File menu is found structurally
-    /// (first `MenuButton` descendant of ScriptEditor), and the Close item is
-    /// identified by its keyboard accelerator (`Ctrl+W` / `Cmd+W`), not by
-    /// its display text which varies with the UI language.
+    /// `_close_tab()` is private, so we synthesize an `InputEventShortcut`
+    /// for `"script_editor/close_file"` and push it into the editor viewport
+    /// (same mechanism as Godot's Command Palette). Deferred to end-of-frame
+    /// because `_close_tab()` calls `memdelete()` synchronously.
     fn trigger_script_editor_close() {
         let editor_iface = EditorInterface::singleton();
-        let Some(script_editor) = editor_iface.get_script_editor() else {
-            log::warn!("close_tab: no script editor available");
+        let Some(mut settings) = editor_iface.get_editor_settings() else {
+            log::warn!("close_tab: no editor settings available");
             return;
         };
 
-        // The File menu is the first MenuButton descendant of ScriptEditor.
-        // Tree: ScriptEditor → VBoxContainer → HBoxContainer (menu_hb) → MenuButton
-        let file_menu: Option<Gd<MenuButton>> = find_descendant::<MenuButton>(
-            &script_editor.clone().upcast(),
-            MAX_DISCOVERY_DEPTH,
+        // Look up the shortcut by its stable string path — registered by
+        // Godot's ScriptEditor via ED_SHORTCUT("script_editor/close_file", ...).
+        // `get_shortcut` is not in gdext's typed API, so we use dynamic call.
+        let shortcut_variant = settings.call(
+            "get_shortcut",
+            &["script_editor/close_file".to_variant()],
         );
-
-        let Some(file_menu) = file_menu else {
-            log::warn!("close_tab: no MenuButton found in ScriptEditor");
+        let Ok(shortcut) = shortcut_variant.try_to::<Gd<godot::classes::Shortcut>>() else {
+            log::warn!("close_tab: shortcut 'script_editor/close_file' not found");
             return;
         };
 
-        let popup: Gd<PopupMenu> = file_menu.get_popup().expect("MenuButton always has a popup");
+        // Synthesize an InputEventShortcut. Godot's Shortcut::matches_event()
+        // does a pointer-identity check for this event type, so it matches
+        // regardless of what keycode the user has bound.
+        let mut event: Gd<InputEventShortcut> = InputEventShortcut::new_gd();
+        event.set_shortcut(&shortcut);
 
-        // Find the Close item by its accelerator key (Ctrl+W / Cmd+W).
-        // This is language-independent — the accelerator doesn't change with
-        // Godot's UI translation, unlike the item text ("Close" / "Cerrar" / etc).
-        if let Some(id) = find_close_item_by_accelerator(&popup) {
-            defer_emit_id_pressed(popup, id);
+        // Push into the editor viewport's input pipeline at end-of-frame.
+        let Some(mut viewport) = editor_iface.get_base_control()
+            .and_then(|ctrl| ctrl.get_viewport())
+        else {
+            log::warn!("close_tab: no editor viewport available");
             return;
-        }
+        };
 
-        log::warn!("close_tab: no Ctrl+W accelerator item found in File menu");
-    }
-
-    /// Find the Close menu item by matching its keyboard accelerator.
-    ///
-    /// Godot's Close shortcut is `Ctrl+W` (or `Cmd+W` on macOS), registered
-    /// via `ED_SHORTCUT("script_editor/close_file", ...)`. The accelerator
-    /// key is stored as a `Key` bitfield combining modifier flags and the
-    /// key code. We match on `W` with either Ctrl or Meta modifier.
-    fn find_close_item_by_accelerator(popup: &Gd<PopupMenu>) -> Option<i32> {
-        let count = popup.get_item_count();
-        for i in 0..count {
-            let accel = popup.get_item_accelerator(i);
-            let key_code = accel.ord() as u64;
-            // Key::W = 87. Modifier masks: Ctrl = 1<<28, Meta/Cmd = 1<<27.
-            // Godot uses CMD_OR_CTRL which resolves to Ctrl on Linux/Windows
-            // and Meta on macOS. Check both.
-            let w = godot::global::Key::W.ord() as u64;
-            let ctrl_mask = godot::global::KeyModifierMask::CTRL.ord();
-            let meta_mask = godot::global::KeyModifierMask::META.ord();
-            if key_code == (w | ctrl_mask) || key_code == (w | meta_mask) {
-                return Some(popup.get_item_id(i));
-            }
-        }
-        None
-    }
-
-    /// Emit `id_pressed` on a PopupMenu at end-of-frame via `call_deferred`.
-    fn defer_emit_id_pressed(popup: Gd<PopupMenu>, id: i32) {
-        popup.upcast::<godot::classes::Node>().call_deferred(
-            "emit_signal",
-            &["id_pressed".to_variant(), id.to_variant()],
+        viewport.call_deferred(
+            "push_input",
+            &[event.to_variant(), false.to_variant()],
         );
     }
 
