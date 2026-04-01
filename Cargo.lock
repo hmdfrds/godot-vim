@@ -740,6 +740,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "vim-core"
 version = "0.1.0"
+source = "git+https://github.com/hmdfrds/vim-core.git?tag=v0.3.0#ebefead50d23f810428d78c85e88217c3c612640"
 dependencies = [
  "ahash",
  "arrayvec",
