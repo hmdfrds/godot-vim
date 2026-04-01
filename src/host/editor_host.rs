@@ -25,7 +25,7 @@ pub(crate) trait EditorHost {
 
     fn set_text(&mut self, text: &str);
 
-    /// Closes the current script tab via `ScriptEditorBase::queue_free()`.
+    /// Closes the current script tab via ScriptEditor's own close pipeline.
     fn close_tab(&mut self);
 
     /// Emits `name_changed` on the ScriptEditorBase to refresh the tab title.
@@ -51,13 +51,14 @@ mod godot_impl {
     use compact_str::CompactString;
     use godot::classes::file_access::ModeFlags;
     use godot::classes::{
-        CodeEdit, EditorInterface, FileAccess, ResourceLoader, ResourceSaver, Script,
-        ScriptEditorBase,
+        CodeEdit, EditorInterface, FileAccess, MenuButton, PopupMenu, ResourceLoader,
+        ResourceSaver, Script, ScriptEditorBase,
     };
     use godot::prelude::*;
 
     use super::EditorHost;
     use crate::host::error::HostError;
+    use crate::scene_tree::{find_descendant_by, MAX_DISCOVERY_DEPTH};
 
     /// Production `EditorHost` wrapping a live `Gd<CodeEdit>`.
     pub(crate) struct GodotEditorHost<'a>(pub(crate) &'a mut Gd<CodeEdit>);
@@ -76,6 +77,97 @@ mod godot_impl {
         let editor_iface = EditorInterface::singleton();
         let script_editor = editor_iface.get_script_editor()?;
         script_editor.get_current_editor()
+    }
+
+    /// Trigger ScriptEditor's native "File → Close" action.
+    ///
+    /// Godot's `ScriptEditor::_close_tab()` manages history, menu bar sync,
+    /// script list updates, and layout persistence — none of which happen if
+    /// we just `queue_free()` the ScriptEditorBase. Since `_close_tab()` is
+    /// private (not exposed via ClassDB), we reach it through the same public
+    /// entry point Godot's own UI uses: emitting `id_pressed` on the File
+    /// menu's PopupMenu with the "Close" item's ID.
+    ///
+    /// The emission is **deferred** (`call_deferred`) so the close happens at
+    /// end-of-frame. This is critical: Godot's `_close_tab()` calls
+    /// `memdelete()` (synchronous deletion) on the ScriptEditorBase and its
+    /// child CodeEdit. If we emitted immediately, the CodeEdit would be freed
+    /// while our `process_cycle` still holds a reference to it, causing a
+    /// use-after-free panic on the subsequent `ui_snapshot()` / `ui.update()`.
+    fn trigger_script_editor_close() {
+        let editor_iface = EditorInterface::singleton();
+        let Some(script_editor) = editor_iface.get_script_editor() else {
+            log::warn!("close_tab: no script editor available");
+            return;
+        };
+
+        // Find the "File" MenuButton among ScriptEditor's descendants.
+        // Tree: ScriptEditor → VBoxContainer → HBoxContainer (menu_hb) → MenuButton("File")
+        let file_menu: Option<Gd<MenuButton>> = find_descendant_by(
+            &script_editor.clone().upcast(),
+            MAX_DISCOVERY_DEPTH,
+            &|node| {
+                let mb = node.clone().try_cast::<MenuButton>().ok()?;
+                (mb.get_text().to_string() == "File").then_some(mb)
+            },
+        );
+
+        let Some(file_menu) = file_menu else {
+            // Fallback: scan all MenuButton descendants for a popup containing
+            // the "Close" item (handles translated UIs).
+            if let Some((popup, close_id)) = find_close_item_in_any_menu(&script_editor) {
+                defer_emit_id_pressed(popup, close_id);
+                return;
+            }
+            log::warn!("close_tab: could not find File menu in ScriptEditor");
+            return;
+        };
+
+        let popup: Gd<PopupMenu> = file_menu.get_popup().expect("MenuButton always has a popup");
+
+        // Find the "Close" item by scanning for text "Close" (first exact match).
+        let count = popup.get_item_count();
+        for i in 0..count {
+            if popup.get_item_text(i).to_string() == "Close" {
+                let id = popup.get_item_id(i);
+                defer_emit_id_pressed(popup, id);
+                return;
+            }
+        }
+
+        log::warn!("close_tab: 'Close' item not found in File menu");
+    }
+
+    /// Emit `id_pressed` on a PopupMenu at end-of-frame via `call_deferred`.
+    fn defer_emit_id_pressed(popup: Gd<PopupMenu>, id: i32) {
+        popup.upcast::<godot::classes::Node>().call_deferred(
+            "emit_signal",
+            &["id_pressed".to_variant(), id.to_variant()],
+        );
+    }
+
+    /// Fallback scanner: find any MenuButton descendant whose popup has a "Close"
+    /// item. Handles non-English Godot UIs where the File menu text is translated.
+    fn find_close_item_in_any_menu(
+        script_editor: &Gd<godot::classes::ScriptEditor>,
+    ) -> Option<(Gd<PopupMenu>, i32)> {
+        find_descendant_by(
+            &script_editor.clone().upcast(),
+            MAX_DISCOVERY_DEPTH,
+            &|node| {
+                let mb = node.clone().try_cast::<MenuButton>().ok()?;
+                let popup = mb.get_popup()?;
+                let count = popup.get_item_count();
+                for i in 0..count {
+                    let text = popup.get_item_text(i).to_string();
+                    if text == "Close" {
+                        let id = popup.get_item_id(i);
+                        return Some((popup.clone(), id));
+                    }
+                }
+                None
+            },
+        )
     }
 
     fn emit_name_changed() {
@@ -140,9 +232,7 @@ mod godot_impl {
         }
 
         fn close_tab(&mut self) {
-            if let Some(mut base) = current_script_editor_base() {
-                base.queue_free();
-            }
+            trigger_script_editor_close();
         }
 
         fn notify_name_changed(&self) {

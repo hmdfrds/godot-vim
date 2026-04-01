@@ -185,7 +185,8 @@ pub(super) fn handle_quit(
     }
 
     if force.is_force() {
-        // Mark clean so Godot's queue_free() skips its built-in save dialog.
+        // Mark clean so Godot's ScriptEditor close pipeline skips its
+        // "unsaved changes" dialog.
         editor.tag_saved_version();
     }
 
