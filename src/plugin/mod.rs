@@ -466,6 +466,11 @@ impl GodotVimPlugin {
                         let mut editor = editor.clone();
                         controller.recover_from_panic(&mut editor);
 
+                        // Invalidate thread-local caches that may hold stale
+                        // pre-panic data (shaped glyphs, auto-brace pairs).
+                        crate::ui::cursor_shape::invalidate_shaped_cache();
+                        crate::bridge::port_impl::invalidate_brace_pair_cache();
+
                         // Refresh UI so the user sees Normal mode + error message
                         // immediately, not stale pre-panic state.
                         let editor_id = editor.instance_id();
