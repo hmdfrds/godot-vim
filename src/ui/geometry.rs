@@ -81,7 +81,7 @@ pub(super) fn compute_highlight_rects(
                 };
                 (end_pos.x - pos.x).max(1)
             } else {
-                (editor_width as i32 - pos.x).max(1)
+                (editor_width.min(i32::MAX as f32) as i32 - pos.x).max(1)
             };
             rects.push(Rect2::new(
                 Vector2::new(pos.x as f32, pos.y as f32),

@@ -200,7 +200,11 @@ fn approximate_viewport_width(editor: &Gd<CodeEdit>) -> usize {
         return DEFAULT_VIEWPORT_WIDTH;
     }
 
-    let columns = ((pixel_width / char_width) as usize).min(10000);
+    let ratio = pixel_width / char_width;
+    if !ratio.is_finite() {
+        return DEFAULT_VIEWPORT_WIDTH;
+    }
+    let columns = (ratio as usize).min(10000);
     if columns == 0 { DEFAULT_VIEWPORT_WIDTH } else { columns }
 }
 

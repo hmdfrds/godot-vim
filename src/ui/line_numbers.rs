@@ -531,7 +531,7 @@ impl LineNumberManager {
         self.last_line_count = line_count;
 
         let digits = if line_count > 0 {
-            (line_count as f64).log10().floor() as i32 + 1
+            (line_count as f64).log10().floor().clamp(0.0, 20.0) as i32 + 1
         } else {
             1
         };
@@ -555,7 +555,7 @@ impl LineNumberManager {
         if !total_width.is_finite() {
             return;
         }
-        editor.set_gutter_width(self.line_gutter_index, total_width as i32);
+        editor.set_gutter_width(self.line_gutter_index, total_width.clamp(0.0, i32::MAX as f32) as i32);
     }
 
     /// Disable built-in gutters and create (or reuse) custom STRING + ICON

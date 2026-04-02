@@ -116,7 +116,7 @@ pub(crate) fn parse_godot_key(event: &Gd<InputEventKey>) -> Option<KeyEvent> {
         let key_a = GodotKey::A.ord();
         let key_z = GodotKey::Z.ord();
         if (key_a..=key_z).contains(&key_val) {
-            if let Some(ch) = char::from_u32(key_val as u32) {
+            if let Some(ch) = u32::try_from(key_val).ok().and_then(char::from_u32) {
                 return Some(KeyEvent::new(
                     Key::Char(ch.to_ascii_lowercase()),
                     modifiers,
@@ -132,7 +132,7 @@ pub(crate) fn parse_godot_key(event: &Gd<InputEventKey>) -> Option<KeyEvent> {
     // so the engine can match Vim's <C-[>, <C-]>, <C-^> notation.
     if modifiers.contains(Modifiers::CTRL) {
         let key_val = raw_code.ord();
-        if let Some(ch) = char::from_u32(key_val as u32) {
+        if let Some(ch) = u32::try_from(key_val).ok().and_then(char::from_u32) {
             if !ch.is_control() {
                 log::trace!("parse_godot_key: Ctrl+non-letter {:?} -> Key::Char({:?})", raw_code, ch);
                 return Some(KeyEvent::new(
