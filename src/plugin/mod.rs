@@ -19,9 +19,9 @@ use godot::prelude::*;
 use crate::controller::VimController;
 use crate::safety::{install_panic_hook, panic_guard};
 
-use floating::TrackedWindow;
+use floating::{disconnect_viewport_signals, TrackedWindow};
 use signals::{
-    SIG_CONFIG_SAVED, SIG_FOCUS_ENTERED, SIG_GUI_FOCUS_CHANGED,
+    SIG_CONFIG_SAVED,
     SIG_TREE_EXITED, SIG_WINDOW_VISIBILITY_CHANGED,
 };
 
@@ -169,6 +169,7 @@ impl GodotVimPlugin {
 
     #[func]
     fn on_window_visibility_changed(&mut self, visible: bool) {
+        if self.controller.is_none() { return; }
         panic_guard(
             "on_window_visibility_changed",
             || {
@@ -207,11 +208,10 @@ impl GodotVimPlugin {
                         log::debug!("on_child_entered_tree: already tracked #{}, skipping", wrapper_id.to_i64());
                         return;
                     }
-                    let callable = self.base().callable("on_window_visibility_changed");
+                    let callables = self.floating_callables();
                     let mut n = node;
-                    signals::connect_immediate(&mut n, SIG_WINDOW_VISIBILITY_CHANGED, &callable);
-                    let tree_exit_callable = self.base().callable("on_wrapper_tree_exited");
-                    signals::connect_immediate(&mut n, SIG_TREE_EXITED, &tree_exit_callable);
+                    signals::connect_immediate(&mut n, SIG_WINDOW_VISIBILITY_CHANGED, &callables.visibility_changed);
+                    signals::connect_immediate(&mut n, SIG_TREE_EXITED, &callables.tree_exited);
                     log::debug!("on_child_entered_tree: connected window_visibility_changed + tree_exited on #{}", wrapper_id.to_i64());
                     self.tracked_windows.push(TrackedWindow {
                         wrapper_id,
@@ -240,13 +240,7 @@ impl GodotVimPlugin {
         panic_guard(
             "evict_stale_wrappers",
             || {
-                let focus_callable = self.base().callable("on_focus_changed");
-                let focus_entered_callable =
-                    self.base().callable("on_floating_window_focused");
-                let vis_callable =
-                    self.base().callable("on_window_visibility_changed");
-                let tree_exit_callable =
-                    self.base().callable("on_wrapper_tree_exited");
+                let callables = self.floating_callables();
 
                 let before = self.tracked_windows.len();
                 self.tracked_windows.retain(|tw| {
@@ -255,20 +249,7 @@ impl GodotVimPlugin {
                     else {
                         // Wrapper freed — disconnect viewport signals if any.
                         if let Some(window_id) = tw.window_id {
-                            if let Ok(mut window) =
-                                Gd::<Node>::try_from_instance_id(window_id)
-                            {
-                                signals::safe_disconnect(
-                                    &mut window,
-                                    SIG_GUI_FOCUS_CHANGED,
-                                    &focus_callable,
-                                );
-                                signals::safe_disconnect(
-                                    &mut window,
-                                    SIG_FOCUS_ENTERED,
-                                    &focus_entered_callable,
-                                );
-                            }
+                            disconnect_viewport_signals(window_id, &callables);
                         }
                         log::debug!(
                             "evict_stale_wrappers: evicted freed wrapper #{}",
@@ -285,28 +266,15 @@ impl GodotVimPlugin {
                         signals::safe_disconnect(
                             &mut w,
                             SIG_WINDOW_VISIBILITY_CHANGED,
-                            &vis_callable,
+                            &callables.visibility_changed,
                         );
                         signals::safe_disconnect(
                             &mut w,
                             SIG_TREE_EXITED,
-                            &tree_exit_callable,
+                            &callables.tree_exited,
                         );
                         if let Some(window_id) = tw.window_id {
-                            if let Ok(mut window) =
-                                Gd::<Node>::try_from_instance_id(window_id)
-                            {
-                                signals::safe_disconnect(
-                                    &mut window,
-                                    SIG_GUI_FOCUS_CHANGED,
-                                    &focus_callable,
-                                );
-                                signals::safe_disconnect(
-                                    &mut window,
-                                    SIG_FOCUS_ENTERED,
-                                    &focus_entered_callable,
-                                );
-                            }
+                            disconnect_viewport_signals(window_id, &callables);
                         }
                         log::debug!(
                             "evict_stale_wrappers: evicted out-of-tree wrapper #{}",

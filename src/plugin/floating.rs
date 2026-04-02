@@ -54,7 +54,7 @@ pub(super) fn disconnect_viewport_signals(window_id: InstanceId, callables: &Flo
 }
 
 impl GodotVimPlugin {
-    fn floating_callables(&self) -> FloatingCallables {
+    pub(super) fn floating_callables(&self) -> FloatingCallables {
         FloatingCallables {
             focus_changed: self.base().callable("on_focus_changed"),
             focus_entered: self.base().callable("on_floating_window_focused"),
