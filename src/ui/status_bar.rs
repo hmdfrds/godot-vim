@@ -385,24 +385,11 @@ fn format_cmdline_into(buf: &mut String, prompt: &str, input: &str, cursor: usiz
 
 /// Inject a `VimStatusBar` into a `CodeEdit` as a floating overlay.
 ///
-/// Handles orphan cleanup (stale bars from previous attach cycles),
-/// reparenting, anchor pinning to bottom-right, and mouse passthrough.
+/// Handles reparenting, anchor pinning to bottom-right, and mouse passthrough.
+/// Orphan cleanup is handled by `remove_orphaned_overlays` before this is called.
 pub(crate) fn inject_status_bar(editor: &Gd<CodeEdit>, bar: &Gd<VimStatusBar>) {
     let bar_node = bar.clone().upcast::<Node>();
     let editor_node = editor.clone().upcast::<Node>();
-
-    // Orphaned status bars can accumulate if the plugin is detached/reattached
-    // without a full scene teardown (e.g. during hot-reload).
-    for child in editor_node.get_children().iter_shared() {
-        let name = child.get_name().to_string();
-        if name.starts_with("VimStatusBar") && child.instance_id() != bar_node.instance_id() {
-            let mut orphan = child;
-            if let Some(mut parent) = orphan.get_parent() {
-                parent.remove_child(&orphan);
-            }
-            orphan.queue_free();
-        }
-    }
 
     // Reparent if the bar is already attached to a different editor.
     if let Some(mut old_parent) = bar_node.get_parent() {

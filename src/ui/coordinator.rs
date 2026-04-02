@@ -70,6 +70,37 @@ impl Default for DirtyCache {
 // UiCoordinator
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Remove orphaned overlay nodes from a previous attach that didn't clean up
+/// (panic during attach, hot-reload, crash recovery). One pass over the
+/// editor's children covers all plugin-registered overlay types.
+fn remove_orphaned_overlays(editor: &Gd<CodeEdit>) {
+    const OVERLAY_CLASSES: &[&str] = &[
+        "VimCursor",
+        "VimStatusBar",
+        "InccommandOverlay",
+        "DebugRangeOverlay",
+        "VirtualTextOverlay",
+        "HighlightYankOverlay",
+        "LineNumberManager",
+    ];
+    let editor_node = editor.clone().upcast::<Node>();
+    for child in editor_node.get_children().iter_shared() {
+        let class_name = child.get_class().to_string();
+        if OVERLAY_CLASSES.contains(&class_name.as_str()) {
+            log::warn!(
+                "ui::attach: removing orphaned {} (instance #{})",
+                class_name,
+                child.instance_id().to_i64()
+            );
+            let mut orphan = child;
+            if let Some(mut parent) = orphan.get_parent() {
+                parent.remove_child(&orphan);
+            }
+            orphan.queue_free();
+        }
+    }
+}
+
 pub(crate) struct UiCoordinator {
     status_bar: Option<Gd<VimStatusBar>>,
     cursor: Option<Gd<VimCursor>>,
@@ -112,28 +143,16 @@ impl UiCoordinator {
     /// detach cleanly (e.g. editor reload, crash recovery).
     pub(crate) fn attach(&mut self, editor: &mut Gd<CodeEdit>) {
         log::debug!("ui::attach: editor=#{}", editor.instance_id().to_i64());
+
+        // ── 0. Remove orphaned overlays from previous attach ──────────
+        remove_orphaned_overlays(editor);
+
         // ── 1. Status bar ────────────────────────────────────────────────
         let bar = VimStatusBar::new_alloc();
         status_bar::inject_status_bar(editor, &bar);
         self.status_bar = Some(bar);
 
-        // ── 2. Remove orphaned VimCursor children ────────────────────────
-        {
-            let editor_node = editor.clone().upcast::<Node>();
-            for child in editor_node.get_children().iter_shared() {
-                let name = child.get_name().to_string();
-                if name.starts_with("VimCursor") {
-                    log::warn!("ui::attach: removing orphaned VimCursor {}", name);
-                    let mut orphan = child;
-                    if let Some(mut parent) = orphan.get_parent() {
-                        parent.remove_child(&orphan);
-                    }
-                    orphan.queue_free();
-                }
-            }
-        }
-
-        // ── 3. Cursor ────────────────────────────────────────────────────
+        // ── 2. Cursor ────────────────────────────────────────────────────
         let mut cursor = VimCursor::new_alloc();
         editor.add_child(&cursor.clone().upcast::<Node>());
         // Snap immediately -- without this the cursor lerps from (0,0).
@@ -145,7 +164,7 @@ impl UiCoordinator {
         self.cursor = Some(cursor);
         self.cursor_enabled = true;
 
-        // ── 4. Hide native caret ─────────────────────────────────────────
+        // ── 3. Hide native caret ─────────────────────────────────────────
         // Save the existing override (or None for theme-inherited) so detach
         // can restore the original behavior without leaking our transparent
         // override into future theme changes.
@@ -159,25 +178,25 @@ impl UiCoordinator {
             Color::from_rgba(0.0, 0.0, 0.0, 0.0),
         );
 
-        // ── 4b. Cache caret type ───────────────────────────────────────
+        // ── 3b. Cache caret type ───────────────────────────────────────
         self.saved.caret_type = Some(editor.get_caret_type());
 
-        // ── 5. Line numbers ─────────────────────────────────────────────
+        // ── 4. Line numbers ─────────────────────────────────────────────
         let mut line_numbers = LineNumberManager::new_alloc();
         editor.add_child(&line_numbers.clone().upcast::<Node>());
         line_numbers.bind_mut().attach(editor.clone());
         self.line_numbers = Some(line_numbers);
 
-        // ── 6. Inccommand overlay ────────────────────────────────────────
+        // ── 5. Inccommand overlay ────────────────────────────────────────
         self.inccommand = Some(create_overlay::<InccommandOverlay>(editor, 50));
 
-        // ── 7. Debug range overlay ───────────────────────────────────────
+        // ── 6. Debug range overlay ───────────────────────────────────────
         self.debug_overlay = Some(create_overlay::<DebugRangeOverlay>(editor, 60));
 
-        // ── 8. Virtual text overlay ────────────────────────────────────────
+        // ── 7. Virtual text overlay ────────────────────────────────────────
         self.virtual_text = Some(create_overlay::<VirtualTextOverlay>(editor, 51));
 
-        // ── 9. Highlight yank overlay ──────────────────────────────────────
+        // ── 8. Highlight yank overlay ──────────────────────────────────────
         let mut hy_overlay = create_overlay::<HighlightYankOverlay>(editor, 52);
         hy_overlay.set_process(false);
         self.highlight_yank = Some(hy_overlay);
