@@ -309,6 +309,12 @@ impl GodotVimPlugin {
         }
 
         self.scan_floating_windows();
+
+        // Connect focus signals on any windows that are already floating at
+        // plugin init time. The scan above tracked the wrappers but created
+        // them with `window_id: None`. This call finds visible Window children
+        // and wires up gui_focus_changed + focus_entered.
+        self.connect_floating_viewport();
     }
 
     /// Symmetric teardown: disconnect all child_entered_tree, focus, and
