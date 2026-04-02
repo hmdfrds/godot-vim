@@ -443,16 +443,27 @@ impl GodotVimPlugin {
     }
 
     /// Post-panic recovery: reset controller to clean Normal-mode state, clear
-    /// the text cache, and drain orphaned undo groups. Called from every
-    /// `panic_guard` callsite that mutates the controller.
+    /// the text cache, drain orphaned undo groups, refresh the UI to reflect
+    /// the recovered state. Called from every `panic_guard` callsite that
+    /// mutates the controller.
     fn recover_controller_from_panic(&mut self) {
         if let (Some(controller), Some(editor)) =
             (&mut self.controller, &mut self.attached_editor)
         {
             if editor.is_instance_valid() {
-                controller.recover_from_panic(&mut editor.clone());
+                let mut editor = editor.clone();
+                controller.recover_from_panic(&mut editor);
+
+                // Refresh UI so the user sees Normal mode + error message
+                // immediately, not stale pre-panic state.
+                let editor_id = editor.instance_id();
+                let snap = controller.ui_snapshot(editor_id);
+                self.ui.update(&snap, &mut editor);
             }
         }
+        // Clear stale caret suppression counter so deferred caret_changed
+        // events after recovery are not swallowed.
+        self.pending_caret_suppressions = 0;
     }
 
     fn update_cursor_if_attached(&mut self) {
