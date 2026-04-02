@@ -10,7 +10,7 @@ use godot::prelude::*;
 
 use super::{
     GodotVimPlugin, SIG_CHILD_ENTERED_TREE, SIG_GUI_FOCUS_CHANGED,
-    SIG_WINDOW_VISIBILITY_CHANGED,
+    SIG_TREE_EXITED, SIG_WINDOW_VISIBILITY_CHANGED,
 };
 use super::signals::{connect_deferred, connect_immediate, safe_disconnect};
 
@@ -229,6 +229,8 @@ impl GodotVimPlugin {
 
                 let mut node = child;
                 connect_immediate(&mut node, SIG_WINDOW_VISIBILITY_CHANGED, &callable);
+                let tree_exit_callable = self.base().callable("on_wrapper_tree_exited");
+                connect_immediate(&mut node, SIG_TREE_EXITED, &tree_exit_callable);
 
                 log::debug!(
                     "scan_floating_windows: [{}] tracking new WindowWrapper #{} (class={})",
@@ -363,11 +365,13 @@ impl GodotVimPlugin {
         self.disconnect_all_floating_viewports();
 
         let vis_callable = self.base().callable("on_window_visibility_changed");
+        let tree_exit_callable = self.base().callable("on_wrapper_tree_exited");
         for tw in &self.tracked_windows {
             if let Ok(mut wrapper) =
                 Gd::<godot::classes::Node>::try_from_instance_id(tw.wrapper_id)
             {
                 safe_disconnect(&mut wrapper, SIG_WINDOW_VISIBILITY_CHANGED, &vis_callable);
+                safe_disconnect(&mut wrapper, SIG_TREE_EXITED, &tree_exit_callable);
             }
         }
         self.tracked_windows.clear();

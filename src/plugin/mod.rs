@@ -28,6 +28,7 @@ const SIG_TIMEOUT: &str = "timeout";
 const SIG_CONFIG_SAVED: &str = "config_saved";
 const SIG_WINDOW_VISIBILITY_CHANGED: &str = "window_visibility_changed";
 const SIG_CHILD_ENTERED_TREE: &str = "child_entered_tree";
+const SIG_TREE_EXITED: &str = "tree_exited";
 
 #[derive(GodotClass)]
 #[class(tool, base=EditorPlugin)]
@@ -214,11 +215,102 @@ impl GodotVimPlugin {
                     let callable = self.base().callable("on_window_visibility_changed");
                     let mut n = node;
                     signals::connect_immediate(&mut n, SIG_WINDOW_VISIBILITY_CHANGED, &callable);
-                    log::debug!("on_child_entered_tree: connected window_visibility_changed on #{}", wrapper_id.to_i64());
+                    let tree_exit_callable = self.base().callable("on_wrapper_tree_exited");
+                    signals::connect_immediate(&mut n, SIG_TREE_EXITED, &tree_exit_callable);
+                    log::debug!("on_child_entered_tree: connected window_visibility_changed + tree_exited on #{}", wrapper_id.to_i64());
                     self.tracked_windows.push(TrackedWindow {
                         wrapper_id,
                         window_id: None,
                     });
+                }
+            },
+            (),
+        );
+    }
+
+    #[func]
+    fn on_wrapper_tree_exited(&mut self) {
+        // A tracked WindowWrapper left the scene tree (freed via queue_free,
+        // or removed by Godot's dock manager). Defer the eviction sweep so
+        // that queue_free has fully completed and try_from_instance_id fails
+        // for freed wrappers.
+        self.base_mut()
+            .call_deferred("evict_stale_wrappers", &[]);
+    }
+
+    #[func]
+    fn evict_stale_wrappers(&mut self) {
+        panic_guard(
+            "evict_stale_wrappers",
+            || {
+                let focus_callable = self.base().callable("on_focus_changed");
+                let focus_entered_callable =
+                    self.base().callable("on_floating_window_focused");
+
+                let before = self.tracked_windows.len();
+                self.tracked_windows.retain(|tw| {
+                    let Ok(wrapper) =
+                        Gd::<Node>::try_from_instance_id(tw.wrapper_id)
+                    else {
+                        // Wrapper freed — disconnect viewport signals if any.
+                        if let Some(window_id) = tw.window_id {
+                            if let Ok(mut window) =
+                                Gd::<Node>::try_from_instance_id(window_id)
+                            {
+                                signals::safe_disconnect(
+                                    &mut window,
+                                    SIG_GUI_FOCUS_CHANGED,
+                                    &focus_callable,
+                                );
+                                signals::safe_disconnect(
+                                    &mut window,
+                                    "focus_entered",
+                                    &focus_entered_callable,
+                                );
+                            }
+                        }
+                        log::debug!(
+                            "evict_stale_wrappers: evicted freed wrapper #{}",
+                            tw.wrapper_id.to_i64()
+                        );
+                        return false;
+                    };
+
+                    // Wrapper still exists but left the tree.
+                    if !wrapper.is_inside_tree() {
+                        if let Some(window_id) = tw.window_id {
+                            if let Ok(mut window) =
+                                Gd::<Node>::try_from_instance_id(window_id)
+                            {
+                                signals::safe_disconnect(
+                                    &mut window,
+                                    SIG_GUI_FOCUS_CHANGED,
+                                    &focus_callable,
+                                );
+                                signals::safe_disconnect(
+                                    &mut window,
+                                    "focus_entered",
+                                    &focus_entered_callable,
+                                );
+                            }
+                        }
+                        log::debug!(
+                            "evict_stale_wrappers: evicted out-of-tree wrapper #{}",
+                            tw.wrapper_id.to_i64()
+                        );
+                        return false;
+                    }
+
+                    true
+                });
+
+                let evicted = before - self.tracked_windows.len();
+                if evicted > 0 {
+                    log::debug!(
+                        "evict_stale_wrappers: evicted {} entries, {} remaining",
+                        evicted,
+                        self.tracked_windows.len()
+                    );
                 }
             },
             (),
