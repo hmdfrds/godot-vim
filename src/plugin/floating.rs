@@ -35,13 +35,39 @@ pub(super) fn is_window_wrapper(node: &Gd<Node>) -> bool {
     node.has_signal(SIG_WINDOW_VISIBILITY_CHANGED)
 }
 
+/// Bundles the 4 callables used for floating window signal management.
+/// Constructed once per method invocation via [`GodotVimPlugin::floating_callables`]
+/// to avoid repeated `self.base().callable(...)` calls.
+pub(super) struct FloatingCallables {
+    pub(super) focus_changed: Callable,
+    pub(super) focus_entered: Callable,
+    pub(super) visibility_changed: Callable,
+    pub(super) tree_exited: Callable,
+}
+
+/// Disconnect `gui_focus_changed` + `focus_entered` from a tracked Window.
+pub(super) fn disconnect_viewport_signals(window_id: InstanceId, callables: &FloatingCallables) {
+    if let Ok(mut window) = Gd::<Node>::try_from_instance_id(window_id) {
+        safe_disconnect(&mut window, SIG_GUI_FOCUS_CHANGED, &callables.focus_changed);
+        safe_disconnect(&mut window, SIG_FOCUS_ENTERED, &callables.focus_entered);
+    }
+}
+
 impl GodotVimPlugin {
+    fn floating_callables(&self) -> FloatingCallables {
+        FloatingCallables {
+            focus_changed: self.base().callable("on_focus_changed"),
+            focus_entered: self.base().callable("on_floating_window_focused"),
+            visibility_changed: self.base().callable("on_window_visibility_changed"),
+            tree_exited: self.base().callable("on_wrapper_tree_exited"),
+        }
+    }
+
     // ── Viewport signal connection ───────────────────────────────────
 
     /// Connect focus signals on Window children of visible (floating) wrappers.
     pub(super) fn connect_floating_viewport(&mut self) {
-        let callable = self.base().callable("on_focus_changed");
-        let focus_callable = self.base().callable("on_floating_window_focused");
+        let callables = self.floating_callables();
         for tw in &mut self.tracked_windows {
             let Ok(wrapper) = Gd::<Node>::try_from_instance_id(tw.wrapper_id) else {
                 log::trace!(
@@ -85,8 +111,8 @@ impl GodotVimPlugin {
                     // Window inherits Viewport -- gui_focus_changed detects
                     // focus changes between controls within the floating window.
                     let mut node = child;
-                    let was_disconnected = !node.is_connected(SIG_GUI_FOCUS_CHANGED, &callable);
-                    connect_deferred(&mut node, SIG_GUI_FOCUS_CHANGED, &callable);
+                    let was_disconnected = !node.is_connected(SIG_GUI_FOCUS_CHANGED, &callables.focus_changed);
+                    connect_deferred(&mut node, SIG_GUI_FOCUS_CHANGED, &callables.focus_changed);
                     if was_disconnected {
                         log::debug!(
                             "connect_floating_viewport: connected gui_focus_changed on floating Window #{}",
@@ -98,8 +124,8 @@ impl GodotVimPlugin {
                     // into the floating window from the main window, because the
                     // CodeEdit never lost key_focus within that viewport.
                     // focus_entered fires on every OS-level window focus event.
-                    let was_disconnected = !node.is_connected(SIG_FOCUS_ENTERED, &focus_callable);
-                    connect_immediate(&mut node, SIG_FOCUS_ENTERED, &focus_callable);
+                    let was_disconnected = !node.is_connected(SIG_FOCUS_ENTERED, &callables.focus_entered);
+                    connect_immediate(&mut node, SIG_FOCUS_ENTERED, &callables.focus_entered);
                     if was_disconnected {
                         log::debug!(
                             "connect_floating_viewport: connected focus_entered on Window #{}",
@@ -126,8 +152,7 @@ impl GodotVimPlugin {
     /// all tracked windows -- multiple editors can be floating simultaneously,
     /// and unfloating one must not break the others.
     pub(super) fn disconnect_floating_viewport(&mut self) {
-        let callable = self.base().callable("on_focus_changed");
-        let focus_callable = self.base().callable("on_floating_window_focused");
+        let callables = self.floating_callables();
         for tw in &mut self.tracked_windows {
             let Some(window_id) = tw.window_id else { continue };
 
@@ -155,23 +180,16 @@ impl GodotVimPlugin {
                 "disconnect_floating_viewport: disconnecting Window #{} from wrapper #{}",
                 window_id.to_i64(), tw.wrapper_id.to_i64()
             );
-            if let Ok(mut window) = Gd::<Node>::try_from_instance_id(window_id) {
-                safe_disconnect(&mut window, SIG_GUI_FOCUS_CHANGED, &callable);
-                safe_disconnect(&mut window, SIG_FOCUS_ENTERED, &focus_callable);
-            }
+            disconnect_viewport_signals(window_id, &callables);
         }
     }
 
     /// Unconditionally disconnect ALL floating window signals (exit_tree only).
     pub(super) fn disconnect_all_floating_viewports(&mut self) {
-        let callable = self.base().callable("on_focus_changed");
-        let focus_callable = self.base().callable("on_floating_window_focused");
+        let callables = self.floating_callables();
         for tw in &mut self.tracked_windows {
             if let Some(window_id) = tw.window_id.take() {
-                if let Ok(mut window) = Gd::<Node>::try_from_instance_id(window_id) {
-                    safe_disconnect(&mut window, SIG_GUI_FOCUS_CHANGED, &callable);
-                    safe_disconnect(&mut window, SIG_FOCUS_ENTERED, &focus_callable);
-                }
+                disconnect_viewport_signals(window_id, &callables);
             }
         }
     }
@@ -214,7 +232,7 @@ impl GodotVimPlugin {
             }).collect::<Vec<_>>().join(", ")
         );
 
-        let callable = self.base().callable("on_window_visibility_changed");
+        let callables = self.floating_callables();
         let mut newly_tracked = 0u32;
 
         for (parent, label) in &scan_roots {
@@ -240,9 +258,8 @@ impl GodotVimPlugin {
                 }
 
                 let mut node = child;
-                connect_immediate(&mut node, SIG_WINDOW_VISIBILITY_CHANGED, &callable);
-                let tree_exit_callable = self.base().callable("on_wrapper_tree_exited");
-                connect_immediate(&mut node, SIG_TREE_EXITED, &tree_exit_callable);
+                connect_immediate(&mut node, SIG_WINDOW_VISIBILITY_CHANGED, &callables.visibility_changed);
+                connect_immediate(&mut node, SIG_TREE_EXITED, &callables.tree_exited);
 
                 log::debug!(
                     "scan_floating_windows: [{}] tracking new WindowWrapper #{} (class={})",
@@ -370,14 +387,13 @@ impl GodotVimPlugin {
 
         self.disconnect_all_floating_viewports();
 
-        let vis_callable = self.base().callable("on_window_visibility_changed");
-        let tree_exit_callable = self.base().callable("on_wrapper_tree_exited");
+        let callables = self.floating_callables();
         for tw in &self.tracked_windows {
             if let Ok(mut wrapper) =
                 Gd::<godot::classes::Node>::try_from_instance_id(tw.wrapper_id)
             {
-                safe_disconnect(&mut wrapper, SIG_WINDOW_VISIBILITY_CHANGED, &vis_callable);
-                safe_disconnect(&mut wrapper, SIG_TREE_EXITED, &tree_exit_callable);
+                safe_disconnect(&mut wrapper, SIG_WINDOW_VISIBILITY_CHANGED, &callables.visibility_changed);
+                safe_disconnect(&mut wrapper, SIG_TREE_EXITED, &callables.tree_exited);
             }
         }
         self.tracked_windows.clear();
