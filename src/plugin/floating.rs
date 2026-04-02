@@ -9,8 +9,8 @@ use godot::classes::EditorInterface;
 use godot::prelude::*;
 
 use super::{
-    GodotVimPlugin, SIG_CHILD_ENTERED_TREE, SIG_GUI_FOCUS_CHANGED,
-    SIG_TREE_EXITED, SIG_WINDOW_VISIBILITY_CHANGED,
+    GodotVimPlugin, SIG_CHILD_ENTERED_TREE, SIG_FOCUS_ENTERED,
+    SIG_GUI_FOCUS_CHANGED, SIG_TREE_EXITED, SIG_WINDOW_VISIBILITY_CHANGED,
 };
 use super::signals::{connect_deferred, connect_immediate, safe_disconnect};
 
@@ -24,14 +24,12 @@ pub(super) struct TrackedWindow {
 /// Detect whether a node is a Godot editor `WindowWrapper`.
 ///
 /// `WindowWrapper` is an internal C++ editor class that extends
-/// `MarginContainer`. It is NOT registered in ClassDB with `GDCLASS`, so
-/// `Node::is_class("WindowWrapper")` returns `false` -- it only sees the
-/// registered base class `MarginContainer`.
+/// `MarginContainer`, registered via `GDCLASS(WindowWrapper, MarginContainer)`.
 ///
-/// Instead we use a signal-based heuristic: `WindowWrapper` defines a custom
-/// signal `window_visibility_changed` that no other standard node type has.
-/// Checking `has_signal()` is reliable, fast, and survives Godot version
-/// changes that might rename or re-parent the internal class.
+/// We detect it by checking for its custom `window_visibility_changed` signal
+/// rather than using `is_class("WindowWrapper")`. This is a semantic check —
+/// it identifies the node by its behavior rather than its class name, making
+/// it resilient to class renames or inheritance changes across Godot versions.
 pub(super) fn is_window_wrapper(node: &Gd<Node>) -> bool {
     node.has_signal(SIG_WINDOW_VISIBILITY_CHANGED)
 }
@@ -99,8 +97,8 @@ impl GodotVimPlugin {
                     // into the floating window from the main window, because the
                     // CodeEdit never lost key_focus within that viewport.
                     // focus_entered fires on every OS-level window focus event.
-                    let was_disconnected = !node.is_connected("focus_entered", &focus_callable);
-                    connect_immediate(&mut node, "focus_entered", &focus_callable);
+                    let was_disconnected = !node.is_connected(SIG_FOCUS_ENTERED, &focus_callable);
+                    connect_immediate(&mut node, SIG_FOCUS_ENTERED, &focus_callable);
                     if was_disconnected {
                         log::debug!(
                             "connect_floating_viewport: connected focus_entered on Window #{}",
@@ -158,7 +156,7 @@ impl GodotVimPlugin {
             );
             if let Ok(mut window) = Gd::<Node>::try_from_instance_id(window_id) {
                 safe_disconnect(&mut window, SIG_GUI_FOCUS_CHANGED, &callable);
-                safe_disconnect(&mut window, "focus_entered", &focus_callable);
+                safe_disconnect(&mut window, SIG_FOCUS_ENTERED, &focus_callable);
             }
         }
     }
@@ -171,7 +169,7 @@ impl GodotVimPlugin {
             if let Some(window_id) = tw.window_id.take() {
                 if let Ok(mut window) = Gd::<Node>::try_from_instance_id(window_id) {
                     safe_disconnect(&mut window, SIG_GUI_FOCUS_CHANGED, &callable);
-                    safe_disconnect(&mut window, "focus_entered", &focus_callable);
+                    safe_disconnect(&mut window, SIG_FOCUS_ENTERED, &focus_callable);
                 }
             }
         }
@@ -263,15 +261,9 @@ impl GodotVimPlugin {
             );
         }
 
-        let before = self.tracked_windows.len();
-        self.tracked_windows.retain(|tw| {
-            Gd::<Node>::try_from_instance_id(tw.wrapper_id).is_ok()
-        });
-        let evicted = before - self.tracked_windows.len();
-
         log::trace!(
-            "scan_floating_windows: done -- {} newly tracked, {} evicted, {} total",
-            newly_tracked, evicted, self.tracked_windows.len()
+            "scan_floating_windows: done -- {} newly tracked, {} total",
+            newly_tracked, self.tracked_windows.len()
         );
     }
 
