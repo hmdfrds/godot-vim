@@ -249,13 +249,24 @@ impl GodotVimPlugin {
                         );
                         continue;
                     };
-                    let Ok(viewport) = window_node.try_cast::<godot::classes::Viewport>() else {
+                    let Ok(window) = window_node.try_cast::<godot::classes::Window>() else {
                         log::warn!(
-                            "on_floating_window_focused: window #{} not a Viewport",
+                            "on_floating_window_focused: window #{} not a Window",
                             window_id.to_i64()
                         );
                         continue;
                     };
+                    // Only consider the window that actually has OS-level focus.
+                    // Each Viewport maintains independent gui_focus_owner state,
+                    // so checking all windows would match stale focus owners.
+                    if !window.has_focus() {
+                        log::trace!(
+                            "on_floating_window_focused: window #{} does not have OS focus, skipping",
+                            window_id.to_i64()
+                        );
+                        continue;
+                    }
+                    let viewport = window.clone().upcast::<godot::classes::Viewport>();
                     if let Some(focus_owner) = viewport.gui_get_focus_owner() {
                         let focus_class = focus_owner.get_class().to_string();
                         log::trace!(
