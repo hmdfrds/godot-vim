@@ -599,7 +599,7 @@ impl GodotVimPlugin {
                     // Use emergency_reset for maximum aggression — this is
                     // a panic path, not a normal cleanup.
                     log::warn!("recover_controller_from_panic: no editor, emergency resetting engine");
-                    controller.emergency_engine_reset();
+                    controller.force_cleanup_without_editor();
                 }
             },
             (),

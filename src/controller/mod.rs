@@ -58,6 +58,51 @@ const PERF_BUDGET_US: perf::Microseconds = perf::Microseconds(2000);
 /// `:source` chains can reach 3. Five allows headroom without risk.
 const MAX_HOST_DEPTH: u32 = 5;
 
+/// Transient per-cycle / per-keystroke state that must be reset on every
+/// cleanup path (dead editor, panic recovery, tab switch).
+///
+/// Grouping these fields into a single struct with a [`reset()`](Self::reset)
+/// method ensures that all cleanup call-sites stay in sync — adding a new
+/// transient field automatically gets cleaned up everywhere.
+struct TransientShellState {
+    /// Cross-drain runaway guard: catches `:norm` calling back into `drain_pending`.
+    operations_this_cycle: u32,
+    /// Avoids re-fetching the full document text from Godot (FFI round-trip)
+    /// on successive keystrokes that don't mutate text. Tagged with
+    /// `InstanceId` to self-invalidate on buffer switch.
+    persistent_text: Option<(InstanceId, String)>,
+    /// Deferred for the plugin layer (scene tree owner) after `process_cycle`.
+    pending_ui_action: Option<PendingUiAction>,
+    /// Effect inspector state (`:vimdebug watch/step`).
+    vimdebug: vimdebug::VimdebugState,
+    /// Pass-2 effects deferred by vimdebug step-mode.
+    pending_step_effects: Option<Vec<vim_core::effects::Effect>>,
+}
+
+impl TransientShellState {
+    fn new() -> Self {
+        Self {
+            operations_this_cycle: 0,
+            persistent_text: None,
+            pending_ui_action: None,
+            vimdebug: vimdebug::VimdebugState::default(),
+            pending_step_effects: None,
+        }
+    }
+
+    /// Reset all transient fields to their clean defaults.
+    ///
+    /// Called by every cleanup path (dead editor, panic recovery, tab switch)
+    /// to guarantee no stale state leaks across boundaries.
+    fn reset(&mut self) {
+        self.operations_this_cycle = 0;
+        self.persistent_text = None;
+        self.pending_ui_action = None;
+        self.vimdebug.set_mode(vimdebug::VimdebugMode::Off);
+        self.pending_step_effects = None;
+    }
+}
+
 /// Per-editor orchestrator that owns the [`VimEngine`] and bridges Godot's
 /// event-driven input to vim-core's synchronous command model.
 ///
@@ -70,20 +115,12 @@ pub(crate) struct VimController {
     /// Ensures Godot's `begin/end_complex_operation` calls are always balanced,
     /// even after panics or abnormal mode transitions.
     undo_depth: crate::effects::UndoDepth,
-    /// Cross-drain runaway guard: catches `:norm` calling back into `drain_pending`.
-    operations_this_cycle: u32,
-    /// Avoids re-fetching the full document text from Godot (FFI round-trip)
-    /// on successive keystrokes that don't mutate text. Tagged with
-    /// `InstanceId` to self-invalidate on buffer switch.
-    persistent_text: Option<(InstanceId, String)>,
+    /// Per-cycle / per-keystroke state that must be reset on every cleanup path.
+    /// See [`TransientShellState::reset()`] for the canonical reset logic.
+    transient: TransientShellState,
     passthrough_keys: HashSet<KeyEvent>,
-    /// Deferred for the plugin layer (scene tree owner) after `process_cycle`.
-    pending_ui_action: Option<PendingUiAction>,
     security_policy: SecurityPolicy,
     perf: perf::PerfTracker,
-    vimdebug: vimdebug::VimdebugState,
-    /// Pass-2 effects deferred by vimdebug step-mode.
-    pending_step_effects: Option<Vec<vim_core::effects::Effect>>,
     /// 0 = disabled.
     highlight_yank_duration_ms: u32,
     /// Whether Godot's native code completion should auto-trigger on typing.
@@ -98,18 +135,14 @@ impl VimController {
             engine: VimEngine::new(),
             state: ShellState::default(),
             undo_depth: crate::effects::UndoDepth::new(),
-            operations_this_cycle: 0,
-            persistent_text: None,
+            transient: TransientShellState::new(),
             passthrough_keys: HashSet::new(),
-            pending_ui_action: None,
             security_policy: SecurityPolicy {
                 shell_execution: ShellExecution::Disabled,
                 file_access_scope: FileAccessScope::ProjectOnly,
                 project_vimrc: crate::settings::ProjectVimrc::Sandbox,
             },
             perf: perf::PerfTracker::new(PERF_RING_CAPACITY, PERF_BUDGET_US),
-            vimdebug: vimdebug::VimdebugState::default(),
-            pending_step_effects: None,
             highlight_yank_duration_ms: u32::try_from(crate::settings::defaults::HIGHLIGHT_YANK_DURATION).unwrap_or(150),
             code_complete_enabled: true,
         };
@@ -174,19 +207,19 @@ impl VimController {
             pending_keys: self.engine.pending_mapping_display(),
             pending_command: self.engine.pending_command_display(),
             substitute_preview: self.state.take_substitute_preview(),
-            vimdebug: match (self.vimdebug.provenance().cloned(), self.vimdebug.effects_summary().cloned()) {
+            vimdebug: match (self.transient.vimdebug.provenance().cloned(), self.transient.vimdebug.effects_summary().cloned()) {
                 (Some(provenance), Some(effects)) => {
-                    match self.vimdebug.step_status_line() {
+                    match self.transient.vimdebug.step_status_line() {
                         Some(step_status) => crate::types::VimdebugSnapshot::Step {
                             provenance,
                             effects,
-                            range: self.vimdebug.range(),
+                            range: self.transient.vimdebug.range(),
                             step_status,
                         },
                         None => crate::types::VimdebugSnapshot::Watch {
                             provenance,
                             effects,
-                            range: self.vimdebug.range(),
+                            range: self.transient.vimdebug.range(),
                         },
                     }
                 }
@@ -296,28 +329,28 @@ impl VimController {
     /// Called on `text_changed` signal so the next keystroke fetches fresh
     /// editor text instead of using a stale cache.
     pub(crate) fn invalidate_text_cache(&mut self) {
-        self.persistent_text = None;
+        self.transient.persistent_text = None;
     }
 
-    /// Comprehensive cleanup when the attached editor has been freed externally.
+    /// Canonical Tier 1 cleanup: comprehensive internal reset when no editor
+    /// is available (dead editor, panic recovery, tab switch).
     ///
-    /// Unlike the normal detach path (`force_exit_insert_replace`, etc.), this
-    /// cannot call Godot FFI methods on the editor — it is already destroyed.
-    /// Resets only internal Rust state:
-    /// - Mode → Normal (covers Insert/Replace/Visual/CommandLine)
-    /// - Undo depth counter (Godot-side groups died with the editor)
-    /// - Pending mapping keys + macro replay (can't resolve without editor)
-    /// - Parser state (clears operator-pending like a stale `d`)
-    /// - Macro recording (can't continue without editor context)
-    /// - Substitute preview (prevents stale inccommand on next editor)
-    pub(crate) fn force_cleanup_without_editor(&mut self) {
-        log::debug!("force_cleanup_without_editor: resetting engine state for dead editor");
-        self.engine.set_mode(vim_core::primitives::Mode::Normal);
-        self.undo_depth.drain();
-        self.engine.abort_replay();
-        self.engine.reset_parser();
-        self.engine.abort_recording();
+    /// Delegates to [`VimEngine::emergency_reset`] which clears parser, mode,
+    /// state, typeahead, host pending, recording, command-line session,
+    /// cmd_buffer, is_repeating, and changelist in one call. Then drains
+    /// orphaned undo groups, clears substitute preview, and resets all
+    /// transient shell state.
+    ///
+    /// Returns the number of Godot undo groups that were drained — callers
+    /// with a live editor should close that many `end_complex_operation`
+    /// calls and optionally `undo()` to roll back partial mutations.
+    pub(crate) fn force_cleanup_without_editor(&mut self) -> u32 {
+        log::debug!("force_cleanup_without_editor: canonical Tier 1 reset");
+        self.engine.emergency_reset();
+        let godot_groups = self.undo_depth.drain();
         self.state.clear_substitute_preview();
+        self.transient.reset();
+        godot_groups
     }
 
     /// Reset parser and abort recording — the Tier 1 operations not covered
@@ -332,12 +365,12 @@ impl VimController {
         self.engine.abort_recording();
     }
 
-    /// Emergency engine reset for use on panic paths when no editor is
-    /// available. Delegates to [`VimEngine::emergency_reset`] which clears
-    /// parser, mode, state, typeahead, host pending, recording,
-    /// command-line session, cmd_buffer, is_repeating, and changelist.
-    pub(crate) fn emergency_engine_reset(&mut self) {
-        self.engine.emergency_reset();
+    /// Convenience wrapper to reset transient shell state without touching
+    /// the engine or undo depth. Used by cleanup paths that handle engine
+    /// reset separately (e.g., the normal detach path).
+    #[allow(dead_code)] // Used by the detach path (Task 2)
+    pub(crate) fn reset_transients(&mut self) {
+        self.transient.reset();
     }
 
     /// Notify the engine that the current buffer is being left.
@@ -430,7 +463,7 @@ impl VimController {
     /// resolution produced any effects this cycle.
     #[must_use]
     pub(crate) fn operations_this_cycle(&self) -> u32 {
-        self.operations_this_cycle
+        self.transient.operations_this_cycle
     }
 
     // ── Config file sourcing ─────────────────────────────────────────
@@ -475,29 +508,17 @@ impl VimController {
     // ── Pending UI actions ───────────────────────────────────────────
 
     pub(crate) fn take_pending_ui_action(&mut self) -> Option<PendingUiAction> {
-        self.pending_ui_action.take()
+        self.transient.pending_ui_action.take()
     }
 
-    /// Three-tier panic recovery: engine → Godot → shell.
+    /// Panic recovery composed from the canonical Tier 1 cleanup.
     ///
-    /// **Tier 1 (Engine):** [`emergency_reset()`] clears parser, mode, state,
-    /// typeahead, host pending, recording, command-line session, cmd_buffer,
-    /// is_repeating, and changelist in one call.
-    ///
-    /// **Tier 2 (Godot):** Drain orphaned undo groups, roll back partial text
-    /// mutations via `undo()`, clear visual selection and secondary carets.
-    ///
-    /// **Tier 3 (Shell):** Invalidate caches, clear transient state, notify
-    /// the user via status bar error message.
-    ///
-    /// Ordering: engine first (known-good state regardless of later failures),
-    /// Godot second (restore document text), shell third (reflect reality).
+    /// Delegates to [`force_cleanup_without_editor`](Self::force_cleanup_without_editor)
+    /// for engine + shell reset, then uses the returned undo group count to
+    /// close orphaned Godot undo groups, roll back partial text mutations,
+    /// and restore the editor to a clean visual state.
     pub(crate) fn recover_from_panic(&mut self, editor: &mut Gd<CodeEdit>) {
-        // ── Tier 1: Engine ───────────────────────────────────────────────
-        self.engine.emergency_reset();
-
-        // ── Tier 2: Godot ────────────────────────────────────────────────
-        let godot_groups = self.undo_depth.drain();
+        let godot_groups = self.force_cleanup_without_editor();
         for _ in 0..godot_groups {
             editor.end_complex_operation();
         }
@@ -510,16 +531,8 @@ impl VimController {
         }
         editor.deselect();
         editor.remove_secondary_carets();
-
-        // ── Tier 3: Shell ────────────────────────────────────────────────
         let editor_id = editor.instance_id();
         self.state.buffer(editor_id).clear_visual_selection();
-        self.state.clear_substitute_preview();
-        self.persistent_text = None;
-        self.pending_step_effects = None;
-        self.pending_ui_action = None;
-        self.operations_this_cycle = 0;
-        self.vimdebug.set_mode(vimdebug::VimdebugMode::Off);
         self.state.globals_mut().set_error(
             "Recovered from internal error \u{2014} state reset to Normal mode",
         );
@@ -552,7 +565,7 @@ impl VimController {
     ) -> bool {
         let editor_id = editor.instance_id();
 
-        let text = match self.persistent_text.take() {
+        let text = match self.transient.persistent_text.take() {
             Some((id, t)) if id == editor_id => t,
             _ => editor.get_text().to_string(),
         };
@@ -578,7 +591,7 @@ impl VimController {
 
         let effects = response.take_effects();
         if effects.is_empty() {
-            self.persistent_text = Some((editor_id, text));
+            self.transient.persistent_text = Some((editor_id, text));
             return false;
         }
 
@@ -606,12 +619,12 @@ impl VimController {
             engine: &mut self.engine,
             state: &mut self.state,
             undo_depth: &mut self.undo_depth,
-            persistent_text: &mut self.persistent_text,
-            vimdebug: &mut self.vimdebug,
-            pending_step_effects: &mut self.pending_step_effects,
-            operations_this_cycle: &mut self.operations_this_cycle,
+            persistent_text: &mut self.transient.persistent_text,
+            vimdebug: &mut self.transient.vimdebug,
+            pending_step_effects: &mut self.transient.pending_step_effects,
+            operations_this_cycle: &mut self.transient.operations_this_cycle,
             perf: &mut self.perf,
-            pending_ui_action: &mut self.pending_ui_action,
+            pending_ui_action: &mut self.transient.pending_ui_action,
             security_policy: &self.security_policy,
             highlight_yank_duration_ms: self.highlight_yank_duration_ms,
             passthrough_keys: &self.passthrough_keys,
