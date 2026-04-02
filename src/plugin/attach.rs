@@ -6,7 +6,7 @@ use godot::prelude::*;
 
 use crate::bridge::code_edit_ext::CodeEditExt;
 
-use super::GodotVimPlugin;
+use super::GodotVimCore;
 use super::signals::{connect_deferred, connect_immediate, safe_disconnect};
 
 const SIG_GUI_INPUT: &str = "gui_input";
@@ -17,7 +17,7 @@ const SIG_VISIBILITY_CHANGED: &str = "visibility_changed";
 const SIG_MINIMUM_SIZE_CHANGED: &str = "minimum_size_changed";
 const SIG_TEXT_CHANGED: &str = "text_changed";
 
-impl GodotVimPlugin {
+impl GodotVimCore {
     pub(super) fn attach(&mut self, editor: Gd<CodeEdit>) {
         let new_id = editor.instance_id();
 

@@ -8,14 +8,14 @@
 use godot::classes::{EditorInterface, Timer};
 use godot::prelude::*;
 
-use super::GodotVimPlugin;
+use super::GodotVimCore;
 use super::signals::{
     connect_deferred, connect_immediate, safe_disconnect,
     SIG_EDITOR_SCRIPT_CHANGED, SIG_GUI_FOCUS_CHANGED,
     SIG_SETTINGS_CHANGED, SIG_TIMEOUT,
 };
 
-impl GodotVimPlugin {
+impl GodotVimCore {
     // ── Settings ──────────────────────────────────────────────────────
 
     /// Register EditorSettings keys, read initial values, source the config

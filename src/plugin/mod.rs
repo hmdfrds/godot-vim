@@ -1,8 +1,15 @@
-//! Top-level `EditorPlugin` that manages controller lifecycle and input routing.
+//! Core Node that manages controller lifecycle and input routing.
 //!
-//! [`GodotVimPlugin`] is the single Godot-visible class. It handles editor
-//! attachment/detachment, signal wiring, settings synchronization, and
-//! dispatches keystrokes to the [`crate::controller::VimController`].
+//! [`GodotVimCore`] is the Godot-visible Rust class owned by a GDScript
+//! `EditorPlugin`. It handles editor attachment/detachment, signal wiring,
+//! settings synchronization, and dispatches keystrokes to the
+//! [`crate::controller::VimController`].
+//!
+//! The split between a GDScript `EditorPlugin` and this Rust `Node` works
+//! around godotengine/godot#86035, a bug where GDScript cannot extend a
+//! GDExtension `EditorPlugin` subclass. By using `base=Node` here, Rust is
+//! not auto-registered as an `EditorPlugin`, and the GDScript layer can use
+//! plain `extends EditorPlugin` instead.
 
 mod attach;
 mod discovery;
@@ -12,7 +19,7 @@ mod lifecycle;
 mod signals;
 
 use godot::classes::{
-    CodeEdit, Control, EditorInterface, EditorPlugin, IEditorPlugin, InputEvent, Timer,
+    CodeEdit, Control, EditorInterface, INode, InputEvent, Timer,
 };
 use godot::prelude::*;
 
@@ -26,9 +33,9 @@ use signals::{
 };
 
 #[derive(GodotClass)]
-#[class(tool, base=EditorPlugin)]
-pub struct GodotVimPlugin {
-    base: Base<EditorPlugin>,
+#[class(tool, base=Node)]
+pub struct GodotVimCore {
+    base: Base<Node>,
     /// `None` between `exit_tree` and the next `enter_tree` (or before first init).
     controller: Option<VimController>,
     /// The CodeEdit that Vim input is currently routed to.
@@ -51,8 +58,8 @@ pub struct GodotVimPlugin {
 }
 
 #[godot_api]
-impl IEditorPlugin for GodotVimPlugin {
-    fn init(base: Base<EditorPlugin>) -> Self {
+impl INode for GodotVimCore {
+    fn init(base: Base<Node>) -> Self {
         install_panic_hook();
         Self {
             base,
@@ -76,17 +83,6 @@ impl IEditorPlugin for GodotVimPlugin {
         panic_guard(
             "enter_tree",
             || {
-                // gdext auto-registers EditorPlugin classes, creating an extension
-                // instance with no script attached. Only the addon instance (from
-                // plugin.cfg) has the GDScript set — this is a Godot architectural
-                // invariant: set_addon_plugin_enabled() calls set_script() BEFORE
-                // add_child(), while add_extension_editor_plugin() never sets a script.
-                // We only initialize the addon instance so the Project Settings
-                // plugin checkbox works as the user expects.
-                if self.base().get_script().is_none() {
-                    return;
-                }
-
                 if self.controller.is_some() {
                     return;
                 }
@@ -134,7 +130,7 @@ impl IEditorPlugin for GodotVimPlugin {
 // Signal handlers -- thin routing wrappers that delegate to impl methods.
 
 #[godot_api]
-impl GodotVimPlugin {
+impl GodotVimCore {
     #[func]
     fn on_script_changed(&mut self, _script: Variant) {
         if self.controller.is_none() { return; }
@@ -506,7 +502,7 @@ impl GodotVimPlugin {
     }
 }
 
-impl GodotVimPlugin {
+impl GodotVimCore {
     /// Execute a pending UI action that requires plugin-level access (scene tree,
     /// settings snapshot) which the controller cannot reach directly.
     pub(super) fn handle_pending_ui_action(

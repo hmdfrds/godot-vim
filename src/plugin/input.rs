@@ -11,9 +11,9 @@ use crate::controller::VimController;
 use crate::navigation::{self, classify_focus, FocusContext};
 use crate::ui::UiCoordinator;
 
-use super::GodotVimPlugin;
+use super::GodotVimCore;
 
-impl GodotVimPlugin {
+impl GodotVimCore {
     /// Global `input()` handler (Godot stage 1 -- fires before `gui_input`).
     ///
     /// Intercepts two categories before they reach the Vim engine or native controls:

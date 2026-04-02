@@ -2,13 +2,13 @@
 //! connects viewport signals on their floating `Window` children, and tears
 //! everything down on shutdown.
 //!
-//! All methods are `pub(super)` — only [`super::GodotVimPlugin`] signal
+//! All methods are `pub(super)` — only [`super::GodotVimCore`] signal
 //! handlers and lifecycle hooks call them.
 
 use godot::classes::EditorInterface;
 use godot::prelude::*;
 
-use super::GodotVimPlugin;
+use super::GodotVimCore;
 use super::signals::{
     connect_deferred, connect_immediate, safe_disconnect,
     SIG_CHILD_ENTERED_TREE, SIG_FOCUS_ENTERED, SIG_GUI_FOCUS_CHANGED,
@@ -36,7 +36,7 @@ pub(super) fn is_window_wrapper(node: &Gd<Node>) -> bool {
 }
 
 /// Bundles the 4 callables used for floating window signal management.
-/// Constructed once per method invocation via [`GodotVimPlugin::floating_callables`]
+/// Constructed once per method invocation via [`GodotVimCore::floating_callables`]
 /// to avoid repeated `self.base().callable(...)` calls.
 pub(super) struct FloatingCallables {
     pub(super) focus_changed: Callable,
@@ -53,7 +53,7 @@ pub(super) fn disconnect_viewport_signals(window_id: InstanceId, callables: &Flo
     }
 }
 
-impl GodotVimPlugin {
+impl GodotVimCore {
     pub(super) fn floating_callables(&self) -> FloatingCallables {
         FloatingCallables {
             focus_changed: self.base().callable("on_focus_changed"),
