@@ -299,11 +299,6 @@ impl VimController {
         self.persistent_text = None;
     }
 
-    /// Force Normal mode when the editor has been freed but engine mode is stale.
-    pub(crate) fn reset_mode_to_normal(&mut self) {
-        self.engine.set_mode(vim_core::primitives::Mode::Normal);
-    }
-
     /// Comprehensive cleanup when the attached editor has been freed externally.
     ///
     /// Unlike the normal detach path (`force_exit_insert_replace`, etc.), this

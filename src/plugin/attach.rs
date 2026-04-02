@@ -156,7 +156,7 @@ impl GodotVimPlugin {
 
             if !editor.is_instance_valid() {
                 log::warn!("detach: editor freed during mapping timeout resolution");
-                controller.reset_mode_to_normal();
+                controller.force_cleanup_without_editor();
                 self.ui.reset_cached_state();
                 return;
             }
