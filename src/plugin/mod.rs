@@ -29,6 +29,7 @@ const SIG_CONFIG_SAVED: &str = "config_saved";
 const SIG_WINDOW_VISIBILITY_CHANGED: &str = "window_visibility_changed";
 const SIG_CHILD_ENTERED_TREE: &str = "child_entered_tree";
 const SIG_TREE_EXITED: &str = "tree_exited";
+const SIG_FOCUS_ENTERED: &str = "focus_entered";
 
 #[derive(GodotClass)]
 #[class(tool, base=EditorPlugin)]
@@ -270,7 +271,7 @@ impl GodotVimPlugin {
                                 );
                                 signals::safe_disconnect(
                                     &mut window,
-                                    "focus_entered",
+                                    SIG_FOCUS_ENTERED,
                                     &focus_entered_callable,
                                 );
                             }
@@ -308,7 +309,7 @@ impl GodotVimPlugin {
                                 );
                                 signals::safe_disconnect(
                                     &mut window,
-                                    "focus_entered",
+                                    SIG_FOCUS_ENTERED,
                                     &focus_entered_callable,
                                 );
                             }
@@ -626,6 +627,11 @@ impl GodotVimPlugin {
             },
             (),
         );
+        // Stop the mapping timer — emergency_reset cleared all pending mapping
+        // state, so a stale timeout firing would be a wasted no-op.
+        if let Some(timer) = self.mapping_timer.as_mut() {
+            timer.stop();
+        }
         // Always reset — trivially infallible (u32 assignment), must happen
         // regardless of whether recovery itself panicked.
         self.pending_caret_suppressions = 0;
