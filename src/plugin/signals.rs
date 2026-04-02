@@ -46,6 +46,9 @@ pub(super) fn safe_disconnect(
     signal: &str,
     callable: &Callable,
 ) {
+    if !target.is_instance_valid() {
+        return;
+    }
     let mut obj = target.clone().upcast::<Object>();
     if obj.is_connected(signal, callable) {
         obj.disconnect(signal, callable);
