@@ -427,21 +427,29 @@ impl VimController {
         self.pending_ui_action.take()
     }
 
-    /// Reset transient state after a caught panic. Treats open undo groups
-    /// as a transaction boundary: drain and roll back, so partial text
-    /// mutations don't persist. The engine self-corrects on the next
-    /// keystroke when it rebuilds `InputContext` from Godot's restored text.
+    /// Three-tier panic recovery: engine → Godot → shell.
+    ///
+    /// **Tier 1 (Engine):** [`emergency_reset()`] clears parser, mode, state,
+    /// typeahead, host pending, recording, command-line session, cmd_buffer,
+    /// is_repeating, and changelist in one call.
+    ///
+    /// **Tier 2 (Godot):** Drain orphaned undo groups, roll back partial text
+    /// mutations via `undo()`, clear visual selection and secondary carets.
+    ///
+    /// **Tier 3 (Shell):** Invalidate caches, clear transient state, notify
+    /// the user via status bar error message.
+    ///
+    /// Ordering: engine first (known-good state regardless of later failures),
+    /// Godot second (restore document text), shell third (reflect reality).
     pub(crate) fn recover_from_panic(&mut self, editor: &mut Gd<CodeEdit>) {
-        self.engine.set_mode(vim_core::primitives::Mode::Normal);
-        self.persistent_text = None;
-        self.pending_step_effects = None;
-        self.pending_ui_action = None;
+        // ── Tier 1: Engine ───────────────────────────────────────────────
+        self.engine.emergency_reset();
+
+        // ── Tier 2: Godot ────────────────────────────────────────────────
         let godot_groups = self.undo_depth.drain();
         for _ in 0..godot_groups {
             editor.end_complex_operation();
         }
-
-        // One undo() reverses the entire closed undo group atomically.
         if godot_groups > 0 {
             log::warn!(
                 "recover_from_panic: rolling back {} closed undo group(s) via editor.undo()",
@@ -449,11 +457,20 @@ impl VimController {
             );
             editor.undo();
         }
+        editor.deselect();
+        editor.remove_secondary_carets();
 
-        // Resolve and discard any half-consumed mapping (e.g., `j` of
-        // `jk`→`<Esc>`) — cannot safely dispatch effects during recovery.
-        self.engine.resolve_timeout();
-        self.engine.abort_replay();
+        // ── Tier 3: Shell ────────────────────────────────────────────────
+        let editor_id = editor.instance_id();
+        self.state.buffer(editor_id).clear_visual_selection();
+        self.state.clear_substitute_preview();
+        self.persistent_text = None;
+        self.pending_step_effects = None;
+        self.pending_ui_action = None;
+        self.operations_this_cycle = 0;
+        self.state.globals_mut().set_error(
+            "Recovered from internal error \u{2014} state reset to Normal mode",
+        );
     }
 
     // ── Processing entry points (delegate to ProcessContext) ─────────
