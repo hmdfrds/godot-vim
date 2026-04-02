@@ -27,34 +27,6 @@ fn extract_panic_message(payload: &dyn Any) -> String {
     }
 }
 
-/// Strip user-specific prefixes from a file path so panic messages never
-/// leak local directory structure (e.g., `/home/user/.cargo/...` or
-/// `C:\Users\user\...`). Works on any machine without build-time config.
-fn sanitize_path(path: &str) -> &str {
-    // Strip everything up to and including `/src/` for our own crate paths.
-    if let Some(pos) = path.find("/src/") {
-        return &path[pos + 1..]; // "src/safety.rs:45"
-    }
-    // Strip cargo checkout paths: keep from the crate name onward.
-    // e.g., "/home/user/.cargo/git/checkouts/gdext-.../godot-core/src/foo.rs"
-    //     → "godot-core/src/foo.rs"
-    for marker in ["/godot-core/", "/godot-macros/", "/godot/src/"] {
-        if let Some(pos) = path.find(marker) {
-            return &path[pos + 1..];
-        }
-    }
-    // Fallback: strip common home directory prefixes.
-    for prefix in ["/home/", "/Users/", "C:\\Users\\"] {
-        if let Some(rest) = path.strip_prefix(prefix) {
-            // Skip past "username/" to get the relative portion.
-            if let Some(pos) = rest.find(['/', '\\']) {
-                return &rest[pos + 1..];
-            }
-        }
-    }
-    path
-}
-
 /// Install a panic hook that routes messages to Godot's Debugger panel.
 ///
 /// Chains with the previously installed hook (via `take_hook` + forward) so
@@ -71,13 +43,19 @@ pub(crate) fn install_panic_hook() {
                 |loc| {
                     format!(
                         " at {}:{}:{}",
-                        sanitize_path(loc.file()),
+                        loc.file(),
                         loc.line(),
                         loc.column(),
                     )
                 },
             );
-            godot_error!("GodotVim panic{location}: {msg}");
+            // Guard: godot_error! requires the Godot engine to be
+            // initialized. During shutdown a panic can fire after the
+            // engine has de-initialized; calling godot_error! then would
+            // double-panic and abort.
+            if godot::sys::is_initialized() {
+                godot_error!("GodotVim panic{location}: {msg}");
+            }
             // Chain to the previous hook (typically gdext's default handler).
             previous(info);
         }));
@@ -87,10 +65,11 @@ pub(crate) fn install_panic_hook() {
 /// Wrap a closure in `catch_unwind`, returning `default` on panic.
 ///
 /// Every Godot signal handler and virtual override in this plugin should be
-/// wrapped with this guard. The `AssertUnwindSafe` is sound because every
+/// wrapped with this guard. The `label` identifies which handler caught the
+/// panic in error messages. The `AssertUnwindSafe` is sound because every
 /// engine-mutating callsite performs comprehensive state recovery after a
 /// panic, restoring invariants before the next operation.
-pub(crate) fn panic_guard<F, R>(f: F, default: R) -> R
+pub(crate) fn panic_guard<F, R>(label: &str, f: F, default: R) -> R
 where
     F: FnOnce() -> R,
 {
@@ -98,7 +77,9 @@ where
         Ok(r) => r,
         Err(e) => {
             let msg = extract_panic_message(e.as_ref());
-            godot_error!("GodotVim panic in signal handler: {msg}");
+            if godot::sys::is_initialized() {
+                godot_error!("GodotVim panic in {label}: {msg}");
+            }
             default
         }
     }
