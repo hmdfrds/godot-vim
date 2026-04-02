@@ -127,6 +127,7 @@ impl IEditorPlugin for GodotVimPlugin {
                     dialog.queue_free();
                 }
                 self.controller = None;
+                self.settings = None;
                 self.last_editor_id = None;
             },
             (),
@@ -287,6 +288,7 @@ impl GodotVimPlugin {
     /// signal handlers to avoid borrowing conflicts with `&mut self`.
     #[func]
     fn perform_attach(&mut self, node: Variant) {
+        if self.controller.is_none() { return; }
         let ok = panic_guard(
             "perform_attach",
             || {
