@@ -20,16 +20,10 @@ use crate::controller::VimController;
 use crate::safety::{install_panic_hook, panic_guard};
 
 use floating::TrackedWindow;
-
-const SIG_SETTINGS_CHANGED: &str = "settings_changed";
-const SIG_EDITOR_SCRIPT_CHANGED: &str = "editor_script_changed";
-const SIG_GUI_FOCUS_CHANGED: &str = "gui_focus_changed";
-const SIG_TIMEOUT: &str = "timeout";
-const SIG_CONFIG_SAVED: &str = "config_saved";
-const SIG_WINDOW_VISIBILITY_CHANGED: &str = "window_visibility_changed";
-const SIG_CHILD_ENTERED_TREE: &str = "child_entered_tree";
-const SIG_TREE_EXITED: &str = "tree_exited";
-const SIG_FOCUS_ENTERED: &str = "focus_entered";
+use signals::{
+    SIG_CONFIG_SAVED, SIG_FOCUS_ENTERED, SIG_GUI_FOCUS_CHANGED,
+    SIG_TREE_EXITED, SIG_WINDOW_VISIBILITY_CHANGED,
+};
 
 #[derive(GodotClass)]
 #[class(tool, base=EditorPlugin)]

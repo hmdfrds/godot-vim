@@ -8,11 +8,12 @@
 use godot::classes::EditorInterface;
 use godot::prelude::*;
 
-use super::{
-    GodotVimPlugin, SIG_CHILD_ENTERED_TREE, SIG_FOCUS_ENTERED,
-    SIG_GUI_FOCUS_CHANGED, SIG_TREE_EXITED, SIG_WINDOW_VISIBILITY_CHANGED,
+use super::GodotVimPlugin;
+use super::signals::{
+    connect_deferred, connect_immediate, safe_disconnect,
+    SIG_CHILD_ENTERED_TREE, SIG_FOCUS_ENTERED, SIG_GUI_FOCUS_CHANGED,
+    SIG_TREE_EXITED, SIG_WINDOW_VISIBILITY_CHANGED,
 };
-use super::signals::{connect_deferred, connect_immediate, safe_disconnect};
 
 /// Tracks a floating WindowWrapper and its associated Window viewport.
 pub(super) struct TrackedWindow {
