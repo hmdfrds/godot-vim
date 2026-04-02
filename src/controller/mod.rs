@@ -95,11 +95,18 @@ impl TransientShellState {
     /// Called by every cleanup path (dead editor, panic recovery, tab switch)
     /// to guarantee no stale state leaks across boundaries.
     fn reset(&mut self) {
-        self.operations_this_cycle = 0;
-        self.persistent_text = None;
-        self.pending_ui_action = None;
-        self.vimdebug.set_mode(vimdebug::VimdebugMode::Off);
-        self.pending_step_effects = None;
+        let Self {
+            operations_this_cycle,
+            persistent_text,
+            pending_ui_action,
+            vimdebug,
+            pending_step_effects,
+        } = self;
+        *operations_this_cycle = 0;
+        *persistent_text = None;
+        *pending_ui_action = None;
+        vimdebug.set_mode(vimdebug::VimdebugMode::Off);
+        *pending_step_effects = None;
     }
 }
 
