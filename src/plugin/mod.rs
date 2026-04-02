@@ -490,6 +490,13 @@ impl GodotVimPlugin {
                         let snap = controller.ui_snapshot(editor_id);
                         self.ui.update(&snap, &mut editor);
                     }
+                } else if let Some(controller) = &mut self.controller {
+                    // No editor available (panic during attach before
+                    // attached_editor was set, or editor already freed).
+                    // Use emergency_reset for maximum aggression — this is
+                    // a panic path, not a normal cleanup.
+                    log::warn!("recover_controller_from_panic: no editor, emergency resetting engine");
+                    controller.emergency_engine_reset();
                 }
             },
             (),

@@ -332,6 +332,14 @@ impl VimController {
         self.engine.abort_recording();
     }
 
+    /// Emergency engine reset for use on panic paths when no editor is
+    /// available. Delegates to [`VimEngine::emergency_reset`] which clears
+    /// parser, mode, state, typeahead, host pending, recording,
+    /// command-line session, cmd_buffer, is_repeating, and changelist.
+    pub(crate) fn emergency_engine_reset(&mut self) {
+        self.engine.emergency_reset();
+    }
+
     /// Notify the engine that the current buffer is being left.
     ///
     /// Saves the cursor position as the `'"` (last-position) mark so that
