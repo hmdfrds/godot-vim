@@ -147,7 +147,7 @@ impl IHBoxContainer for VimStatusBar {
     }
 
     fn ready(&mut self) {
-        panic_guard(|| {
+        panic_guard("status_bar::ready", || {
             {
                 let mut base = self.base_mut();
                 base.set_name("VimStatusBar");

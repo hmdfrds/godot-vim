@@ -122,7 +122,7 @@ impl INode for LineNumberManager {
 
     // Defense-in-depth: disconnect signals on exit_tree.
     fn exit_tree(&mut self) {
-        panic_guard(|| {
+        panic_guard("line_numbers::exit_tree", || {
             self.detach();
         }, ());
     }
@@ -241,6 +241,7 @@ impl LineNumberManager {
     #[func]
     pub fn on_gutter_clicked(&mut self, line: i32, gutter: i32) {
         panic_guard(
+            "line_numbers::on_gutter_clicked",
             || {
                 if gutter != self.fold_gutter_index {
                     return;
@@ -265,6 +266,7 @@ impl LineNumberManager {
     #[func]
     pub fn on_theme_changed(&mut self) {
         panic_guard(
+            "line_numbers::on_theme_changed",
             || {
                 self.last_line_count = -1;
                 self.force_next_update = true;
@@ -276,7 +278,7 @@ impl LineNumberManager {
 
     #[func]
     pub fn on_scroll_changed(&mut self, _value: f64) {
-        panic_guard(|| self.update_gutters(), ());
+        panic_guard("line_numbers::on_scroll_changed", || self.update_gutters(), ());
     }
 
     /// Force flag ensures Absolute mode also updates when lines are
@@ -284,6 +286,7 @@ impl LineNumberManager {
     #[func]
     pub fn on_text_changed(&mut self) {
         panic_guard(
+            "line_numbers::on_text_changed",
             || {
                 self.force_next_update = true;
                 self.update_gutters();
@@ -298,6 +301,7 @@ impl LineNumberManager {
     #[func]
     pub fn on_caret_changed(&mut self) {
         panic_guard(
+            "line_numbers::on_caret_changed",
             || {
                 self.base_mut().call_deferred("update_gutters", &[]);
             },
@@ -310,6 +314,7 @@ impl LineNumberManager {
     #[func]
     pub fn on_visibility_changed(&mut self) {
         panic_guard(
+            "line_numbers::on_visibility_changed",
             || {
                 self.force_next_update = true;
                 self.base_mut().call_deferred("update_gutters", &[]);
@@ -331,7 +336,7 @@ impl LineNumberManager {
     /// callback via `call_deferred("update_gutters", &[])`.
     #[func]
     pub fn update_gutters(&mut self) {
-        panic_guard(|| self.update_gutters_impl(), ());
+        panic_guard("line_numbers::update_gutters", || self.update_gutters_impl(), ());
     }
 }
 

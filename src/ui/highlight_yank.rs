@@ -68,7 +68,7 @@ impl IControl for HighlightYankOverlay {
     }
 
     fn process(&mut self, delta: f64) {
-        panic_guard(|| {
+        panic_guard("highlight_yank::process", || {
             if matches!(self.phase, AnimationPhase::Inactive) {
                 return;
             }
@@ -87,7 +87,7 @@ impl IControl for HighlightYankOverlay {
     }
 
     fn draw(&mut self) {
-        panic_guard(|| {
+        panic_guard("highlight_yank::draw", || {
             if matches!(self.phase, AnimationPhase::Inactive) {
                 return;
             }

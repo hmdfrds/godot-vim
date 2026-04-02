@@ -81,7 +81,7 @@ impl IControl for VirtualTextOverlay {
     }
 
     fn draw(&mut self) {
-        panic_guard(|| {
+        panic_guard("virtual_text::draw", || {
             if self.draw_list.is_empty() {
                 return;
             }

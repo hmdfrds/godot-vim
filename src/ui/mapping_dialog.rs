@@ -106,7 +106,7 @@ impl IWindow for MappingDialog {
     }
 
     fn ready(&mut self) {
-        panic_guard(|| {
+        panic_guard("mapping_dialog::ready", || {
             self.base_mut().set_title(&GString::from("GodotVim Mappings"));
             self.base_mut().set_size(Vector2i::new(700, 500));
             self.base_mut().set_min_size(Vector2i::new(500, 350));
@@ -134,17 +134,18 @@ impl MappingDialog {
     /// modifications (clear/rebuild) during an `item_edited` callback.
     #[func]
     fn deferred_save_and_reload(&mut self) {
-        panic_guard(|| self.save_and_reload(), ());
+        panic_guard("mapping_dialog::deferred_save_and_reload", || self.save_and_reload(), ());
     }
 
     #[func]
     fn on_close_requested(&mut self) {
-        panic_guard(|| self.base_mut().hide(), ());
+        panic_guard("mapping_dialog::on_close_requested", || self.base_mut().hide(), ());
     }
 
     #[func]
     fn on_add_pressed(&mut self) {
         panic_guard(
+            "mapping_dialog::on_add_pressed",
             || {
                 let from = self
                     .from_input
@@ -188,6 +189,7 @@ impl MappingDialog {
     #[func]
     fn on_delete_pressed(&mut self) {
         panic_guard(
+            "mapping_dialog::on_delete_pressed",
             || {
                 let Some(tree) = &self.user_tree else { return };
                 let Some(selected) = tree.get_selected() else { return };
@@ -209,12 +211,13 @@ impl MappingDialog {
 
     #[func]
     fn on_reload_pressed(&mut self) {
-        panic_guard(|| self.reload_from_file(), ());
+        panic_guard("mapping_dialog::on_reload_pressed", || self.reload_from_file(), ());
     }
 
     #[func]
     fn on_user_tree_item_edited(&mut self) {
         panic_guard(
+            "mapping_dialog::on_user_tree_item_edited",
             || {
                 let Some(tree) = &self.user_tree else { return };
                 let Some(item) = tree.get_edited() else { return };
@@ -258,6 +261,7 @@ impl MappingDialog {
     #[func]
     fn on_preset_tree_item_edited(&mut self) {
         panic_guard(
+            "mapping_dialog::on_preset_tree_item_edited",
             || {
                 let Some(tree) = &self.preset_tree else { return };
                 let Some(item) = tree.get_edited() else { return };
@@ -287,22 +291,23 @@ impl MappingDialog {
 
     #[func]
     fn on_close_button_pressed(&mut self) {
-        panic_guard(|| self.base_mut().hide(), ());
+        panic_guard("mapping_dialog::on_close_button_pressed", || self.base_mut().hide(), ());
     }
 
     #[func]
     fn on_mode_filter_changed(&mut self, _index: i32) {
-        panic_guard(|| self.refresh_user_tree(), ());
+        panic_guard("mapping_dialog::on_mode_filter_changed", || self.refresh_user_tree(), ());
     }
 
     #[func]
     fn on_search_changed(&mut self, _text: GString) {
-        panic_guard(|| self.refresh_user_tree(), ());
+        panic_guard("mapping_dialog::on_search_changed", || self.refresh_user_tree(), ());
     }
 
     #[func]
     fn on_timeout_changed(&mut self, value: f64) {
         panic_guard(
+            "mapping_dialog::on_timeout_changed",
             || {
                 let ms = value.round().max(0.0).min(u32::MAX as f64) as u32;
                 if let Some(svc) = &mut self.service {

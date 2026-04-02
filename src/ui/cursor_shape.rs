@@ -588,7 +588,7 @@ impl IControl for VimCursor {
     }
 
     fn ready(&mut self) {
-        panic_guard(|| {
+        panic_guard("cursor_shape::ready", || {
             let mut visual = Panel::new_alloc();
             visual.set_name("CursorShape");
             visual.set_mouse_filter(MouseFilter::IGNORE);
@@ -620,7 +620,7 @@ impl IControl for VimCursor {
     }
 
     fn process(&mut self, delta: f64) {
-        panic_guard(|| {
+        panic_guard("cursor_shape::process", || {
             let current = self.animation.current_pos;
             let target = self.animation.target_pos;
             let dist = target - current;

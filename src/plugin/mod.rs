@@ -73,11 +73,12 @@ impl IEditorPlugin for GodotVimPlugin {
     }
 
     fn input(&mut self, event: Gd<InputEvent>) {
-        panic_guard(|| self.handle_input_impl(event), ());
+        panic_guard("input", || self.handle_input_impl(event), ());
     }
 
     fn enter_tree(&mut self) {
         panic_guard(
+            "enter_tree",
             || {
                 // gdext auto-registers EditorPlugin classes, creating an extension
                 // instance with no script attached. Only the addon instance (from
@@ -111,6 +112,7 @@ impl IEditorPlugin for GodotVimPlugin {
 
     fn exit_tree(&mut self) {
         panic_guard(
+            "exit_tree",
             || {
                 if self.controller.is_none() {
                     return;
@@ -140,6 +142,7 @@ impl GodotVimPlugin {
     fn on_script_changed(&mut self, _script: Variant) {
         if self.controller.is_none() { return; }
         panic_guard(
+            "on_script_changed",
             || {
                 if let Some(code_edit) = discovery::find_active_code_edit() {
                     self.base_mut()
@@ -154,6 +157,7 @@ impl GodotVimPlugin {
     fn on_focus_changed(&mut self, focused_node: Gd<Control>) {
         if self.controller.is_none() { return; }
         panic_guard(
+            "on_focus_changed",
             || {
                 if let Some(code_edit) =
                     discovery::find_code_edit_from_control(&focused_node)
@@ -169,6 +173,7 @@ impl GodotVimPlugin {
     #[func]
     fn on_window_visibility_changed(&mut self, visible: bool) {
         panic_guard(
+            "on_window_visibility_changed",
             || {
                 log::trace!(
                     "on_window_visibility_changed: visible={} tracked_count={}",
@@ -188,6 +193,7 @@ impl GodotVimPlugin {
     #[func]
     fn on_child_entered_tree(&mut self, node: Gd<Node>) {
         panic_guard(
+            "on_child_entered_tree",
             || {
                 if !floating::is_window_wrapper(&node) {
                     return;
@@ -221,6 +227,7 @@ impl GodotVimPlugin {
     #[func]
     fn on_floating_window_focused(&mut self) {
         panic_guard(
+            "on_floating_window_focused",
             || {
                 log::trace!(
                     "on_floating_window_focused: checking {} tracked windows",
@@ -281,6 +288,7 @@ impl GodotVimPlugin {
     #[func]
     fn perform_attach(&mut self, node: Variant) {
         let ok = panic_guard(
+            "perform_attach",
             || {
                 let Ok(control) = node.try_to::<Gd<Control>>() else {
                     return true;
@@ -310,7 +318,7 @@ impl GodotVimPlugin {
     #[func]
     #[allow(clippy::needless_pass_by_value)] // gdext requires Gd<T> by value
     fn handle_gui_input(&mut self, event: Gd<InputEvent>) {
-        let ok = panic_guard(|| { self.handle_gui_input_impl(event); true }, false);
+        let ok = panic_guard("handle_gui_input", || { self.handle_gui_input_impl(event); true }, false);
         if !ok {
             self.recover_controller_from_panic();
         }
@@ -318,7 +326,7 @@ impl GodotVimPlugin {
 
     #[func]
     fn on_mapping_timeout(&mut self) {
-        let ok = panic_guard(|| { self.on_mapping_timeout_impl(); true }, false);
+        let ok = panic_guard("on_mapping_timeout", || { self.on_mapping_timeout_impl(); true }, false);
         if !ok {
             self.recover_controller_from_panic();
         }
@@ -326,7 +334,7 @@ impl GodotVimPlugin {
 
     #[func]
     fn on_caret_changed(&mut self) {
-        let ok = panic_guard(|| { self.on_caret_changed_impl(); true }, false);
+        let ok = panic_guard("on_caret_changed", || { self.on_caret_changed_impl(); true }, false);
         if !ok {
             self.recover_controller_from_panic();
         }
@@ -337,6 +345,7 @@ impl GodotVimPlugin {
     #[func]
     fn on_text_changed(&mut self) {
         panic_guard(
+            "on_text_changed",
             || {
                 if let Some(controller) = &mut self.controller {
                     controller.invalidate_text_cache();
@@ -348,18 +357,18 @@ impl GodotVimPlugin {
 
     #[func]
     fn on_scrollbar_changed(&mut self, _value: f64) {
-        panic_guard(|| self.update_cursor_if_attached(), ());
+        panic_guard("on_scrollbar_changed", || self.update_cursor_if_attached(), ());
     }
 
     #[func]
     fn on_editor_draw(&mut self) {
-        panic_guard(|| self.update_cursor_if_attached(), ());
+        panic_guard("on_editor_draw", || self.update_cursor_if_attached(), ());
     }
 
     #[func]
     fn on_config_saved(&mut self) {
         if self.controller.is_none() { return; }
-        let ok = panic_guard(|| { self.source_config_from_disk("on_config_saved"); true }, false);
+        let ok = panic_guard("on_config_saved", || { self.source_config_from_disk("on_config_saved"); true }, false);
         if !ok {
             self.recover_controller_from_panic();
         }
@@ -372,6 +381,7 @@ impl GodotVimPlugin {
     fn on_settings_changed(&mut self) {
         if self.controller.is_none() { return; }
         let ok = panic_guard(
+            "on_settings_changed",
             || {
                 let Some(editor_settings) =
                     EditorInterface::singleton().get_editor_settings()
@@ -458,6 +468,7 @@ impl GodotVimPlugin {
     /// state. Godot state may be slightly messy but no UB occurs.
     fn recover_controller_from_panic(&mut self) {
         panic_guard(
+            "recover_controller_from_panic",
             || {
                 if let (Some(controller), Some(editor)) =
                     (&mut self.controller, &mut self.attached_editor)

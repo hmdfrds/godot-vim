@@ -52,7 +52,7 @@ impl IControl for InccommandOverlay {
     }
 
     fn draw(&mut self) {
-        panic_guard(|| {
+        panic_guard("inccommand::draw", || {
             if self.highlights.is_empty() {
                 return;
             }
@@ -72,7 +72,7 @@ impl InccommandOverlay {
     /// Exposed to GDScript for scene teardown; Rust code uses `clear_highlights`.
     #[func]
     pub fn clear(&mut self) {
-        panic_guard(|| {
+        panic_guard("inccommand::clear", || {
             if self.highlights.is_empty() {
                 return;
             }

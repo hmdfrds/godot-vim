@@ -44,7 +44,7 @@ impl IControl for DebugRangeOverlay {
     }
 
     fn ready(&mut self) {
-        panic_guard(|| {
+        panic_guard("operator_debugger::ready", || {
             let mut timer = Timer::new_alloc();
             timer.set_one_shot(true);
             timer.set_wait_time(CLEAR_DELAY_SECS);
@@ -56,7 +56,7 @@ impl IControl for DebugRangeOverlay {
     }
 
     fn draw(&mut self) {
-        panic_guard(|| {
+        panic_guard("operator_debugger::draw", || {
             if self.highlights.is_empty() {
                 return;
             }
@@ -77,6 +77,7 @@ impl DebugRangeOverlay {
     #[func]
     fn on_clear_timer(&mut self) {
         panic_guard(
+            "operator_debugger::on_clear_timer",
             || {
                 if self.highlights.is_empty() {
                     return;
