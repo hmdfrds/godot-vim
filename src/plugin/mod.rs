@@ -230,12 +230,14 @@ impl GodotVimPlugin {
 
     #[func]
     fn on_wrapper_tree_exited(&mut self) {
-        // A tracked WindowWrapper left the scene tree (freed via queue_free,
-        // or removed by Godot's dock manager). Defer the eviction sweep so
-        // that queue_free has fully completed and try_from_instance_id fails
-        // for freed wrappers.
-        self.base_mut()
-            .call_deferred("evict_stale_wrappers", &[]);
+        panic_guard(
+            "on_wrapper_tree_exited",
+            || {
+                self.base_mut()
+                    .call_deferred("evict_stale_wrappers", &[]);
+            },
+            (),
+        );
     }
 
     #[func]
@@ -246,6 +248,10 @@ impl GodotVimPlugin {
                 let focus_callable = self.base().callable("on_focus_changed");
                 let focus_entered_callable =
                     self.base().callable("on_floating_window_focused");
+                let vis_callable =
+                    self.base().callable("on_window_visibility_changed");
+                let tree_exit_callable =
+                    self.base().callable("on_wrapper_tree_exited");
 
                 let before = self.tracked_windows.len();
                 self.tracked_windows.retain(|tw| {
@@ -278,6 +284,19 @@ impl GodotVimPlugin {
 
                     // Wrapper still exists but left the tree.
                     if !wrapper.is_inside_tree() {
+                        // Disconnect wrapper-level signals so orphaned connections
+                        // don't fire on a wrapper no longer in tracked_windows.
+                        let mut w = wrapper;
+                        signals::safe_disconnect(
+                            &mut w,
+                            SIG_WINDOW_VISIBILITY_CHANGED,
+                            &vis_callable,
+                        );
+                        signals::safe_disconnect(
+                            &mut w,
+                            SIG_TREE_EXITED,
+                            &tree_exit_callable,
+                        );
                         if let Some(window_id) = tw.window_id {
                             if let Ok(mut window) =
                                 Gd::<Node>::try_from_instance_id(window_id)
@@ -575,11 +594,14 @@ impl GodotVimPlugin {
         panic_guard(
             "recover_controller_from_panic",
             || {
-                if let (Some(controller), Some(editor)) =
-                    (&mut self.controller, &mut self.attached_editor)
-                {
-                    if editor.is_instance_valid() {
-                        let mut editor = editor.clone();
+                let has_valid_editor = self
+                    .attached_editor
+                    .as_ref()
+                    .is_some_and(|e| e.is_instance_valid());
+
+                if let Some(controller) = &mut self.controller {
+                    if has_valid_editor {
+                        let mut editor = self.attached_editor.as_ref().unwrap().clone();
                         controller.recover_from_panic(&mut editor);
 
                         // Invalidate thread-local caches that may hold stale
@@ -592,14 +614,14 @@ impl GodotVimPlugin {
                         let editor_id = editor.instance_id();
                         let snap = controller.ui_snapshot(editor_id);
                         self.ui.update(&snap, &mut editor);
+                    } else {
+                        // No editor, or editor exists but is invalid (freed
+                        // during the panic). Canonical Tier 1 cleanup only.
+                        log::warn!(
+                            "recover_controller_from_panic: no valid editor, Tier 1 cleanup only"
+                        );
+                        controller.force_cleanup_without_editor();
                     }
-                } else if let Some(controller) = &mut self.controller {
-                    // No editor available (panic during attach before
-                    // attached_editor was set, or editor already freed).
-                    // Use emergency_reset for maximum aggression — this is
-                    // a panic path, not a normal cleanup.
-                    log::warn!("recover_controller_from_panic: no editor, emergency resetting engine");
-                    controller.force_cleanup_without_editor();
                 }
             },
             (),

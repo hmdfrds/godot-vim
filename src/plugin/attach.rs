@@ -169,6 +169,9 @@ impl GodotVimPlugin {
             // and abort macro recording. These are not covered by the force_exit_*
             // methods above, which only handle mode transitions.
             controller.engine_reset_parser_and_recording();
+
+            // Reset transient shell state (vimdebug, pending effects, caches).
+            controller.reset_transients();
         }
 
         self.ui.detach(&mut editor);

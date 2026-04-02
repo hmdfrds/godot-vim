@@ -368,7 +368,6 @@ impl VimController {
     /// Convenience wrapper to reset transient shell state without touching
     /// the engine or undo depth. Used by cleanup paths that handle engine
     /// reset separately (e.g., the normal detach path).
-    #[allow(dead_code)] // Used by the detach path (Task 2)
     pub(crate) fn reset_transients(&mut self) {
         self.transient.reset();
     }

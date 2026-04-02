@@ -61,6 +61,19 @@ impl GodotVimPlugin {
             for child in wrapper.get_children().iter_shared() {
                 if child.is_class("Window") {
                     found_window = true;
+                    // Only connect to visible (floating) windows. Docked wrappers
+                    // keep a hidden Window child — connecting to it would violate
+                    // the window_id invariant (Some = floating, None = docked).
+                    let Ok(window_check) = child.clone().try_cast::<godot::classes::Window>() else {
+                        continue;
+                    };
+                    if !window_check.is_visible() {
+                        log::trace!(
+                            "connect_floating_viewport: Window in wrapper #{} is hidden (docked), skipping",
+                            tw.wrapper_id.to_i64()
+                        );
+                        break;
+                    }
                     let window_id = child.instance_id();
                     if tw.window_id == Some(window_id) {
                         log::debug!(
