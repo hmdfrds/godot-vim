@@ -131,15 +131,8 @@ impl GodotVimPlugin {
 
         if !editor.is_instance_valid() {
             log::warn!("detach: editor no longer valid, skipping cleanup");
-            // Force Normal mode even without a live editor -- otherwise the
-            // stale mode (Insert/Visual/Replace) contaminates the next attach.
             if let Some(controller) = &mut self.controller {
-                let mode = controller.mode();
-                if mode.is_visual() || mode.is_insert() || mode.is_replace()
-                    || mode.is_command_line()
-                {
-                    controller.reset_mode_to_normal();
-                }
+                controller.force_cleanup_without_editor();
             }
             self.ui.reset_cached_state();
             return;

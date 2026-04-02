@@ -304,6 +304,23 @@ impl VimController {
         self.engine.set_mode(vim_core::primitives::Mode::Normal);
     }
 
+    /// Comprehensive cleanup when the attached editor has been freed externally.
+    ///
+    /// Unlike the normal detach path (`force_exit_insert_replace`, etc.), this
+    /// cannot call Godot FFI methods on the editor — it is already destroyed.
+    /// Resets only internal Rust state:
+    /// - Mode → Normal (covers Insert/Replace/Visual/CommandLine)
+    /// - Undo depth counter (Godot-side groups died with the editor)
+    /// - Pending mapping keys + macro replay (can't resolve without editor)
+    /// - Substitute preview (prevents stale inccommand on next editor)
+    pub(crate) fn force_cleanup_without_editor(&mut self) {
+        log::debug!("force_cleanup_without_editor: resetting engine state for dead editor");
+        self.engine.set_mode(vim_core::primitives::Mode::Normal);
+        self.undo_depth.drain();
+        self.engine.abort_replay();
+        self.state.clear_substitute_preview();
+    }
+
     /// Force-exit visual/select mode on detach, clearing both engine and
     /// Godot-side selection state to prevent stale highlights.
     pub(crate) fn force_exit_visual(&mut self, editor_id: InstanceId, editor: &mut Gd<CodeEdit>) {
