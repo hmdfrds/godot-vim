@@ -631,3 +631,38 @@ impl VimController {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Exhaustive field inventory for [`VimController`].
+    ///
+    /// Adding a new field causes a compile error until it is categorized here.
+    /// This is the compile-time guarantee that cleanup paths stay complete.
+    ///
+    /// Categories:
+    ///   engine     — cleaned by `emergency_reset()` inside `force_cleanup_without_editor`
+    ///   shell      — cleaned selectively by `force_cleanup_without_editor`
+    ///   undo       — cleaned by `undo_depth.drain()` inside `force_cleanup_without_editor`
+    ///   transient  — in `TransientShellState`, cleaned by `transient.reset()`
+    ///   config     — set via `apply_settings()`, never reset on cleanup
+    ///   persistent — survives all cleanups
+    #[test]
+    fn cleanup_field_inventory() {
+        #[allow(unused, unreachable_code)]
+        fn check(c: VimController) {
+            let VimController {
+                engine: _,                     // engine: emergency_reset()
+                state: _,                      // shell: selective clears
+                undo_depth: _,                 // undo: drain()
+                transient: _,                  // transient: .reset()
+                passthrough_keys: _,           // config
+                security_policy: _,            // config
+                perf: _,                       // persistent
+                highlight_yank_duration_ms: _, // config
+                code_complete_enabled: _,      // config
+            } = c;
+        }
+    }
+}
