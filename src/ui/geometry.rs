@@ -64,6 +64,9 @@ pub(super) fn compute_highlight_rects(
         ));
     } else {
         let editor_width = editor.get_size().x;
+        if !editor_width.is_finite() || editor_width < 0.0 {
+            return rects;
+        }
         for line in start.line..=end.line {
             if rects.len() >= max_rects {
                 break;

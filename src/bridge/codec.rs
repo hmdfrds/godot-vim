@@ -397,10 +397,16 @@ pub(crate) fn usize_to_i32(val: usize) -> i32 {
 /// `u32` -> `i32` with saturation. Values above `i32::MAX` clamp to `i32::MAX`.
 ///
 /// Used where a count/quantity stored as `u32` must cross into Godot's `i32`
-/// API (e.g., buffer-switch counts).
+/// API (e.g., buffer-switch counts, scroll amounts).
 #[inline]
 pub(crate) fn u32_to_i32_sat(val: u32) -> i32 {
-    i32::try_from(val).unwrap_or(i32::MAX)
+    match i32::try_from(val) {
+        Ok(v) => v,
+        Err(_) => {
+            log::warn!("u32_to_i32_sat: overflow {} clamped to i32::MAX", val);
+            i32::MAX
+        }
+    }
 }
 
 /// Godot char column (Unicode scalars) -> grapheme column (user-perceived characters).

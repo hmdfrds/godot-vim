@@ -2,7 +2,7 @@
 //! to CodeEdit's viewport.
 
 use crate::bridge::port::TextEditorPort;
-use crate::bridge::codec::DocumentView;
+use crate::bridge::codec::{self, DocumentView};
 
 /// Scroll the viewport so that `offset` (byte position) is at the top.
 ///
@@ -80,7 +80,7 @@ pub(crate) fn handle_cursor_to_bottom(editor: &mut impl TextEditorPort) {
 /// `zh` — scroll viewport left by `count` columns.
 pub(crate) fn handle_scroll_left(editor: &mut impl TextEditorPort, count: u32) {
     log::trace!("scroll_left: count={}", count);
-    let scroll_amount = i32::try_from(count).unwrap_or(i32::MAX);
+    let scroll_amount = codec::u32_to_i32_sat(count);
     let new_scroll = editor.get_h_scroll().saturating_sub(scroll_amount).max(0);
     editor.set_h_scroll(new_scroll);
 }
@@ -88,7 +88,7 @@ pub(crate) fn handle_scroll_left(editor: &mut impl TextEditorPort, count: u32) {
 /// `zl` — scroll viewport right by `count` columns.
 pub(crate) fn handle_scroll_right(editor: &mut impl TextEditorPort, count: u32) {
     log::trace!("scroll_right: count={}", count);
-    let scroll_amount = i32::try_from(count).unwrap_or(i32::MAX);
+    let scroll_amount = codec::u32_to_i32_sat(count);
     let new_scroll = editor.get_h_scroll().saturating_add(scroll_amount);
     editor.set_h_scroll(new_scroll);
 }

@@ -19,6 +19,7 @@ use godot::prelude::*;
 use vim_core::primitives::Mode;
 
 use crate::bridge::code_edit_ext::CodeEditExt;
+use crate::bridge::codec;
 use crate::safety::panic_guard;
 use crate::types::CharLineCol;
 
@@ -210,7 +211,7 @@ fn compute_override_x_and_width(
         };
 
         // Width: shaped delta between col and col+1.
-        let width = if (col as usize) < line_len {
+        let width = if codec::i32_to_usize(col) < line_len {
             let col_next = caret_x_from_dict(&ts.shaped_text_get_carets(rid, (col + 1) as i64));
             let col_cur = caret_x_from_dict(&ts.shaped_text_get_carets(rid, col as i64));
             match (col_next, col_cur) {
@@ -401,7 +402,7 @@ fn compute_char_width_ts(
     line_len: usize,
     fallback: f32,
 ) -> f32 {
-    if (col as usize) >= line_len {
+    if codec::i32_to_usize(col) >= line_len {
         return fallback;
     }
 

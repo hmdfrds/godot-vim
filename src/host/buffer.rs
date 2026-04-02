@@ -201,7 +201,7 @@ pub(super) fn handle_buffer_list(id: HostRequestId) -> HostResult {
     }
 
     let current = tabs.get_current_tab();
-    let mut lines = Vec::with_capacity(count as usize);
+    let mut lines = Vec::with_capacity(crate::bridge::codec::i32_to_usize(count));
 
     for i in 0..count {
         let title = tabs.get_tab_title(i).to_string();

@@ -552,6 +552,9 @@ impl LineNumberManager {
         // (digits + 1) matches Godot's built-in gutter formula; the extra
         // digit provides padding between numbers and the fold gutter.
         let total_width = (digits + 1) as f32 * char_width;
+        if !total_width.is_finite() {
+            return;
+        }
         editor.set_gutter_width(self.line_gutter_index, total_width as i32);
     }
 

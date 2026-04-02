@@ -7,6 +7,8 @@
 use godot::classes::{Control, ItemList, RichTextLabel, Tree};
 use godot::prelude::*;
 
+use crate::bridge::codec;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum NavDirection {
     Next,
@@ -238,8 +240,8 @@ fn handle_item_list_nav(mut list: Gd<ItemList>, direction: NavDirection) -> bool
     }
 
     let current = selected_items.get(0).unwrap_or(0);
-    let current_idx = current as usize;
-    let count = list.get_item_count() as usize;
+    let current_idx = codec::i32_to_usize(current);
+    let count = codec::i32_to_usize(list.get_item_count());
 
     let target_idx = match direction {
         NavDirection::Next => {
@@ -258,8 +260,8 @@ fn handle_item_list_nav(mut list: Gd<ItemList>, direction: NavDirection) -> bool
         }
     };
 
-    list.deselect(current_idx as i32);
-    list.select(target_idx as i32);
+    list.deselect(codec::usize_to_i32(current_idx));
+    list.select(codec::usize_to_i32(target_idx));
     list.ensure_current_is_visible();
     true
 }
