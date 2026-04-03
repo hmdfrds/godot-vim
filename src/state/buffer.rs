@@ -1,7 +1,7 @@
 //! Per-buffer persistent state: canonical visual selection, buffer-local
 //! mappings, sticky scroll count, and undo tree.
 
-use vim_core::keymap::BufferMappings;
+use vim_core::execution::BufferLocalState;
 use vim_core::primitives::Offset;
 
 use crate::types::CharLineCol;
@@ -25,7 +25,10 @@ pub(crate) struct BufferState {
     /// block-mode anchor/head spanning multiple lines.
     visual: Option<VisualSelectionState>,
 
-    buffer_mappings: BufferMappings,
+    /// Engine-side per-buffer state (marks, changelist, last_visual, sticky_column,
+    /// buffer_overrides, buffer_mappings, exchange). Saved by `on_buffer_leave`,
+    /// restored by `on_buffer_enter`. `None` for buffers not yet visited.
+    engine_state: Option<BufferLocalState>,
 
     /// Sticky half-page scroll count: once the user supplies an explicit count
     /// to `Ctrl-D`/`Ctrl-U`, that count persists for subsequent scrolls in
@@ -44,12 +47,16 @@ impl BufferState {
     }
 
     #[must_use]
-    pub(crate) fn buffer_mappings(&self) -> &BufferMappings {
-        &self.buffer_mappings
+    pub(crate) fn engine_state(&self) -> Option<&BufferLocalState> {
+        self.engine_state.as_ref()
     }
 
-    pub(crate) fn buffer_mappings_mut(&mut self) -> &mut BufferMappings {
-        &mut self.buffer_mappings
+    pub(crate) fn set_engine_state(&mut self, state: BufferLocalState) {
+        self.engine_state = Some(state);
+    }
+
+    pub(crate) fn take_engine_state(&mut self) -> Option<BufferLocalState> {
+        self.engine_state.take()
     }
 
     #[must_use]
