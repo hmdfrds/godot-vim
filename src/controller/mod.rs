@@ -401,6 +401,41 @@ impl VimController {
         self.state.buffer(editor_id).set_engine_state(engine_state);
     }
 
+    /// Exit non-Normal mode by sending a synthetic Escape through the engine
+    /// pipeline. This ensures macro recording captures the exit, visual marks
+    /// (`<`/`>`), `LastVisualInfo`, insert-stop marks (`^`), and `EndUndo`
+    /// effects are all produced — identical to the user pressing Esc.
+    ///
+    /// Returns `true` if the engine was in a non-Normal mode and Esc was processed.
+    pub(crate) fn exit_mode_via_pipeline(&mut self, editor: &mut Gd<CodeEdit>) -> bool {
+        if self.engine.mode().is_normal() {
+            return false;
+        }
+        log::debug!("exit_mode_via_pipeline: mode={}", self.engine.mode());
+        let mut cx = self.as_process_context();
+        cx.process_single_key(KeyEvent::escape(), editor);
+        true
+    }
+
+    /// Clear Godot-side visual artifacts after the engine has already exited
+    /// visual mode via the pipeline. Defense-in-depth: ensures no stale
+    /// selection highlights remain even if the pipeline exit was a no-op.
+    pub(crate) fn cleanup_visual_artifacts(&mut self, editor_id: InstanceId, editor: &mut Gd<CodeEdit>) {
+        self.state.buffer(editor_id).clear_visual_selection();
+        editor.remove_secondary_carets();
+        editor.deselect();
+    }
+
+    /// Drain any remaining undo depth as defense-in-depth after pipeline exit.
+    /// The pipeline's `EndUndo` effect handles the normal case; this catches
+    /// edge cases where undo groups are still open.
+    pub(crate) fn drain_remaining_undo_depth(&mut self, editor: &mut Gd<CodeEdit>) {
+        let remaining = self.undo_depth.drain();
+        for _ in 0..remaining {
+            editor.end_complex_operation();
+        }
+    }
+
     /// Force-exit visual/select mode on detach, clearing both engine and
     /// Godot-side selection state to prevent stale highlights.
     pub(crate) fn force_exit_visual(&mut self, editor_id: InstanceId, editor: &mut Gd<CodeEdit>) {
@@ -424,35 +459,6 @@ impl VimController {
             self.state.buffer(editor_id).clear_visual_selection();
             editor.remove_secondary_carets();
             editor.deselect();
-        }
-    }
-
-    /// Force-exit command-line mode on detach.
-    ///
-    /// Resets the engine to Normal mode and clears the command-line session
-    /// so that the substitute preview is cleaned up and the next editor
-    /// doesn't inherit a stale command-line prompt.
-    pub(crate) fn force_exit_command_line(&mut self) {
-        if self.engine.mode().is_command_line() {
-            log::debug!("force_exit_command_line: mode={}", self.engine.mode());
-            self.engine.set_mode(vim_core::primitives::Mode::Normal);
-            // Clear substitute preview so the UI layer doesn't carry stale
-            // highlights to the next editor.
-            self.state.clear_substitute_preview();
-        }
-    }
-
-    /// Force-exit insert/replace mode on detach, draining undo groups against
-    /// the *departing* editor to prevent begin/end imbalance across tab switches.
-    pub(crate) fn force_exit_insert_replace(&mut self, editor: &mut Gd<CodeEdit>) {
-        let mode = self.engine.mode();
-        if mode.is_insert() || mode.is_replace() {
-            log::debug!("force_exit_insert_replace: mode={}", mode);
-            self.engine.set_mode(vim_core::primitives::Mode::Normal);
-            let godot_groups = self.undo_depth.drain();
-            for _ in 0..godot_groups {
-                editor.end_complex_operation();
-            }
         }
     }
 

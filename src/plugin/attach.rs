@@ -1,5 +1,6 @@
-//! Editor attachment and detachment: signal wiring, per-buffer engine state
-//! save/restore, indent/commentstring sync, and UI lifecycle management.
+//! Editor attachment and detachment: signal wiring, pipeline-driven mode exit,
+//! per-buffer engine state save/restore, indent/commentstring sync, and UI
+//! lifecycle management.
 
 use godot::classes::CodeEdit;
 use godot::prelude::*;
@@ -134,7 +135,7 @@ impl GodotVimCore {
 
         // Discard any unconsumed yank highlight so it doesn't flash on the
         // next editor's first ui_snapshot(). Matches the substitute_preview
-        // pattern (cleared in force_exit_command_line / force_cleanup).
+        // pattern (cleared via pipeline exit / force_cleanup).
         if let Some(controller) = &mut self.controller {
             controller.clear_highlight_yank();
         }
@@ -171,9 +172,19 @@ impl GodotVimCore {
                 return;
             }
 
-            controller.force_exit_command_line();
-            controller.force_exit_insert_replace(&mut editor);
-            controller.force_exit_visual(editor_id, &mut editor);
+            // Exit non-Normal mode via the engine pipeline. This ensures
+            // macro recording captures the Esc, visual marks (</>),
+            // LastVisualInfo, insert-stop marks (^), and EndUndo effects
+            // are all produced — identical to the user pressing Esc.
+            controller.exit_mode_via_pipeline(&mut editor);
+
+            // Defense-in-depth: clear Godot-side visual artifacts in case
+            // the pipeline exit left stale selection highlights.
+            controller.cleanup_visual_artifacts(editor_id, &mut editor);
+
+            // Defense-in-depth: drain any remaining undo depth in case
+            // the pipeline's EndUndo didn't close all open groups.
+            controller.drain_remaining_undo_depth(&mut editor);
 
             // Clear parser state (pending operator like `d`) so it doesn't
             // leak to the next editor. Macro recording is NOT aborted here —
