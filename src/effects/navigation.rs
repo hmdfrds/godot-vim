@@ -75,13 +75,12 @@ pub(super) fn handle_goto_definition(editor: &mut impl NavigationCapable) {
     });
 }
 
-/// `K`: warp the mouse to the symbol and emit `symbol_hovered`. Godot's
-/// `ScriptTextEditor` displays the hover documentation popup at the mouse
-/// position. The mouse warp is necessary because Godot shows the tooltip
-/// at the cursor, not at the symbol's screen coordinates.
+/// `K`: show documentation tooltip for the symbol under the cursor.
+/// Synthesizes Godot's `SHOW_TOOLTIP_AT_CARET` shortcut event to bypass
+/// the `is_anything_pressed()` guard that blocks signal-based tooltips.
 pub(super) fn handle_show_documentation(editor: &mut impl NavigationCapable) {
     with_word_under_cursor(editor, "K", |ed, word, line, col| {
-        ed.emit_symbol_hovered_with_mouse_warp(word, line, col);
+        ed.show_documentation_tooltip(word, line, col);
     });
 }
 

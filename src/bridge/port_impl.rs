@@ -9,10 +9,11 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use godot::classes::CodeEdit;
+use godot::classes::{CodeEdit, EditorInterface, InputEventShortcut};
 use godot::prelude::*;
 
 use super::port::{FoldCapable, IdeCapable, NavigationCapable, TextEditorPort, ViewportAdjust};
+use crate::bridge::godot_calls;
 
 // Brace-pair cache: thread-local rather than a VimController field because
 // TextEditorPort is intentionally stateless (enabling MockTextEdit in tests).
@@ -324,59 +325,32 @@ impl NavigationCapable for CodeEditPort<'_> {
         );
     }
 
-    fn emit_symbol_hovered_with_mouse_warp(&mut self, symbol: &str, line: i32, col: i32) {
-        // Warp mouse to the symbol position so Godot's tooltip system shows
-        // the hover documentation at the cursor. Uses canvas-space coordinates
-        // from `get_global_transform()`, suitable for `DisplayServer::warp_mouse`.
-        let rect_local = self.0.get_rect_at_line_column(line, col);
+    fn show_documentation_tooltip(&mut self, symbol: &str, _line: i32, _col: i32) {
+        log::trace!("show_documentation_tooltip: symbol={symbol:?}");
 
-        // Godot returns (-1, -1) for off-screen or not-yet-laid-out positions.
-        if rect_local.position.x == -1 && rect_local.position.y == -1 {
-            log::trace!("emit_symbol_hovered: skipping mouse warp (off-screen sentinel)");
-            self.0.emit_signal(
-                "symbol_hovered",
-                &[
-                    symbol.to_variant(),
-                    line.to_variant(),
-                    col.to_variant(),
-                ],
-            );
+        let editor_iface = EditorInterface::singleton();
+        let Some(mut settings) = editor_iface.get_editor_settings() else {
+            log::warn!("show_documentation_tooltip: no editor settings available");
             return;
-        }
-        let pos_local = Vector2::new(rect_local.position.x as f32, rect_local.position.y as f32);
-        let transform = self.0.get_global_transform();
-        let pos_global = transform * pos_local;
+        };
 
-        // NaN guard: a degenerate transform or uninitialized layout can produce
-        // NaN, and f32->i32 cast of NaN/infinity is UB in Rust (saturates in
-        // release, may panic in debug).
-        if pos_global.x.is_nan() || pos_global.y.is_nan() {
-            log::warn!("emit_symbol_hovered: NaN position, skipping mouse warp");
-            self.0.emit_signal(
-                "symbol_hovered",
-                &[
-                    symbol.to_variant(),
-                    line.to_variant(),
-                    col.to_variant(),
-                ],
-            );
+        let Some(shortcut) =
+            godot_calls::get_shortcut(&mut settings, godot_calls::SHORTCUT_SHOW_TOOLTIP)
+        else {
+            log::warn!("show_documentation_tooltip: shortcut not found");
             return;
-        }
+        };
 
-        let warp_x = super::codec::f32_to_i32_sat(pos_global.x);
-        // Vertically center the warp point within the line's glyph rectangle.
-        let warp_y = super::codec::f32_to_i32_sat(pos_global.y + rect_local.size.y as f32 / 2.0);
+        let mut event: Gd<InputEventShortcut> = InputEventShortcut::new_gd();
+        event.set_shortcut(&shortcut);
 
-        let mut display_server = godot::classes::DisplayServer::singleton();
-        display_server.warp_mouse(Vector2i::new(warp_x, warp_y));
+        let Some(mut viewport) =
+            editor_iface.get_base_control().and_then(|ctrl| ctrl.get_viewport())
+        else {
+            log::warn!("show_documentation_tooltip: no editor viewport available");
+            return;
+        };
 
-        self.0.emit_signal(
-            "symbol_hovered",
-            &[
-                symbol.to_variant(),
-                line.to_variant(),
-                col.to_variant(),
-            ],
-        );
+        viewport.call_deferred("push_input", &[event.to_variant(), false.to_variant()]);
     }
 }
