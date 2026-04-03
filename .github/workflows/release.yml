@@ -98,45 +98,8 @@ jobs:
           name: libgodot_vim.dylib
           path: libgodot_vim.dylib
 
-  build-android:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure private repo access
-        shell: bash
-        env:
-          GH_PAT: ${{ secrets.GH_PAT }}
-        run: git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android
-
-      - uses: nttld/setup-ndk@v1
-        id: setup-ndk
-        with:
-          ndk-version: r25c
-
-      - name: Install cargo-ndk
-        run: cargo install cargo-ndk
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: android
-
-      - name: Build Android arm64
-        env:
-          ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-        run: cargo ndk -t arm64-v8a --platform 21 build --release
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: libgodot_vim.android.arm64.so
-          path: target/aarch64-linux-android/release/libgodot_vim.so
-
   release:
-    needs: [build-linux, build-windows, build-macos, build-android]
+    needs: [build-linux, build-windows, build-macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -154,7 +117,6 @@ jobs:
           cp artifacts/libgodot_vim.so/libgodot_vim.so addons/godot_vim/bin/
           cp artifacts/godot_vim.dll/godot_vim.dll addons/godot_vim/bin/
           cp artifacts/libgodot_vim.dylib/libgodot_vim.dylib addons/godot_vim/bin/
-          cp artifacts/libgodot_vim.android.arm64.so/libgodot_vim.so addons/godot_vim/bin/libgodot_vim.android.arm64.so
 
       - name: VirusTotal Scan
         id: vt
@@ -166,7 +128,6 @@ jobs:
             addons/godot_vim/bin/libgodot_vim.so
             addons/godot_vim/bin/godot_vim.dll
             addons/godot_vim/bin/libgodot_vim.dylib
-            addons/godot_vim/bin/libgodot_vim.android.arm64.so
 
       - name: Build release body
         id: body
@@ -199,5 +160,4 @@ jobs:
             addons/godot_vim/bin/libgodot_vim.so
             addons/godot_vim/bin/godot_vim.dll
             addons/godot_vim/bin/libgodot_vim.dylib
-            addons/godot_vim/bin/libgodot_vim.android.arm64.so
           generate_release_notes: true
