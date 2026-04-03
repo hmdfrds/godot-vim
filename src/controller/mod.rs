@@ -356,6 +356,7 @@ impl VimController {
         self.engine.emergency_reset();
         let godot_groups = self.undo_depth.drain();
         self.state.clear_substitute_preview();
+        self.state.take_highlight_yank();
         self.transient.reset();
         godot_groups
     }
@@ -376,6 +377,11 @@ impl VimController {
     /// reset separately (e.g., the normal detach path).
     pub(crate) fn reset_transients(&mut self) {
         self.transient.reset();
+    }
+
+    /// Discard any unconsumed yank highlight to prevent cross-editor flash.
+    pub(crate) fn clear_highlight_yank(&mut self) {
+        self.state.take_highlight_yank();
     }
 
     /// Notify the engine that the current buffer is being left.

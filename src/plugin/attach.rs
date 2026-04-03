@@ -129,6 +129,13 @@ impl GodotVimCore {
         // legitimate caret_changed events on the next editor.
         self.pending_caret_suppressions = 0;
 
+        // Discard any unconsumed yank highlight so it doesn't flash on the
+        // next editor's first ui_snapshot(). Matches the substitute_preview
+        // pattern (cleared in force_exit_command_line / force_cleanup).
+        if let Some(controller) = &mut self.controller {
+            controller.clear_highlight_yank();
+        }
+
         if !editor.is_instance_valid() {
             log::warn!("detach: editor no longer valid, skipping cleanup");
             if let Some(controller) = &mut self.controller {
