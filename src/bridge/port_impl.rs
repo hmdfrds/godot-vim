@@ -356,18 +356,41 @@ impl NavigationCapable for CodeEditPort<'_> {
             }
         }
 
-        // Tier 2 (Godot ≤4.6): Emit symbol_hovered signal directly.
-        // The is_anything_pressed() guard in make_tooltip (present since 4.4)
-        // will suppress the tooltip when K is held. This is a Godot limitation
-        // fixed upstream in 4.7 by the p_shortcut bypass. We emit the signal
-        // anyway so third-party listeners or future Godot patches can act on it.
+        // Tier 2 (Godot ≤4.6): Mouse warp + symbol_hovered signal.
+        // Warp the mouse to the symbol's screen position, then emit the signal.
+        // On X11 this positions the tooltip at the symbol. On Wayland, warp_mouse
+        // is a protocol-level no-op, so the tooltip may appear at the physical
+        // mouse position or be suppressed by the is_anything_pressed() guard.
+        // This is a Godot limitation fixed in 4.7 by the p_shortcut bypass.
+        let rect_local = self.0.get_rect_at_line_column(line, col);
+
+        if rect_local.position.x == -1 && rect_local.position.y == -1 {
+            log::trace!("show_documentation_tooltip: off-screen sentinel, skipping warp");
+        } else {
+            let pos_local = Vector2::new(
+                rect_local.position.x as f32,
+                rect_local.position.y as f32,
+            );
+            let transform = self.0.get_global_transform();
+            let pos_global = transform * pos_local;
+
+            if !pos_global.x.is_nan() && !pos_global.y.is_nan() {
+                let warp_x = super::codec::f32_to_i32_sat(pos_global.x);
+                let warp_y = super::codec::f32_to_i32_sat(
+                    pos_global.y + rect_local.size.y as f32 / 2.0,
+                );
+                godot::classes::DisplayServer::singleton()
+                    .warp_mouse(Vector2i::new(warp_x, warp_y));
+            }
+        }
+
         self.0.emit_signal(
             "symbol_hovered",
             &[symbol.to_variant(), line.to_variant(), col.to_variant()],
         );
         log::debug!(
-            "show_documentation_tooltip: signal fallback for '{symbol}' \
-             (shortcut unavailable — tooltip may be suppressed on Godot <4.7)"
+            "show_documentation_tooltip: warp+signal fallback for '{symbol}' \
+             (shortcut unavailable — Wayland may not position correctly)"
         );
     }
 }
