@@ -421,6 +421,15 @@ impl ProcessContext<'_> {
     pub(super) fn drain_pending(&mut self, editor: &mut Gd<CodeEdit>) {
         let mut iterations: u32 = 0;
         while let Some(output) = self.engine.drain_next_key() {
+            // Defense-in-depth: abort if the editor was freed mid-replay.
+            // Godot's single-threaded model makes this unreachable in normal
+            // operation, but it provides an independent safety layer against
+            // future changes or unexpected Godot behavior.
+            if !editor.is_instance_valid() {
+                log::warn!("drain_pending: editor freed mid-replay, aborting");
+                self.engine.abort_replay();
+                return;
+            }
             iterations += 1;
             if iterations > MAX_DRAIN_ITERATIONS || *self.operations_this_cycle > MAX_DRAIN_ITERATIONS {
                 log::error!(

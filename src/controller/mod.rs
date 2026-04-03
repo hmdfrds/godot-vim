@@ -311,11 +311,11 @@ impl VimController {
         self.engine.set_buffer_mappings(mappings);
     }
 
-    /// Evict buffer state for editors freed since the last sweep, including
-    /// global marks referencing evicted buffers.
+    /// Evict buffer state for editors freed since the last sweep.
     ///
-    /// Called from `attach()` — a natural choke point since every editor
-    /// switch passes through it. Uses Godot's ObjectDB to probe liveness.
+    /// Called from `attach()` and `perform_detach()` — natural choke points
+    /// since every editor lifecycle transition passes through them. Uses
+    /// Godot's ObjectDB to probe liveness.
     pub(crate) fn sweep_stale_buffers(&mut self) {
         let removed = self.state.sweep_invalid_buffers(|id| {
             Gd::<godot::classes::Object>::try_from_instance_id(id).is_ok()

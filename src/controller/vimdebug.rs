@@ -55,8 +55,21 @@ impl VimdebugState {
     pub(crate) fn set_mode(&mut self, mode: VimdebugMode) {
         self.mode = mode;
         if mode == VimdebugMode::Off {
-            self.clear_captures();
-            self.step_quit();
+            // Exhaustive destructure: adding a new field to VimdebugState
+            // causes a compile error here until it is handled.
+            let Self {
+                mode: _,          // just set above
+                provenance,
+                effects,
+                range,
+                step_pending,
+                step_index,
+            } = self;
+            *provenance = None;
+            *effects = None;
+            *range = None;
+            step_pending.clear();
+            *step_index = 0;
         }
     }
 
