@@ -97,8 +97,6 @@ pub(crate) trait IdeCapable: TextEditorPort {
 pub(crate) trait NavigationCapable: TextEditorPort {
     fn emit_symbol_lookup(&mut self, _symbol: &str, _line: i32, _col: i32) {}
 
-    /// Warps the mouse to the symbol's screen position before emitting
-    /// `symbol_hovered`, because Godot's tooltip system renders the hover
-    /// documentation popup at the mouse cursor location.
-    fn emit_symbol_hovered_with_mouse_warp(&mut self, _symbol: &str, _line: i32, _col: i32) {}
+    /// Show documentation tooltip for the symbol at the given position.
+    fn show_documentation_tooltip(&mut self, _symbol: &str, _line: i32, _col: i32) {}
 }

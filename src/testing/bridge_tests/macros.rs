@@ -249,6 +249,7 @@ pub(super) struct DispatchCtx {
     state: crate::state::ShellState,
     editor_id: godot::prelude::InstanceId,
     undo_depth: crate::effects::UndoDepth,
+    clipboard: crate::bridge::clipboard::MockClipboard,
 }
 
 impl DispatchCtx {
@@ -257,6 +258,7 @@ impl DispatchCtx {
             state: crate::state::ShellState::default(),
             editor_id: godot::prelude::InstanceId::from_i64(1),
             undo_depth: crate::effects::UndoDepth::new(),
+            clipboard: crate::bridge::clipboard::MockClipboard::new(),
         }
     }
 
@@ -278,6 +280,7 @@ impl DispatchCtx {
                 scrolloff: 0,
                 highlight_yank_duration_ms: 150,
                 syntax_query: Box::new(|_, _| crate::bridge::SyntaxRegion::code()),
+                clipboard: &mut self.clipboard,
             },
             &text,
         );

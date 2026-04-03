@@ -7,6 +7,7 @@
 use godot::classes::{Control, ItemList, LineEdit, Node, RichTextLabel, Tree};
 use godot::prelude::*;
 
+use crate::bridge::godot_calls;
 use crate::scene_tree::{find_child_of_type, MAX_DISCOVERY_DEPTH};
 
 /// Maximum ancestor levels to climb before giving up. 8 is enough to reach
@@ -23,8 +24,10 @@ const MAX_CLIMB_DEPTH: usize = 8;
 /// that also separate logical navigation regions.
 fn is_dock_boundary(node: &Gd<Node>) -> bool {
     let class_name = node.get_class().to_string();
+    // COMPAT: Substring heuristic for internal dock classes; EditorHelp is
+    // also an internal editor class, not public Godot API.
     class_name.contains("Dock")
-        || node.is_class("EditorHelp")
+        || node.is_class(godot_calls::CLASS_EDITOR_HELP)
         || node.is_class("TabContainer")
 }
 

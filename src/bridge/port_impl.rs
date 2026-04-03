@@ -6,13 +6,14 @@
 //! calls the trait method instead of the Godot FFI method. The newtype
 //! breaks this ambiguity — `self.0.get_text()` always resolves to Godot.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
-use godot::classes::CodeEdit;
+use godot::classes::{CodeEdit, EditorInterface, InputEventShortcut};
 use godot::prelude::*;
 
 use super::port::{FoldCapable, IdeCapable, NavigationCapable, TextEditorPort, ViewportAdjust};
+use crate::bridge::godot_calls;
 
 // Brace-pair cache: thread-local rather than a VimController field because
 // TextEditorPort is intentionally stateless (enabling MockTextEdit in tests).
@@ -28,6 +29,26 @@ thread_local! {
 
 pub(crate) fn invalidate_brace_pair_cache() {
     BRACE_PAIR_CACHE.with(|c| *c.borrow_mut() = None);
+}
+
+// ── Pending tooltip data ────────────────────────────────────────────────
+//
+// Thread-local store for deferred tooltip emission. `show_documentation_tooltip`
+// (Tier 2 path) deposits data here; the plugin layer drains it after dispatch.
+
+pub(crate) struct PendingTooltipData {
+    pub symbol: String,
+    pub line: i32,
+    pub col: i32,
+    pub warp_pos: Option<Vector2i>,
+}
+
+thread_local! {
+    static PENDING_TOOLTIP_DATA: Cell<Option<PendingTooltipData>> = const { Cell::new(None) };
+}
+
+pub(crate) fn take_pending_tooltip_data() -> Option<PendingTooltipData> {
+    PENDING_TOOLTIP_DATA.take()
 }
 
 // ── Pre-dispatch snapshots ───────────────────────────────────────────────
@@ -308,8 +329,7 @@ impl IdeCapable for CodeEditPort<'_> {
     }
 
     fn dismiss_code_hint(&mut self) {
-        // `set_code_hint` is not exposed in gdext's typed API — must use dynamic call.
-        self.0.call("set_code_hint", &["".to_variant()]);
+        super::godot_calls::dismiss_code_hint(self.0);
     }
 }
 
@@ -325,59 +345,75 @@ impl NavigationCapable for CodeEditPort<'_> {
         );
     }
 
-    fn emit_symbol_hovered_with_mouse_warp(&mut self, symbol: &str, line: i32, col: i32) {
-        // Warp mouse to the symbol position so Godot's tooltip system shows
-        // the hover documentation at the cursor. Uses canvas-space coordinates
-        // from `get_global_transform()`, suitable for `DisplayServer::warp_mouse`.
+    fn show_documentation_tooltip(&mut self, symbol: &str, line: i32, col: i32) {
+        // Tier 1 (Godot 4.7+): Synthesize an InputEventShortcut for
+        // SHOW_TOOLTIP_AT_CARET. The shortcut "script_text_editor/show_tooltip"
+        // is only registered in Godot 4.7+; its presence acts as implicit
+        // version detection. When ScriptTextEditor receives this shortcut, it
+        // calls _show_symbol_tooltip(p_shortcut=true), which:
+        //   - Bypasses the is_anything_pressed() guard in make_tooltip
+        //   - Positions the tooltip at the caret (not the mouse)
+        //   - Works on Wayland/X11/macOS/Windows identically
+        // Pattern proven by trigger_script_editor_close() in editor_host.rs.
+        let editor_iface = EditorInterface::singleton();
+        if let Some(mut settings) = editor_iface.get_editor_settings() {
+            if let Some(shortcut) =
+                godot_calls::get_shortcut(&mut settings, godot_calls::SHORTCUT_SHOW_TOOLTIP)
+            {
+                if let Some(mut viewport) = editor_iface
+                    .get_base_control()
+                    .and_then(|ctrl| ctrl.get_viewport())
+                {
+                    let mut event: Gd<InputEventShortcut> = InputEventShortcut::new_gd();
+                    event.set_shortcut(&shortcut);
+                    viewport.call_deferred(
+                        "push_input",
+                        &[event.to_variant(), false.to_variant()],
+                    );
+                    log::debug!("show_documentation_tooltip: shortcut synthesis for '{symbol}'");
+                    return;
+                }
+            }
+        }
+
+        // Tier 2 (Godot ≤4.6): Deferred tooltip emission.
+        // Compute the warp position but do NOT warp or emit a signal here.
+        // Instead, store the data in a thread-local for the plugin layer to
+        // pick up after dispatch completes.
         let rect_local = self.0.get_rect_at_line_column(line, col);
 
-        // Godot returns (-1, -1) for off-screen or not-yet-laid-out positions.
-        if rect_local.position.x == -1 && rect_local.position.y == -1 {
-            log::trace!("emit_symbol_hovered: skipping mouse warp (off-screen sentinel)");
-            self.0.emit_signal(
-                "symbol_hovered",
-                &[
-                    symbol.to_variant(),
-                    line.to_variant(),
-                    col.to_variant(),
-                ],
+        let warp_pos = if rect_local.position.x == -1 && rect_local.position.y == -1 {
+            log::trace!("show_documentation_tooltip: off-screen sentinel, no warp_pos");
+            None
+        } else {
+            let pos_local = Vector2::new(
+                rect_local.position.x as f32,
+                rect_local.position.y as f32,
             );
-            return;
-        }
-        let pos_local = Vector2::new(rect_local.position.x as f32, rect_local.position.y as f32);
-        let transform = self.0.get_global_transform();
-        let pos_global = transform * pos_local;
+            let transform = self.0.get_global_transform();
+            let pos_global = transform * pos_local;
 
-        // NaN guard: a degenerate transform or uninitialized layout can produce
-        // NaN, and f32->i32 cast of NaN/infinity is UB in Rust (saturates in
-        // release, may panic in debug).
-        if pos_global.x.is_nan() || pos_global.y.is_nan() {
-            log::warn!("emit_symbol_hovered: NaN position, skipping mouse warp");
-            self.0.emit_signal(
-                "symbol_hovered",
-                &[
-                    symbol.to_variant(),
-                    line.to_variant(),
-                    col.to_variant(),
-                ],
-            );
-            return;
-        }
+            if !pos_global.x.is_nan() && !pos_global.y.is_nan() {
+                let warp_x = super::codec::f32_to_i32_sat(pos_global.x);
+                let warp_y = super::codec::f32_to_i32_sat(
+                    pos_global.y + rect_local.size.y as f32 / 2.0,
+                );
+                Some(Vector2i::new(warp_x, warp_y))
+            } else {
+                None
+            }
+        };
 
-        let warp_x = super::codec::f32_to_i32_sat(pos_global.x);
-        // Vertically center the warp point within the line's glyph rectangle.
-        let warp_y = super::codec::f32_to_i32_sat(pos_global.y + rect_local.size.y as f32 / 2.0);
+        PENDING_TOOLTIP_DATA.set(Some(PendingTooltipData {
+            symbol: symbol.to_string(),
+            line,
+            col,
+            warp_pos,
+        }));
 
-        let mut display_server = godot::classes::DisplayServer::singleton();
-        display_server.warp_mouse(Vector2i::new(warp_x, warp_y));
-
-        self.0.emit_signal(
-            "symbol_hovered",
-            &[
-                symbol.to_variant(),
-                line.to_variant(),
-                col.to_variant(),
-            ],
+        log::debug!(
+            "show_documentation_tooltip: stored pending tooltip for '{symbol}' \
+             (shortcut unavailable — plugin layer will emit)"
         );
     }
 }

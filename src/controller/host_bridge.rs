@@ -121,7 +121,7 @@ impl ProcessContext<'_> {
             }
 
             let mode_str = mode_to_vim_string(self.engine.mode());
-            let result = crate::host::execute(request, editor, self.security_policy, mode_str);
+            let result = crate::host::execute(request, editor, self.security_policy, mode_str, self.clipboard);
 
             let result = sandbox_config_result(request, result, self.security_policy.project_vimrc == crate::settings::ProjectVimrc::Sandbox);
 

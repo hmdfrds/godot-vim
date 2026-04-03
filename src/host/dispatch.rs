@@ -68,6 +68,7 @@ pub(crate) fn execute(
     editor: &mut Gd<CodeEdit>,
     policy: &SecurityPolicy,
     mode_str: &str,
+    clipboard: &dyn crate::bridge::clipboard::ClipboardPort,
 ) -> HostResult {
     log::debug!("host::execute: {:?}", request.kind());
 
@@ -159,7 +160,7 @@ pub(crate) fn execute(
         HostRequest::ReadClipboard {
             meta: _,
             cursor_offset: _,
-        } => super::clipboard::handle_read_clipboard(request.id()),
+        } => super::clipboard::handle_read_clipboard(request.id(), clipboard),
 
         HostRequest::ExternalCommand { meta: _, command } => {
             if let Err(result) = require_shell_enabled(request.id(), policy) {

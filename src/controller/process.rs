@@ -411,6 +411,7 @@ impl ProcessContext<'_> {
                         &mut compound_actions,
                         scrolloff,
                         self.highlight_yank_duration_ms,
+                        self.clipboard,
                     );
                 }
             }
@@ -567,6 +568,7 @@ impl ProcessContext<'_> {
                     syntax_query: Box::new(move |line, col| {
                         bridge::SyntaxRegion::from_editor(&editor_for_syntax, line, col)
                     }),
+                    clipboard: self.clipboard,
                 },
                 text_ref,
             )

@@ -133,6 +133,9 @@ pub(crate) struct VimController {
     /// Whether Godot's native code completion should auto-trigger on typing.
     /// Mirrors `text_editor/completion/code_complete_enabled` from EditorSettings.
     code_complete_enabled: bool,
+    /// System clipboard abstraction — production uses [`GodotClipboard`],
+    /// tests can substitute a mock.
+    clipboard: crate::bridge::clipboard::GodotClipboard,
 }
 
 impl VimController {
@@ -152,6 +155,7 @@ impl VimController {
             perf: perf::PerfTracker::new(PERF_RING_CAPACITY, PERF_BUDGET_US),
             highlight_yank_duration_ms: u32::try_from(crate::settings::defaults::HIGHLIGHT_YANK_DURATION).unwrap_or(150),
             code_complete_enabled: true,
+            clipboard: crate::bridge::clipboard::GodotClipboard,
         };
         ctrl.engine.set_shadow_execution(true);
         ctrl
@@ -644,6 +648,7 @@ impl VimController {
             highlight_yank_duration_ms: self.highlight_yank_duration_ms,
             passthrough_keys: &self.passthrough_keys,
             code_complete_enabled: self.code_complete_enabled,
+            clipboard: &mut self.clipboard,
         }
     }
 }
@@ -678,6 +683,7 @@ mod tests {
                 perf: _,                       // persistent
                 highlight_yank_duration_ms: _, // config
                 code_complete_enabled: _,      // config
+                clipboard: _,                  // config (stateless ZST)
             } = c;
         }
     }

@@ -46,6 +46,8 @@ pub(crate) struct DispatchContext<'a> {
     /// Position-dependent syntax query (string/comment context). Production
     /// captures `Gd<CodeEdit>` for FFI; tests return `SyntaxRegion::code()`.
     pub(crate) syntax_query: Box<dyn Fn(i32, i32) -> SyntaxRegion + 'a>,
+    /// Clipboard abstraction for register sync and copy-to-clipboard effects.
+    pub(crate) clipboard: &'a mut dyn crate::bridge::clipboard::ClipboardPort,
 }
 
 /// State machine tracking SetSelection → SetCursor effect pairing.
@@ -107,7 +109,7 @@ pub(crate) fn dispatch(
     ctx: DispatchContext<'_>,
     text_ref: &str,
 ) -> Vec<CompoundAction> {
-    let DispatchContext { state, editor_id, undo_depth, auto_brace, auto_brace_snapshot, line_index_hint, scrolloff, highlight_yank_duration_ms, syntax_query } = ctx;
+    let DispatchContext { state, editor_id, undo_depth, auto_brace, auto_brace_snapshot, line_index_hint, scrolloff, highlight_yank_duration_ms, syntax_query, clipboard } = ctx;
     let auto_brace_eligible = matches!(auto_brace, AutoBraceMode::Eligible);
     log::trace!("dispatch: {} effects", effects.len());
     let mut pass2 = Vec::with_capacity(effects.len());
@@ -273,7 +275,7 @@ pub(crate) fn dispatch(
                 pairing = pairing.on_consume_cursor();
             }
             other => {
-                dispatch_pass2_effect(other, editor, state, &doc, &mut compound_actions, scrolloff, highlight_yank_duration_ms);
+                dispatch_pass2_effect(other, editor, state, &doc, &mut compound_actions, scrolloff, highlight_yank_duration_ms, clipboard);
             }
         }
     }
@@ -311,6 +313,7 @@ pub(crate) fn split_effects_by_pass(effects: Vec<Effect>) -> (Vec<Effect>, Vec<E
 /// Route a single pass-2 effect to its domain handler. Compound actions
 /// (`:norm`, window nav) are collected for the controller to handle after
 /// dispatch completes.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn dispatch_pass2_effect(
     effect: Effect,
     editor: &mut (impl FoldCapable + IdeCapable + NavigationCapable),
@@ -319,6 +322,7 @@ pub(crate) fn dispatch_pass2_effect(
     compound_actions: &mut Vec<CompoundAction>,
     scrolloff: i32,
     highlight_yank_duration_ms: u32,
+    clipboard: &mut dyn crate::bridge::clipboard::ClipboardPort,
 ) {
     match effect {
         // ── Cursor ──────────────────────────────────────────────────────
@@ -418,7 +422,7 @@ pub(crate) fn dispatch_pass2_effect(
         // ── Register ────────────────────────────────────────────────────
         Effect::SetRegister { .. }
         | Effect::CopyToClipboard { .. } => {
-            dispatch_register_effect(effect);
+            dispatch_register_effect(effect, clipboard);
         }
 
         // ── Compound actions (require re-driving the engine) ────────────
@@ -706,13 +710,13 @@ fn dispatch_message_effect(effect: Effect, state: &mut ShellState) {
     }
 }
 
-fn dispatch_register_effect(effect: Effect) {
+fn dispatch_register_effect(effect: Effect, clipboard: &mut dyn crate::bridge::clipboard::ClipboardPort) {
     match effect {
         Effect::SetRegister { name, text: content, .. } => {
-            registers::sync_register_to_clipboard(name, &content);
+            registers::sync_register_to_clipboard(name, &content, clipboard);
         }
         Effect::CopyToClipboard { text: content, .. } => {
-            registers::handle_copy_to_clipboard(&content);
+            registers::handle_copy_to_clipboard(&content, clipboard);
         }
         other => log::error!("dispatch_register_effect: unexpected effect {:?}", other),
     }

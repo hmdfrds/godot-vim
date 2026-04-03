@@ -12,6 +12,7 @@ use godot::prelude::*;
 use vim_core::execution::{HostRequestId, HostResult};
 
 use super::{host_failure, host_success};
+use crate::bridge::godot_calls;
 use crate::scene_tree::find_descendant_by;
 use crate::types::ForceOverride;
 
@@ -29,6 +30,7 @@ fn get_debugger_node() -> Option<Gd<Node>> {
     let main_screen = editor_iface.get_editor_main_screen()?;
     let root = main_screen.upcast::<Node>();
     let tree_root = root.get_tree()?.get_root()?;
+    // COMPAT: Wildcard match on internal EditorDebugger node name.
     tree_root
         .find_child_ex(&GString::from("*EditorDebugger*"))
         .recursive(true)
@@ -170,7 +172,8 @@ fn handle_dock_command(id: HostRequestId, cmd: &str) -> Option<HostResult> {
         "Scene" => {
             let editor_interface = EditorInterface::singleton();
             if let Some(base) = editor_interface.get_base_control() {
-                if let Some(dock) = find_node_by_class(&base.clone().upcast(), "SceneTreeDock") {
+                // COMPAT: Internal editor class, not public Godot API.
+                if let Some(dock) = find_node_by_class(&base.clone().upcast(), godot_calls::CLASS_SCENE_TREE_DOCK) {
                     make_dock_tab_visible(&dock);
                     grab_focus_on_dock(&dock, id)
                 } else {

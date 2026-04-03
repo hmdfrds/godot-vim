@@ -10,6 +10,8 @@ use godot::classes::{Control, EditorInterface, Node};
 use godot::global::Key;
 use godot::prelude::*;
 
+use crate::bridge::godot_calls;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum WindowNavDirection {
     Down,
@@ -158,16 +160,17 @@ fn is_window_candidate(control: &Gd<Control>) -> bool {
         let Some(node) = ancestor else { break };
         let class_name = node.get_class().to_string();
 
-        if node.is_class("CodeTextEditor")
-            || node.is_class("ShaderTextEditor")
-            || node.is_class("SceneTreeEditor")
-            || node.is_class("EditorHelp")
+        // COMPAT: Internal editor classes, not part of public Godot API.
+        if node.is_class(godot_calls::CLASS_CODE_TEXT_EDITOR)
+            || node.is_class(godot_calls::CLASS_SHADER_TEXT_EDITOR)
+            || node.is_class(godot_calls::CLASS_SCENE_TREE_EDITOR)
+            || node.is_class(godot_calls::CLASS_EDITOR_HELP)
         {
             return true;
         }
 
-        // Heuristic: class name contains "Dock" catches all editor docks
-        // without a hardcoded allowlist.
+        // COMPAT: Heuristic — substring match on dynamic class name to catch
+        // all editor docks without a hardcoded allowlist.
         if class_name.contains("Dock") {
             return true;
         }

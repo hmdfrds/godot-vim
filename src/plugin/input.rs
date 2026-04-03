@@ -99,6 +99,12 @@ impl GodotVimCore {
         if !key_event.is_pressed() { return; }
         let Some(key) = bridge::input::parse_godot_key(&key_event) else { return; };
 
+        // Cancel any pending tooltip — a new keystroke supersedes the hover.
+        // Done before cloning `editor` to avoid borrow conflicts with `&mut self`.
+        self.cancel_pending_tooltip();
+
+        // Re-borrow after the mutable cancel call.
+        let Some(editor) = &self.attached_editor else { return; };
         let mut ed = editor.clone();
 
         // Capture caret position BEFORE processing so we can detect whether
@@ -142,6 +148,28 @@ impl GodotVimCore {
         if let Some(controller) = &mut self.controller {
             if let Some(action) = controller.take_pending_ui_action() {
                 self.handle_pending_ui_action(action);
+            }
+        }
+
+        // Drain deferred tooltip request from Tier 2 of show_documentation_tooltip.
+        if let Some(data) = crate::bridge::port_impl::take_pending_tooltip_data() {
+            if let Some(editor) = &self.attached_editor {
+                let editor_id = editor.instance_id();
+                let now = godot::classes::Time::singleton().get_ticks_usec();
+                self.pending_tooltip = Some(super::PendingTooltip {
+                    symbol: data.symbol,
+                    line: data.line,
+                    col: data.col,
+                    warp_pos: data.warp_pos,
+                    editor_id,
+                    created_at_usec: now,
+                    phase: super::TooltipPhase::WaitingForRelease,
+                });
+                self.base_mut().set_process(true);
+                log::debug!(
+                    "handle_gui_input: queued deferred tooltip for '{}'",
+                    self.pending_tooltip.as_ref().unwrap().symbol
+                );
             }
         }
 
@@ -228,6 +256,8 @@ impl GodotVimCore {
             self.pending_caret_suppressions = self.pending_caret_suppressions.saturating_sub(1);
             return;
         }
+
+        self.cancel_pending_tooltip();
 
         let Some(controller) = &mut self.controller else {
             return;

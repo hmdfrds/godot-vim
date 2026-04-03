@@ -75,8 +75,7 @@ trait TreeExt {
 
 impl TreeExt for Gd<Tree> {
     fn safe_scroll_to_item(&mut self, item: &Gd<godot::classes::TreeItem>) {
-        // `scroll_to_item` is not exposed in gdext's typed API; use `call()`.
-        self.call("scroll_to_item", &[item.to_variant()]);
+        crate::bridge::godot_calls::scroll_to_item(self, item);
     }
 
     fn safe_select(&mut self, item: &Gd<godot::classes::TreeItem>) {

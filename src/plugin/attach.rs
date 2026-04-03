@@ -136,6 +136,8 @@ impl GodotVimCore {
             return;
         };
 
+        self.cancel_pending_tooltip();
+
         // Brace pair cache is per-language; stale pairs from the old editor's
         // language would produce wrong results in the new editor.
         crate::bridge::port_impl::invalidate_brace_pair_cache();
