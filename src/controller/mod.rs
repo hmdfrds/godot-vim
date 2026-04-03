@@ -292,10 +292,16 @@ impl VimController {
             .set_auto_pairs(Some(AutoPairs { pairs: pairs.into() }));
     }
 
-    /// Persist buffer-local mappings to shell state so they survive detach/reattach.
-    pub(crate) fn save_buffer_mappings_to_state(&mut self, editor_id: InstanceId) {
-        let mappings = self.engine.take_buffer_mappings();
-        *self.state.buffer(editor_id).buffer_mappings_mut() = mappings;
+    /// Restore per-buffer engine state for the given editor.
+    ///
+    /// Retrieves the saved `BufferLocalState` from `BufferState` (or uses
+    /// `Default` for first-visit buffers) and calls `engine.on_buffer_enter()`
+    /// to restore marks, changelist, last_visual, sticky_column, buffer_overrides,
+    /// buffer_mappings, and exchange.
+    pub(crate) fn restore_buffer_engine_state(&mut self, editor_id: InstanceId) {
+        let state = self.state.buffer(editor_id).take_engine_state()
+            .unwrap_or_default();
+        self.engine.on_buffer_enter(state);
     }
 
     /// Seed the undo tree on first attach (no-op if already initialized).
@@ -304,11 +310,6 @@ impl VimController {
         if buf.undo_tree().is_none() {
             buf.init_undo_tree(text);
         }
-    }
-
-    pub(crate) fn restore_buffer_mappings_from_state(&mut self, editor_id: InstanceId) {
-        let mappings = self.state.buffer(editor_id).buffer_mappings().clone();
-        self.engine.set_buffer_mappings(mappings);
     }
 
     /// Evict buffer state for editors freed since the last sweep.
@@ -384,19 +385,20 @@ impl VimController {
         self.state.take_highlight_yank();
     }
 
-    /// Notify the engine that the current buffer is being left.
+    /// Save all per-buffer engine state for the current editor.
     ///
-    /// Saves the cursor position as the `'"` (last-position) mark so that
-    /// `'"` and `g'"` jump back to the right spot after a tab switch.
-    /// Must be called before `save_buffer_mappings_to_state` per vim-core's
-    /// documented contract.
-    pub(crate) fn on_buffer_leave(&mut self, editor: &Gd<CodeEdit>) {
+    /// Computes the cursor byte offset, calls `engine.on_buffer_leave()` to
+    /// extract all per-buffer state (marks, changelist, last_visual, sticky_column,
+    /// buffer_overrides, buffer_mappings, exchange), and stores the result in
+    /// `BufferState` for later restoration.
+    pub(crate) fn save_buffer_engine_state(&mut self, editor_id: InstanceId, editor: &Gd<CodeEdit>) {
         let line = editor.get_caret_line();
         let col = editor.get_caret_column();
         let text = editor.get_text().to_string();
         let line_index = crate::bridge::codec::LineIndex::new(&text);
         let offset = line_index.line_col_to_byte(&text, line, col);
-        self.engine.on_buffer_leave(offset);
+        let engine_state = self.engine.on_buffer_leave(offset);
+        self.state.buffer(editor_id).set_engine_state(engine_state);
     }
 
     /// Force-exit visual/select mode on detach, clearing both engine and
