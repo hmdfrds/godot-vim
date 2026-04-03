@@ -93,12 +93,10 @@ mod godot_impl {
 
         // Look up the shortcut by its stable string path — registered by
         // Godot's ScriptEditor via ED_SHORTCUT("script_editor/close_file", ...).
-        // `get_shortcut` is not in gdext's typed API, so we use dynamic call.
-        let shortcut_variant = settings.call(
-            "get_shortcut",
-            &["script_editor/close_file".to_variant()],
-        );
-        let Ok(shortcut) = shortcut_variant.try_to::<Gd<godot::classes::Shortcut>>() else {
+        let Some(shortcut) = crate::bridge::godot_calls::get_shortcut(
+            &mut settings,
+            crate::bridge::godot_calls::SHORTCUT_CLOSE_FILE,
+        ) else {
             log::warn!("close_tab: shortcut 'script_editor/close_file' not found");
             return;
         };

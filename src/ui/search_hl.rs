@@ -26,8 +26,7 @@ use godot::prelude::*;
 
 use vim_core::primitives::Direction;
 
-/// Hardcoded because the typed constant is not exposed in all gdext versions.
-const GODOT_SEARCH_WHOLE_WORDS: u32 = 2;
+use crate::bridge::godot_calls;
 
 /// Manages search match highlighting on a `CodeEdit`.
 ///
@@ -76,8 +75,8 @@ impl SearchHighlighter {
         let old_pattern = self.last_pattern.as_deref();
 
         if whole_word != self.last_whole_word {
-            let flags: u32 = if whole_word { GODOT_SEARCH_WHOLE_WORDS } else { 0 };
-            editor.call("set_search_flags", &[flags.to_variant()]);
+            let flags: u32 = if whole_word { godot_calls::SEARCH_WHOLE_WORDS } else { 0 };
+            godot_calls::set_search_flags(editor, flags);
             self.last_whole_word = whole_word;
         }
 
@@ -88,12 +87,11 @@ impl SearchHighlighter {
 
         match new_pattern {
             Some(pattern) => {
-                // Dynamic call: set_search_text is not in the typed API for all gdext versions.
-                editor.call("set_search_text", &[pattern.to_variant()]);
+                godot_calls::set_search_text(editor, pattern);
                 self.last_pattern = Some(pattern.to_owned());
             }
             None => {
-                editor.call("set_search_text", &["".to_variant()]);
+                godot_calls::set_search_text(editor, "");
                 self.last_pattern = None;
             }
         }
@@ -102,11 +100,11 @@ impl SearchHighlighter {
     /// Clear highlights and reset dirty-tracking state (used on detach).
     pub(crate) fn clear(&mut self, editor: &mut Gd<CodeEdit>) {
         if self.last_pattern.is_some() {
-            editor.call("set_search_text", &["".to_variant()]);
+            godot_calls::set_search_text(editor, "");
             self.last_pattern = None;
         }
         if self.last_whole_word {
-            editor.call("set_search_flags", &[0u32.to_variant()]);
+            godot_calls::set_search_flags(editor, 0);
             self.last_whole_word = false;
         }
     }

@@ -15,8 +15,6 @@
 pub(crate) mod code_edit_ext;
 pub(crate) mod codec;
 pub(crate) mod context;
-// TODO(task-2): remove `allow` once consumers are wired up.
-#[allow(dead_code)]
 pub(crate) mod godot_calls;
 pub(crate) mod document;
 pub(crate) mod input;

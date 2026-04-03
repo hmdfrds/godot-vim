@@ -308,8 +308,7 @@ impl IdeCapable for CodeEditPort<'_> {
     }
 
     fn dismiss_code_hint(&mut self) {
-        // `set_code_hint` is not exposed in gdext's typed API — must use dynamic call.
-        self.0.call("set_code_hint", &["".to_variant()]);
+        super::godot_calls::dismiss_code_hint(&mut self.0);
     }
 }
 
