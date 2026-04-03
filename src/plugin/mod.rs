@@ -121,6 +121,10 @@ impl INode for GodotVimCore {
             },
             (),
         );
+        // Unconditional: even if a guard above caught a panic, null the
+        // controller so enter_tree can reinitialize cleanly. Orphaned signals
+        // from a panicking teardown step fire into handlers that check
+        // self.controller.is_none() and return early.
         self.controller = None;
         self.settings = None;
         self.last_editor_id = None;
