@@ -144,6 +144,9 @@ impl GodotVimCore {
                 if let Some(code_edit) = discovery::find_active_code_edit() {
                     self.base_mut()
                         .call_deferred("perform_attach", &[code_edit.to_variant()]);
+                } else {
+                    self.base_mut()
+                        .call_deferred("perform_detach", &[]);
                 }
             },
             (),
@@ -400,6 +403,36 @@ impl GodotVimCore {
         if !ok {
             self.recover_controller_from_panic();
         }
+    }
+
+    /// Deferred detach entry point. Called via `call_deferred` from
+    /// `on_script_changed` when no active CodeEdit exists (last tab closed
+    /// or switched to a non-CodeEdit editor view such as the 2D/3D viewport).
+    #[func]
+    fn perform_detach(&mut self) {
+        if self.controller.is_none() { return; }
+        let ok = panic_guard(
+            "perform_detach",
+            || {
+                // Re-discovery guard: between the deferred call being queued
+                // and now, a competing `perform_attach` may have already run,
+                // or the ScriptEditor may have recovered a CodeEdit. If so,
+                // skip the detach — there is a valid editor to stay attached to.
+                if discovery::find_active_code_edit().is_some() {
+                    return true;
+                }
+
+                self.detach();
+                true
+            },
+            false,
+        );
+        if !ok {
+            self.recover_controller_from_panic();
+        }
+        // This is a standalone detach (not a precondition to attach), so clear
+        // the dedup guard to allow re-attachment when a CodeEdit reappears.
+        self.last_editor_id = None;
     }
 
     #[func]
