@@ -433,6 +433,15 @@ impl GodotVimCore {
                 // the detach actually executes, not when the re-discovery
                 // guard skips it.
                 self.last_editor_id = None;
+
+                // Sweep stale buffer entries now that we've detached.
+                // Without this, closing all tabs leaves stale BufferState
+                // (including UndoTree with text snapshots) in the HashMap
+                // until the next attach() call.
+                if let Some(controller) = &mut self.controller {
+                    controller.sweep_stale_buffers();
+                }
+
                 true
             },
             false,
