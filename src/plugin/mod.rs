@@ -103,27 +103,27 @@ impl INode for GodotVimCore {
     }
 
     fn exit_tree(&mut self) {
+        if self.controller.is_none() {
+            return;
+        }
+        log::info!("GodotVim shutting down");
+        panic_guard("exit_tree:floating", || self.teardown_floating_window_tracking(), ());
+        panic_guard("exit_tree:detach", || self.detach(), ());
+        panic_guard("exit_tree:signals", || self.disconnect_editor_signals(), ());
+        panic_guard("exit_tree:settings", || self.teardown_settings(), ());
+        panic_guard("exit_tree:timer", || self.teardown_mapping_timer(), ());
         panic_guard(
-            "exit_tree",
+            "exit_tree:dialog",
             || {
-                if self.controller.is_none() {
-                    return;
-                }
-                log::info!("GodotVim shutting down");
-                self.teardown_floating_window_tracking();
-                self.detach();
-                self.disconnect_editor_signals();
-                self.teardown_settings();
-                self.teardown_mapping_timer();
                 if let Some(mut dialog) = self.mapping_dialog.take() {
                     dialog.queue_free();
                 }
-                self.controller = None;
-                self.settings = None;
-                self.last_editor_id = None;
             },
             (),
         );
+        self.controller = None;
+        self.settings = None;
+        self.last_editor_id = None;
     }
 }
 
