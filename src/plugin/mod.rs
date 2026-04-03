@@ -19,7 +19,7 @@ mod lifecycle;
 mod signals;
 
 use godot::classes::{
-    CodeEdit, Control, EditorInterface, INode, InputEvent, Timer,
+    CodeEdit, Control, DisplayServer, EditorInterface, INode, Input, InputEvent, Time, Timer,
 };
 use godot::prelude::*;
 
@@ -95,6 +95,10 @@ impl INode for GodotVimCore {
 
     fn input(&mut self, event: Gd<InputEvent>) {
         panic_guard("input", || self.handle_input_impl(event), ());
+    }
+
+    fn process(&mut self, _delta: f64) {
+        panic_guard("process", || self.poll_pending_tooltip(), ());
     }
 
     fn enter_tree(&mut self) {
@@ -686,6 +690,69 @@ impl GodotVimCore {
         // Always reset — trivially infallible (u32 assignment), must happen
         // regardless of whether recovery itself panicked.
         self.pending_caret_suppressions = 0;
+    }
+
+    fn poll_pending_tooltip(&mut self) {
+        let Some(pending) = &self.pending_tooltip else {
+            self.base_mut().set_process(false);
+            return;
+        };
+
+        // Stale editor check
+        let editor_valid = self
+            .attached_editor
+            .as_ref()
+            .is_some_and(|e| e.is_instance_valid() && e.instance_id() == pending.editor_id);
+        if !editor_valid {
+            log::debug!("poll_pending_tooltip: editor changed, cancelling");
+            self.pending_tooltip = None;
+            self.base_mut().set_process(false);
+            return;
+        }
+
+        // Timeout check (500ms)
+        let now = Time::singleton().get_ticks_usec() as u64;
+        if now.saturating_sub(pending.created_at_usec) > 500_000 {
+            log::debug!("poll_pending_tooltip: timeout, cancelling");
+            self.pending_tooltip = None;
+            self.base_mut().set_process(false);
+            return;
+        }
+
+        match pending.phase {
+            TooltipPhase::WaitingForRelease => {
+                if Input::singleton().is_anything_pressed() {
+                    return; // Keep polling
+                }
+                // All keys released — warp mouse
+                if let Some(pos) = pending.warp_pos {
+                    DisplayServer::singleton().warp_mouse(pos);
+                }
+                // MUST use mutable reference to transition phase
+                self.pending_tooltip.as_mut().unwrap().phase = TooltipPhase::WarpedPendingEmit;
+            }
+            TooltipPhase::WarpedPendingEmit => {
+                // One frame after warp — emit signal
+                let pending = self.pending_tooltip.take().unwrap();
+                self.base_mut().set_process(false);
+
+                let Some(editor) = &self.attached_editor else { return; };
+                if !editor.is_instance_valid() { return; }
+                let mut ed = editor.clone();
+                ed.emit_signal(
+                    "symbol_hovered",
+                    &[
+                        pending.symbol.to_variant(),
+                        pending.line.to_variant(),
+                        pending.col.to_variant(),
+                    ],
+                );
+                log::debug!(
+                    "poll_pending_tooltip: emitted symbol_hovered for '{}' at {}:{}",
+                    pending.symbol, pending.line, pending.col
+                );
+            }
+        }
     }
 
     fn update_cursor_if_attached(&mut self) {
