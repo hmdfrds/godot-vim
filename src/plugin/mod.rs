@@ -32,6 +32,22 @@ use signals::{
     SIG_TREE_EXITED, SIG_WINDOW_VISIBILITY_CHANGED,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TooltipPhase {
+    WaitingForRelease,
+    WarpedPendingEmit,
+}
+
+struct PendingTooltip {
+    symbol: String,
+    line: i32,
+    col: i32,
+    warp_pos: Option<Vector2i>,
+    editor_id: InstanceId,
+    created_at_usec: u64,
+    phase: TooltipPhase,
+}
+
 #[derive(GodotClass)]
 #[class(tool, base=Node)]
 pub struct GodotVimCore {
@@ -54,6 +70,7 @@ pub struct GodotVimCore {
     /// `caret_changed` callbacks per frame. Each suppressed callback
     /// decrements by 1.
     pending_caret_suppressions: u32,
+    pending_tooltip: Option<PendingTooltip>,
     tracked_windows: Vec<TrackedWindow>,
 }
 
@@ -71,6 +88,7 @@ impl INode for GodotVimCore {
             settings: None,
             mapping_dialog: None,
             pending_caret_suppressions: 0,
+            pending_tooltip: None,
             tracked_windows: Vec::new(),
         }
     }
@@ -80,6 +98,7 @@ impl INode for GodotVimCore {
     }
 
     fn enter_tree(&mut self) {
+        self.base_mut().set_process(false);
         panic_guard(
             "enter_tree",
             || {
