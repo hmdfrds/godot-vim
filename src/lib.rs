@@ -14,7 +14,7 @@
 //! - [`ui`] — Status bar, cursor overlay (GLSL shader), and line number gutter.
 //! - [`settings`] — EditorSettings registration and typed accessors.
 //! - [`navigation`] — Cross-panel `Ctrl+hjkl` focus movement and dock keyboard nav.
-//! - [`plugin`] — Top-level `EditorPlugin` that manages controller attachment.
+//! - [`plugin`] — [`GodotVimCore`] node that manages controller lifecycle and input routing.
 //!
 //! # Keystroke Data Flow
 //!
