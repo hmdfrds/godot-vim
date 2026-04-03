@@ -6,7 +6,7 @@
 //! calls the trait method instead of the Godot FFI method. The newtype
 //! breaks this ambiguity — `self.0.get_text()` always resolves to Godot.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use godot::classes::{CodeEdit, EditorInterface, InputEventShortcut};
@@ -29,6 +29,26 @@ thread_local! {
 
 pub(crate) fn invalidate_brace_pair_cache() {
     BRACE_PAIR_CACHE.with(|c| *c.borrow_mut() = None);
+}
+
+// ── Pending tooltip data ────────────────────────────────────────────────
+//
+// Thread-local store for deferred tooltip emission. `show_documentation_tooltip`
+// (Tier 2 path) deposits data here; the plugin layer drains it after dispatch.
+
+pub(crate) struct PendingTooltipData {
+    pub symbol: String,
+    pub line: i32,
+    pub col: i32,
+    pub warp_pos: Option<Vector2i>,
+}
+
+thread_local! {
+    static PENDING_TOOLTIP_DATA: Cell<Option<PendingTooltipData>> = const { Cell::new(None) };
+}
+
+pub(crate) fn take_pending_tooltip_data() -> Option<PendingTooltipData> {
+    PENDING_TOOLTIP_DATA.take()
 }
 
 // ── Pre-dispatch snapshots ───────────────────────────────────────────────
@@ -356,17 +376,15 @@ impl NavigationCapable for CodeEditPort<'_> {
             }
         }
 
-        // Tier 2 (Godot ≤4.6): Mouse warp + symbol_hovered signal.
-        // Warp the mouse to the symbol's screen position, then emit the signal.
-        // Whether warp_mouse succeeds depends on the display server and GPU
-        // driver — it may be a no-op on some configurations. When the warp
-        // fails, the tooltip either appears at the physical mouse position or
-        // is suppressed by the is_anything_pressed() guard in make_tooltip.
-        // Godot 4.7 fixes this with the p_shortcut bypass (Tier 1).
+        // Tier 2 (Godot ≤4.6): Deferred tooltip emission.
+        // Compute the warp position but do NOT warp or emit a signal here.
+        // Instead, store the data in a thread-local for the plugin layer to
+        // pick up after dispatch completes.
         let rect_local = self.0.get_rect_at_line_column(line, col);
 
-        if rect_local.position.x == -1 && rect_local.position.y == -1 {
-            log::trace!("show_documentation_tooltip: off-screen sentinel, skipping warp");
+        let warp_pos = if rect_local.position.x == -1 && rect_local.position.y == -1 {
+            log::trace!("show_documentation_tooltip: off-screen sentinel, no warp_pos");
+            None
         } else {
             let pos_local = Vector2::new(
                 rect_local.position.x as f32,
@@ -380,18 +398,22 @@ impl NavigationCapable for CodeEditPort<'_> {
                 let warp_y = super::codec::f32_to_i32_sat(
                     pos_global.y + rect_local.size.y as f32 / 2.0,
                 );
-                godot::classes::DisplayServer::singleton()
-                    .warp_mouse(Vector2i::new(warp_x, warp_y));
+                Some(Vector2i::new(warp_x, warp_y))
+            } else {
+                None
             }
-        }
+        };
 
-        self.0.emit_signal(
-            "symbol_hovered",
-            &[symbol.to_variant(), line.to_variant(), col.to_variant()],
-        );
+        PENDING_TOOLTIP_DATA.set(Some(PendingTooltipData {
+            symbol: symbol.to_string(),
+            line,
+            col,
+            warp_pos,
+        }));
+
         log::debug!(
-            "show_documentation_tooltip: warp+signal fallback for '{symbol}' \
-             (shortcut unavailable — Wayland may not position correctly)"
+            "show_documentation_tooltip: stored pending tooltip for '{symbol}' \
+             (shortcut unavailable — plugin layer will emit)"
         );
     }
 }
