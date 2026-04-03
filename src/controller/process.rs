@@ -410,7 +410,6 @@ impl ProcessContext<'_> {
                         &doc,
                         &mut compound_actions,
                         scrolloff,
-                        editor_id,
                         self.highlight_yank_duration_ms,
                     );
                 }

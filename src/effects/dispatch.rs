@@ -273,7 +273,7 @@ pub(crate) fn dispatch(
                 pairing = pairing.on_consume_cursor();
             }
             other => {
-                dispatch_pass2_effect(other, editor, state, &doc, &mut compound_actions, scrolloff, editor_id, highlight_yank_duration_ms);
+                dispatch_pass2_effect(other, editor, state, &doc, &mut compound_actions, scrolloff, highlight_yank_duration_ms);
             }
         }
     }
@@ -311,7 +311,6 @@ pub(crate) fn split_effects_by_pass(effects: Vec<Effect>) -> (Vec<Effect>, Vec<E
 /// Route a single pass-2 effect to its domain handler. Compound actions
 /// (`:norm`, window nav) are collected for the controller to handle after
 /// dispatch completes.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn dispatch_pass2_effect(
     effect: Effect,
     editor: &mut (impl FoldCapable + IdeCapable + NavigationCapable),
@@ -319,7 +318,6 @@ pub(crate) fn dispatch_pass2_effect(
     doc: &DocumentView,
     compound_actions: &mut Vec<CompoundAction>,
     scrolloff: i32,
-    editor_id: InstanceId,
     highlight_yank_duration_ms: u32,
 ) {
     match effect {
@@ -354,11 +352,6 @@ pub(crate) fn dispatch_pass2_effect(
         | Effect::ScrollRight { .. } => {
             dispatch_scroll_effect(effect, editor, doc);
         }
-        Effect::SetScrollHalfCount { count } => {
-            state.buffer(editor_id).set_scroll_half_count(count);
-            log::trace!("SetScrollHalfCount: stored count={} for editor #{}", count, editor_id.to_i64());
-        }
-
         // ── Fold ────────────────────────────────────────────────────────
         Effect::FoldLine { .. }
         | Effect::UnfoldLine { .. }

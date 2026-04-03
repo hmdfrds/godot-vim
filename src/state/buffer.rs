@@ -1,5 +1,5 @@
-//! Per-buffer persistent state: canonical visual selection, buffer-local
-//! mappings, sticky scroll count, and undo tree.
+//! Per-buffer persistent state: canonical visual selection, engine-side
+//! per-buffer state, and undo tree.
 
 use vim_core::execution::BufferLocalState;
 use vim_core::primitives::Offset;
@@ -29,11 +29,6 @@ pub(crate) struct BufferState {
     /// buffer_overrides, buffer_mappings, exchange). Saved by `on_buffer_leave`,
     /// restored by `on_buffer_enter`. `None` for buffers not yet visited.
     engine_state: Option<BufferLocalState>,
-
-    /// Sticky half-page scroll count: once the user supplies an explicit count
-    /// to `Ctrl-D`/`Ctrl-U`, that count persists for subsequent scrolls in
-    /// this buffer (Vim `:help scroll` semantics).
-    scroll_half_count: Option<u32>,
 
     undo_tree: Option<super::undo_tree::UndoTree>,
 }
@@ -81,16 +76,6 @@ impl BufferState {
 
     pub(crate) fn clear_visual_selection(&mut self) {
         self.visual = None;
-    }
-
-    #[must_use]
-    #[allow(dead_code)] // callers pending scroll-half wiring
-    pub(crate) fn scroll_half_count(&self) -> Option<u32> {
-        self.scroll_half_count
-    }
-
-    pub(crate) fn set_scroll_half_count(&mut self, count: u32) {
-        self.scroll_half_count = Some(count);
     }
 
     /// No-op if `init_undo_tree` was never called. `text` is the full document
