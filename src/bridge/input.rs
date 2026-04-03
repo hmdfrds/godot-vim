@@ -174,8 +174,40 @@ pub(crate) fn translate_key(
         modifiers &= !Modifiers::SHIFT;
     }
 
+    // When unicode produced a non-ASCII character, check if the physical key
+    // is a Latin letter. If so, provide the Latin equivalent for command
+    // dispatch in non-insert modes (the engine normalizes via latin_key).
+    // Only letters A-Z are remapped — symbols can't be derived from
+    // keycode+shift and vary across Latin layouts.
+    let event = KeyEvent::new(Key::Char(ch), modifiers);
+    let event = if !ch.is_ascii()
+        && !modifiers.intersects(Modifiers::CTRL | Modifiers::ALT | Modifiers::META)
+    {
+        let key_val = keycode.ord();
+        let key_a = GodotKey::A.ord();
+        let key_z = GodotKey::Z.ord();
+        if (key_a..=key_z).contains(&key_val) {
+            // Use the original `shift` parameter (not `modifiers`, which had
+            // Shift stripped above) to determine upper/lower case.
+            let latin_ch = if shift {
+                (key_val as u8 as char).to_ascii_uppercase()
+            } else {
+                (key_val as u8 as char).to_ascii_lowercase()
+            };
+            log::trace!(
+                "parse_godot_key: non-Latin '{}' with Latin equivalent '{}'",
+                ch, latin_ch
+            );
+            event.with_latin(Key::Char(latin_ch))
+        } else {
+            event
+        }
+    } else {
+        event
+    };
+
     log::trace!("parse_godot_key: char='{}' mods={}", ch, modifiers);
-    Some(KeyEvent::new(Key::Char(ch), modifiers))
+    Some(event)
 }
 
 /// Convert a Godot `InputEventKey` into a vim-core `KeyEvent`.
@@ -519,6 +551,82 @@ mod tests {
             translate_key(GodotKey::CAPSLOCK, 0, false, false, false, false),
             None
         );
+    }
+
+    // ── Non-Latin keyboard layout (latin_key population) ────────────────
+
+    #[test]
+    fn non_ascii_with_latin_keycode_populates_latin_key() {
+        // Russian 'о' (U+043E) on the physical J key
+        let result = translate_key(
+            GodotKey::J,          // keycode (Latin equivalent)
+            0x043E,               // unicode (Cyrillic о)
+            false, false, false, false,
+        );
+        let ke = result.unwrap();
+        assert_eq!(ke.key(), Key::Char('\u{043E}'));
+        assert_eq!(ke.latin_key(), Some(Key::Char('j')));
+    }
+
+    #[test]
+    fn non_ascii_shifted_latin_key_uppercase() {
+        // Russian 'О' (U+041E) with Shift on the physical J key
+        let result = translate_key(
+            GodotKey::J,          // keycode
+            0x041E,               // unicode (Cyrillic О)
+            false, false, true, false,  // shift=true
+        );
+        let ke = result.unwrap();
+        assert_eq!(ke.key(), Key::Char('\u{041E}'));
+        assert_eq!(ke.latin_key(), Some(Key::Char('J')));
+    }
+
+    #[test]
+    fn ascii_char_no_latin_key() {
+        let result = translate_key(
+            GodotKey::J, 0x006A, // 'j'
+            false, false, false, false,
+        );
+        let ke = result.unwrap();
+        assert_eq!(ke.key(), Key::Char('j'));
+        assert_eq!(ke.latin_key(), None);
+    }
+
+    #[test]
+    fn ctrl_path_no_latin_key() {
+        // Ctrl+J goes through the Ctrl path, not the unicode path
+        let result = translate_key(
+            GodotKey::J, 0x000A, // Ctrl+J unicode is control code
+            true, false, false, false,
+        );
+        let ke = result.unwrap();
+        assert_eq!(ke.key(), Key::Char('j'));
+        assert!(ke.modifiers().contains(Modifiers::CTRL));
+        assert_eq!(ke.latin_key(), None);
+    }
+
+    #[test]
+    fn non_letter_keycode_no_latin_key() {
+        // Non-ASCII char but keycode is not in A-Z range (e.g. a symbol key)
+        let result = translate_key(
+            GodotKey::KEY_4,    // keycode for '4' key
+            0x003B,             // ';' (ASCII, would not trigger latin_key anyway)
+            false, false, false, false,
+        );
+        let ke = result.unwrap();
+        assert_eq!(ke.latin_key(), None);
+    }
+
+    #[test]
+    fn named_key_no_latin_key() {
+        // Named keys go through get_named_key, not the unicode path
+        let result = translate_key(
+            GodotKey::UP, 0,
+            false, false, false, false,
+        );
+        let ke = result.unwrap();
+        assert_eq!(ke.key(), Key::Up);
+        assert_eq!(ke.latin_key(), None);
     }
 
     // ── Zero unicode filtering ──────────────────────────────────────────
