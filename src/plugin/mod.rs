@@ -454,6 +454,7 @@ impl GodotVimCore {
     #[func]
     #[allow(clippy::needless_pass_by_value)] // gdext requires Gd<T> by value
     fn handle_gui_input(&mut self, event: Gd<InputEvent>) {
+        if self.controller.is_none() { return; }
         let ok = panic_guard("handle_gui_input", || { self.handle_gui_input_impl(event); true }, false);
         if !ok {
             self.recover_controller_from_panic();
@@ -462,6 +463,7 @@ impl GodotVimCore {
 
     #[func]
     fn on_mapping_timeout(&mut self) {
+        if self.controller.is_none() { return; }
         let ok = panic_guard("on_mapping_timeout", || { self.on_mapping_timeout_impl(); true }, false);
         if !ok {
             self.recover_controller_from_panic();
@@ -470,6 +472,7 @@ impl GodotVimCore {
 
     #[func]
     fn on_caret_changed(&mut self) {
+        if self.controller.is_none() { return; }
         let ok = panic_guard("on_caret_changed", || { self.on_caret_changed_impl(); true }, false);
         if !ok {
             self.recover_controller_from_panic();
@@ -480,6 +483,7 @@ impl GodotVimCore {
     /// that bypass the Vim keystroke pipeline's inline cache invalidation.
     #[func]
     fn on_text_changed(&mut self) {
+        if self.controller.is_none() { return; }
         panic_guard(
             "on_text_changed",
             || {
@@ -493,11 +497,13 @@ impl GodotVimCore {
 
     #[func]
     fn on_scrollbar_changed(&mut self, _value: f64) {
+        if self.controller.is_none() { return; }
         panic_guard("on_scrollbar_changed", || self.update_cursor_if_attached(), ());
     }
 
     #[func]
     fn on_editor_draw(&mut self) {
+        if self.controller.is_none() { return; }
         panic_guard("on_editor_draw", || self.update_cursor_if_attached(), ());
     }
 
