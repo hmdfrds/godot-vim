@@ -12,6 +12,7 @@
 //! - `port` / `port_impl` — `TextEditorPort` trait and CodeEdit implementation
 //! - `code_edit_ext` — fold-aware cursor movement extension trait
 
+pub(crate) mod clipboard;
 pub(crate) mod code_edit_ext;
 pub(crate) mod codec;
 pub(crate) mod context;
