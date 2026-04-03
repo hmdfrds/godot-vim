@@ -309,7 +309,7 @@ impl IdeCapable for CodeEditPort<'_> {
     }
 
     fn dismiss_code_hint(&mut self) {
-        super::godot_calls::dismiss_code_hint(&mut self.0);
+        super::godot_calls::dismiss_code_hint(self.0);
     }
 }
 

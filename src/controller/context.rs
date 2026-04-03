@@ -55,4 +55,6 @@ pub(super) struct ProcessContext<'a> {
     pub(super) passthrough_keys: &'a HashSet<KeyEvent>,
     /// Whether Godot's native code completion should auto-trigger on typing.
     pub(super) code_complete_enabled: bool,
+    /// Clipboard abstraction for register sync and clipboard read operations.
+    pub(super) clipboard: &'a mut dyn crate::bridge::clipboard::ClipboardPort,
 }
