@@ -16,7 +16,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 godot = { git = "https://github.com/godot-rust/gdext", tag = "v0.4.5" }
-vim-core = { git = "https://github.com/hmdfrds/vim-core.git", tag = "v0.3.1" }
+vim-core = { git = "https://github.com/hmdfrds/vim-core.git", tag = "v0.3.2" }
 bitflags = "2"
 unicode-segmentation = "1.10"
 log = { version = "0.4", features = ["max_level_trace", "release_max_level_trace"] }
