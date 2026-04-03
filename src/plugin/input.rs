@@ -101,6 +101,10 @@ impl GodotVimCore {
 
         let mut ed = editor.clone();
 
+        // Capture caret position BEFORE processing so we can detect whether
+        // the keystroke actually moved the cursor (see suppression below).
+        let pos_before = (ed.get_caret_line(), ed.get_caret_column());
+
         let consumed = {
             let Some(controller) = &mut self.controller else { return; };
             controller.process_cycle(key, &mut ed)
@@ -116,11 +120,15 @@ impl GodotVimCore {
         self.ui.update(&snap, &mut ed);
 
         // Suppress the deferred caret_changed that will fire from Vim-driven
-        // cursor moves. Counter (not bool) because fast typing queues multiple
-        // deferred callbacks per frame. Capped to prevent unbounded drift if
-        // caret_changed signals are lost.
+        // cursor moves. Only increment when the cursor actually moved —
+        // Godot only emits caret_changed on position change, so incrementing
+        // without movement causes the counter to drift upward and swallow
+        // subsequent mouse clicks (Round 14 audit finding).
         if consumed {
-            self.pending_caret_suppressions += 1;
+            let pos_after = (ed.get_caret_line(), ed.get_caret_column());
+            if pos_before != pos_after {
+                self.pending_caret_suppressions += 1;
+            }
         }
         self.pending_caret_suppressions = self.pending_caret_suppressions.min(4);
 
@@ -159,21 +167,34 @@ impl GodotVimCore {
         if !editor.is_instance_valid() { return; }
         let mut ed = editor.clone();
 
-        if let Some(controller) = &mut self.controller {
+        // Capture caret position BEFORE timeout resolution so we can detect
+        // whether the resolved keys actually moved the cursor.
+        let pos_before = (ed.get_caret_line(), ed.get_caret_column());
+
+        let had_operations = if let Some(controller) = &mut self.controller {
             controller.resolve_mapping_timeout(&mut ed);
-            // Only suppress if keys were actually processed -- a spurious timeout
-            // with no pending keys must not eat a legitimate external caret change.
-            if controller.operations_this_cycle() > 0 {
-                self.pending_caret_suppressions += 1;
-                self.pending_caret_suppressions = self.pending_caret_suppressions.min(4);
-            }
-        }
+            controller.operations_this_cycle() > 0
+        } else {
+            false
+        };
 
         let editor_id = ed.instance_id();
         let snap = self.controller.as_mut().map(|c| c.ui_snapshot(editor_id));
         if let Some(snap) = snap {
             self.ui.update(&snap, &mut ed);
         }
+
+        // Only suppress if keys were actually processed AND the cursor moved.
+        // A spurious timeout with no pending keys must not eat a legitimate
+        // external caret change, and a timeout that resolved keys without
+        // moving the cursor must not drift the counter (Round 14 audit finding).
+        if had_operations {
+            let pos_after = (ed.get_caret_line(), ed.get_caret_column());
+            if pos_before != pos_after {
+                self.pending_caret_suppressions += 1;
+            }
+        }
+        self.pending_caret_suppressions = self.pending_caret_suppressions.min(4);
 
         if let Some(controller) = &mut self.controller {
             if let Some(action) = controller.take_pending_ui_action() {
