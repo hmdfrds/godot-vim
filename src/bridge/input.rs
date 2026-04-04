@@ -87,6 +87,61 @@ fn is_dead_key_char(ch: char) -> bool {
     matches!(ch as u32, 0x02C0..=0x036F)
 }
 
+/// Derive the US-QWERTY character from a physical keycode + shift state.
+///
+/// Returns `None` for non-printable or non-ASCII physical keys (F-keys,
+/// arrow keys, modifier keys, media keys, etc.).
+///
+/// The shift table is hardcoded to US-QWERTY because Godot's
+/// `get_physical_keycode()` is defined as the US-QWERTY scan code.
+#[allow(dead_code)] // Will be wired into translate_key in the next task
+fn physical_to_ascii(physical: GodotKey, shift: bool) -> Option<char> {
+    let code = physical.ord();
+    // Letters: physical A-Z → 'a'-'z' or 'A'-'Z'
+    let key_a = GodotKey::A.ord();
+    let key_z = GodotKey::Z.ord();
+    if (key_a..=key_z).contains(&code) {
+        let ch = code as u8 as char;
+        return Some(if shift { ch.to_ascii_uppercase() } else { ch.to_ascii_lowercase() });
+    }
+    // Digits and symbols: US-QWERTY shift map
+    if shift {
+        match physical {
+            GodotKey::KEY_1 => Some('!'),
+            GodotKey::KEY_2 => Some('@'),
+            GodotKey::KEY_3 => Some('#'),
+            GodotKey::KEY_4 => Some('$'),
+            GodotKey::KEY_5 => Some('%'),
+            GodotKey::KEY_6 => Some('^'),
+            GodotKey::KEY_7 => Some('&'),
+            GodotKey::KEY_8 => Some('*'),
+            GodotKey::KEY_9 => Some('('),
+            GodotKey::KEY_0 => Some(')'),
+            GodotKey::MINUS => Some('_'),
+            GodotKey::EQUAL => Some('+'),
+            GodotKey::BRACKETLEFT => Some('{'),
+            GodotKey::BRACKETRIGHT => Some('}'),
+            GodotKey::BACKSLASH => Some('|'),
+            GodotKey::SEMICOLON => Some(':'),
+            GodotKey::APOSTROPHE => Some('"'),
+            GodotKey::QUOTELEFT => Some('~'),
+            GodotKey::COMMA => Some('<'),
+            GodotKey::PERIOD => Some('>'),
+            GodotKey::SLASH => Some('?'),
+            GodotKey::SPACE => Some(' '),
+            _ => None,
+        }
+    } else {
+        // Unshifted: Godot Key enum values ARE ASCII codepoints
+        let ch = char::from_u32(u32::try_from(code).ok()?)?;
+        if ch.is_ascii_graphic() || ch == ' ' {
+            Some(ch)
+        } else {
+            None
+        }
+    }
+}
+
 /// Pure translation from raw key parameters to a vim-core [`KeyEvent`].
 ///
 /// Contains all mapping logic without any Godot FFI calls, making it
@@ -943,5 +998,112 @@ mod tests {
             Some(KeyEvent::new(Key::Char('a'), Modifiers::CTRL | Modifiers::ALT)),
             "Ctrl+Alt with control char should preserve flags"
         );
+    }
+
+    // ── Physical keycode to ASCII ──────────────────────────────────────
+
+    #[test]
+    fn physical_to_ascii_unshifted_letters() {
+        for (gk, expected) in [
+            (GodotKey::A, 'a'), (GodotKey::B, 'b'), (GodotKey::Z, 'z'),
+            (GodotKey::M, 'm'),
+        ] {
+            assert_eq!(
+                physical_to_ascii(gk, false), Some(expected),
+                "unshifted {:?} should produce '{}'", gk, expected
+            );
+        }
+    }
+
+    #[test]
+    fn physical_to_ascii_shifted_letters() {
+        for (gk, expected) in [
+            (GodotKey::A, 'A'), (GodotKey::Z, 'Z'), (GodotKey::M, 'M'),
+        ] {
+            assert_eq!(
+                physical_to_ascii(gk, true), Some(expected),
+                "shifted {:?} should produce '{}'", gk, expected
+            );
+        }
+    }
+
+    #[test]
+    fn physical_to_ascii_unshifted_digits() {
+        for (gk, expected) in [
+            (GodotKey::KEY_0, '0'), (GodotKey::KEY_1, '1'),
+            (GodotKey::KEY_5, '5'), (GodotKey::KEY_9, '9'),
+        ] {
+            assert_eq!(
+                physical_to_ascii(gk, false), Some(expected),
+                "unshifted {:?} should produce '{}'", gk, expected
+            );
+        }
+    }
+
+    #[test]
+    fn physical_to_ascii_shifted_digits() {
+        for (gk, expected) in [
+            (GodotKey::KEY_1, '!'), (GodotKey::KEY_2, '@'),
+            (GodotKey::KEY_3, '#'), (GodotKey::KEY_4, '$'),
+            (GodotKey::KEY_5, '%'), (GodotKey::KEY_6, '^'),
+            (GodotKey::KEY_7, '&'), (GodotKey::KEY_8, '*'),
+            (GodotKey::KEY_9, '('), (GodotKey::KEY_0, ')'),
+        ] {
+            assert_eq!(
+                physical_to_ascii(gk, true), Some(expected),
+                "shifted {:?} should produce '{}'", gk, expected
+            );
+        }
+    }
+
+    #[test]
+    fn physical_to_ascii_unshifted_symbols() {
+        for (gk, expected) in [
+            (GodotKey::MINUS, '-'), (GodotKey::EQUAL, '='),
+            (GodotKey::BRACKETLEFT, '['), (GodotKey::BRACKETRIGHT, ']'),
+            (GodotKey::BACKSLASH, '\\'), (GodotKey::SEMICOLON, ';'),
+            (GodotKey::APOSTROPHE, '\''), (GodotKey::QUOTELEFT, '`'),
+            (GodotKey::COMMA, ','), (GodotKey::PERIOD, '.'),
+            (GodotKey::SLASH, '/'),
+        ] {
+            assert_eq!(
+                physical_to_ascii(gk, false), Some(expected),
+                "unshifted {:?} should produce '{}'", gk, expected
+            );
+        }
+    }
+
+    #[test]
+    fn physical_to_ascii_shifted_symbols() {
+        for (gk, expected) in [
+            (GodotKey::MINUS, '_'), (GodotKey::EQUAL, '+'),
+            (GodotKey::BRACKETLEFT, '{'), (GodotKey::BRACKETRIGHT, '}'),
+            (GodotKey::BACKSLASH, '|'), (GodotKey::SEMICOLON, ':'),
+            (GodotKey::APOSTROPHE, '"'), (GodotKey::QUOTELEFT, '~'),
+            (GodotKey::COMMA, '<'), (GodotKey::PERIOD, '>'),
+            (GodotKey::SLASH, '?'),
+        ] {
+            assert_eq!(
+                physical_to_ascii(gk, true), Some(expected),
+                "shifted {:?} should produce '{}'", gk, expected
+            );
+        }
+    }
+
+    #[test]
+    fn physical_to_ascii_space() {
+        assert_eq!(physical_to_ascii(GodotKey::SPACE, false), Some(' '));
+        assert_eq!(physical_to_ascii(GodotKey::SPACE, true), Some(' '));
+    }
+
+    #[test]
+    fn physical_to_ascii_non_printable_returns_none() {
+        assert_eq!(physical_to_ascii(GodotKey::ESCAPE, false), None);
+        assert_eq!(physical_to_ascii(GodotKey::F1, false), None);
+        assert_eq!(physical_to_ascii(GodotKey::UP, false), None);
+        assert_eq!(physical_to_ascii(GodotKey::SHIFT, false), None);
+        assert_eq!(physical_to_ascii(GodotKey::CTRL, false), None);
+        assert_eq!(physical_to_ascii(GodotKey::TAB, false), None);
+        assert_eq!(physical_to_ascii(GodotKey::ENTER, false), None);
     }
 }
