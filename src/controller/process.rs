@@ -208,6 +208,18 @@ impl ProcessContext<'_> {
             }
         }
 
+        // ── IME position tracking ────────────────────────────────────────
+        //
+        // Update the IME candidate window position after every keystroke in
+        // insert-like modes. Done inline (not via deferred caret_changed)
+        // to avoid a one-frame lag between cursor movement and IME popup.
+        {
+            let mode_now = self.engine.mode();
+            if mode_now.is_insert() || mode_now.is_replace() || mode_now.is_command_line() {
+                update_ime_position(editor);
+            }
+        }
+
         // ── Per-keystroke DEBUG summary ──────────────────────────────────
         //
         // One line that tells the complete story of what happened:
@@ -688,6 +700,7 @@ fn activate_ime(editor: &mut Gd<CodeEdit>) {
         .window_set_ime_active_ex(true)
         .window_id(window_id)
         .done();
+    update_ime_position(editor);
     log::trace!("IME activated for insert mode (window_id={})", window_id);
 }
 
@@ -707,4 +720,32 @@ fn deactivate_ime(editor: &mut Gd<CodeEdit>) {
         .window_id(window_id)
         .done();
     log::trace!("IME deactivated (window_id={})", window_id);
+}
+
+/// Update the IME candidate window position to track the text cursor.
+///
+/// Called after IME activation and after every keystroke in insert-like
+/// modes so the CJK candidate window stays next to the caret in real time.
+/// Uses `get_caret_draw_pos` (editor-local) + `get_global_position`
+/// (window-relative) for correct positioning in both docked and floating
+/// script editors.
+fn update_ime_position(editor: &Gd<CodeEdit>) {
+    let caret_pos = editor.get_caret_draw_pos();
+    let global_pos = editor.get_global_position();
+    let ime_pos = Vector2i::new(
+        (global_pos.x + caret_pos.x) as i32,
+        (global_pos.y + caret_pos.y) as i32,
+    );
+    let window_id = editor
+        .get_window()
+        .map(|w| w.get_window_id())
+        .unwrap_or(DisplayServer::MAIN_WINDOW_ID);
+    DisplayServer::singleton()
+        .window_set_ime_position_ex(ime_pos)
+        .window_id(window_id)
+        .done();
+    log::trace!(
+        "IME position updated to ({}, {}) window_id={}",
+        ime_pos.x, ime_pos.y, window_id
+    );
 }
