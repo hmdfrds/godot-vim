@@ -129,10 +129,15 @@ impl GodotVimCore {
         // the keystroke actually moved the cursor (see suppression below).
         let pos_before = (ed.get_caret_line(), ed.get_caret_column());
 
+        self.processing_key = true;
         let consumed = {
-            let Some(controller) = &mut self.controller else { return; };
+            let Some(controller) = &mut self.controller else {
+                self.processing_key = false;
+                return;
+            };
             controller.process_cycle(key, &mut ed)
         };
+        self.processing_key = false;
 
         let snap = {
             let Some(controller) = &mut self.controller else { return; };

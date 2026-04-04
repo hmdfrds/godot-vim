@@ -72,6 +72,9 @@ pub struct GodotVimCore {
     pending_caret_suppressions: u32,
     pending_tooltip: Option<PendingTooltip>,
     tracked_windows: Vec<TrackedWindow>,
+    /// True while the engine is actively processing a keystroke.
+    /// Used to distinguish vim-core-initiated text changes from external ones (IME, completion).
+    processing_key: bool,
 }
 
 #[godot_api]
@@ -90,6 +93,7 @@ impl INode for GodotVimCore {
             pending_caret_suppressions: 0,
             pending_tooltip: None,
             tracked_windows: Vec::new(),
+            processing_key: false,
         }
     }
 
@@ -523,11 +527,26 @@ impl GodotVimCore {
     #[func]
     fn on_text_changed(&mut self) {
         if self.controller.is_none() { return; }
+        let is_external = !self.processing_key;
         panic_guard(
             "on_text_changed",
             || {
                 if let Some(controller) = &mut self.controller {
                     controller.invalidate_text_cache();
+                    if is_external {
+                        let mode = controller.mode();
+                        if matches!(mode,
+                            vim_core::primitives::Mode::Insert
+                            | vim_core::primitives::Mode::Replace
+                            | vim_core::primitives::Mode::VirtualReplace
+                        ) {
+                            log::debug!(
+                                "on_text_changed: external text change detected in {:?} mode \
+                                 (IME/completion/external edit)",
+                                mode
+                            );
+                        }
+                    }
                 }
             },
             (),
