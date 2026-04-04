@@ -61,11 +61,26 @@ impl GodotVimCore {
             FocusContext::Editor => {
                 self.controller.as_ref().is_none_or(|c| {
                     let mode = c.mode();
-                    matches!(mode,
+                    let is_nav_mode = matches!(mode,
                         vim_core::primitives::Mode::Normal
                         | vim_core::primitives::Mode::Visual(_)
                         | vim_core::primitives::Mode::OperatorPending(_)
-                    )
+                    );
+                    if !is_nav_mode {
+                        return false;
+                    }
+                    // User mappings take priority over panel navigation.
+                    // If the mapping trie has an entry for this Ctrl+hjkl key,
+                    // let it flow through to gui_input where the mapping system
+                    // handles it.
+                    let vim_key = vim_core::keymap::KeyEvent::ctrl(match keycode {
+                        Key::H => 'h',
+                        Key::J => 'j',
+                        Key::K => 'k',
+                        Key::L => 'l',
+                        _ => return false, // not hjkl — don't intercept
+                    });
+                    !c.could_start_mapping(vim_key)
                 })
             }
             FocusContext::Dock(..) | FocusContext::SearchBox(..) | FocusContext::Unknown => true,

@@ -474,6 +474,11 @@ impl VimController {
     }
 
     #[must_use]
+    pub(crate) fn could_start_mapping(&self, key: vim_core::keymap::KeyEvent) -> bool {
+        self.engine.could_start_mapping(key)
+    }
+
+    #[must_use]
     pub(crate) fn timeoutlen(&self) -> u32 {
         self.engine.timeoutlen()
     }
