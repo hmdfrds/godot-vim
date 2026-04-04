@@ -20,7 +20,15 @@ pub(crate) enum WindowNavDirection {
     Right,
 }
 
-pub(crate) fn direction_from_hjkl(key: Key) -> Option<WindowNavDirection> {
+/// Try logical keycode first (respects key remapping), fall back to physical
+/// keycode (layout-independent, US-QWERTY positions). This ensures Ctrl+hjkl
+/// panel navigation works on non-Latin layouts (Russian, Greek, etc.) where
+/// `get_keycode()` may not return the Latin H/J/K/L equivalents.
+pub(crate) fn direction_from_hjkl(logical: Key, physical: Key) -> Option<WindowNavDirection> {
+    hjkl_direction(logical).or_else(|| hjkl_direction(physical))
+}
+
+fn hjkl_direction(key: Key) -> Option<WindowNavDirection> {
     match key {
         Key::J => Some(WindowNavDirection::Down),
         Key::K => Some(WindowNavDirection::Up),

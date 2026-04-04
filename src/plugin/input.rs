@@ -71,7 +71,8 @@ impl GodotVimCore {
             FocusContext::Dock(..) | FocusContext::SearchBox(..) | FocusContext::Unknown => true,
         };
         if should_intercept_hjkl {
-            if let Some(direction) = navigation::window::direction_from_hjkl(keycode) {
+            let physical = key_event.get_physical_keycode();
+            if let Some(direction) = navigation::window::direction_from_hjkl(keycode, physical) {
                 if let Some(focus_owner) = viewport.gui_get_focus_owner() {
                     let control: Gd<godot::classes::Control> = focus_owner.upcast();
                     let _ = navigation::handle_window_nav(&control, direction);
