@@ -13,9 +13,8 @@
 
 use godot::classes::CodeEdit;
 use godot::prelude::*;
-use vim_core::execution::{ExternalEdit, ExternalEditKind, VimEngine};
+use vim_core::execution::VimEngine;
 use vim_core::keymap::{Key, KeyEvent, Modifiers};
-use vim_core::primitives::{Offset, Range};
 
 use crate::bridge;
 use crate::bridge::codec::usize_to_i32;
@@ -188,12 +187,6 @@ fn is_completion_prefix(editor: &Gd<CodeEdit>, ch: char) -> bool {
 /// internally for dot-repeat.
 fn confirm_and_reconcile_completion(engine: &mut VimEngine, editor: &mut Gd<CodeEdit>) {
     let before_text = editor.get_text().to_string();
-    let before_index = bridge::codec::LineIndex::new(&before_text);
-    let before_byte = before_index.line_col_to_byte(
-        &before_text,
-        editor.get_caret_line(),
-        editor.get_caret_column(),
-    );
 
     // CodeEdit replaces `code_completion_base` (the typed prefix) with the
     // selected item's `insert_text`. This is the only mutation.
@@ -207,83 +200,10 @@ fn confirm_and_reconcile_completion(engine: &mut VimEngine, editor: &mut Gd<Code
         editor.get_caret_column(),
     );
 
-    // Completion edits are always a contiguous replacement at the caret:
-    // the typed prefix was deleted and the full completion inserted.
-    //
-    // Find the common prefix (bytes before the edit region), snapping to
-    // a char boundary to avoid slicing mid-UTF-8.
-    let raw_prefix = before_text
-        .bytes()
-        .zip(after_text.bytes())
-        .take_while(|(a, b)| a == b)
-        .count()
-        .min(before_byte);
-    let common_prefix = snap_to_char_boundary_down(&before_text, raw_prefix);
-
-    if before_text == after_text {
-        log::trace!("completion_reconcile: no text change, skipping");
-        return;
-    }
-
-    // Common suffix (bytes after the edit region). Clamped so that
-    // prefix + suffix never exceeds the shorter text — otherwise
-    // overlap produces inverted ranges.
-    let max_suffix = before_text.len().saturating_sub(before_byte)
-        .min(after_text.len().saturating_sub(common_prefix));
-    let raw_suffix = before_text
-        .bytes()
-        .rev()
-        .zip(after_text.bytes().rev())
-        .take_while(|(a, b)| a == b)
-        .count()
-        .min(max_suffix);
-    let common_suffix = before_text.len()
-        - snap_to_char_boundary_up(&before_text, before_text.len() - raw_suffix);
-
-    let deleted_end = before_text.len().saturating_sub(common_suffix);
-    let inserted_end = after_text.len().saturating_sub(common_suffix);
-
-    if common_prefix > deleted_end || common_prefix > inserted_end {
-        return;
-    }
-
-    let deleted_range = Range::new(
-        Offset::new(common_prefix),
-        Offset::new(deleted_end),
+    super::reconcile::reconcile_external_text_change(
+        engine,
+        &before_text,
+        &after_text,
+        after_byte,
     );
-    let deleted_text = &before_text[common_prefix..deleted_end];
-    let inserted_text = &after_text[common_prefix..inserted_end];
-
-    log::debug!(
-        "completion_reconcile: deleted={}b inserted={}b",
-        deleted_end - common_prefix, inserted_end - common_prefix
-    );
-
-    let edit = ExternalEdit::new(
-        deleted_range,
-        inserted_text,
-        Offset::new(after_byte),
-        ExternalEditKind::PasteOrIme,
-    );
-    // Response discarded: CodeEdit already applied the text change.
-    // Processing effects here would double-apply them.
-    let _response = engine.apply_external_edit_with_recording(edit, deleted_text);
-}
-
-/// Snap a byte offset down to the nearest char boundary in `s`.
-fn snap_to_char_boundary_down(s: &str, offset: usize) -> usize {
-    let mut pos = offset.min(s.len());
-    while pos > 0 && !s.is_char_boundary(pos) {
-        pos -= 1;
-    }
-    pos
-}
-
-/// Snap a byte offset up to the nearest char boundary in `s`.
-fn snap_to_char_boundary_up(s: &str, offset: usize) -> usize {
-    let mut pos = offset.min(s.len());
-    while pos < s.len() && !s.is_char_boundary(pos) {
-        pos += 1;
-    }
-    pos
 }

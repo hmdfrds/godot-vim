@@ -533,21 +533,14 @@ impl GodotVimCore {
             "on_text_changed",
             || {
                 if let Some(controller) = &mut self.controller {
-                    controller.invalidate_text_cache();
+                    // Reconcile BEFORE invalidating cache — the cache holds
+                    // pre-change text needed for diffing.
                     if is_external {
-                        let mode = controller.mode();
-                        if matches!(mode,
-                            vim_core::primitives::Mode::Insert
-                            | vim_core::primitives::Mode::Replace
-                            | vim_core::primitives::Mode::VirtualReplace
-                        ) {
-                            log::debug!(
-                                "on_text_changed: external text change detected in {:?} mode \
-                                 (IME/completion/external edit)",
-                                mode
-                            );
+                        if let Some(ref editor) = self.attached_editor {
+                            controller.reconcile_external_text_change(editor);
                         }
                     }
+                    controller.invalidate_text_cache();
                 }
             },
             (),

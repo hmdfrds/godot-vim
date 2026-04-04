@@ -23,6 +23,7 @@ mod norm;
 mod passthrough;
 pub(crate) mod perf;
 mod process;
+pub(crate) mod reconcile;
 pub(crate) mod vimdebug;
 
 use std::collections::HashSet;
@@ -342,6 +343,49 @@ impl VimController {
     /// editor text instead of using a stale cache.
     pub(crate) fn invalidate_text_cache(&mut self) {
         self.transient.persistent_text = None;
+    }
+
+    /// Reconcile an external text change (IME commit, Find-and-Replace, etc.)
+    /// with the engine's undo/dot-repeat tracking.
+    ///
+    /// Must be called BEFORE [`invalidate_text_cache`] — the persistent text
+    /// cache holds the pre-change text needed for diffing.
+    ///
+    /// No-ops when the mode is not insert-like (undo tracking only matters
+    /// during active editing sessions) or when no cached text is available
+    /// (first change after attach).
+    pub(crate) fn reconcile_external_text_change(&mut self, editor: &Gd<CodeEdit>) {
+        use vim_core::primitives::Mode;
+
+        let mode = self.engine.mode();
+        if !matches!(mode, Mode::Insert | Mode::Replace | Mode::VirtualReplace) {
+            return;
+        }
+
+        // Read old text from the cache. If no cache exists (first change
+        // after attach, or cache was invalidated by a prior mutation in
+        // the same frame), we have no baseline to diff against — skip.
+        let Some((_, before_text)) = self.transient.persistent_text.take() else {
+            log::trace!(
+                "reconcile_external: no cached text available, skipping"
+            );
+            return;
+        };
+
+        let after_text = editor.get_text().to_string();
+        let after_index = crate::bridge::codec::LineIndex::new(&after_text);
+        let cursor_byte = after_index.line_col_to_byte(
+            &after_text,
+            editor.get_caret_line(),
+            editor.get_caret_column(),
+        );
+
+        reconcile::reconcile_external_text_change(
+            &mut self.engine,
+            &before_text,
+            &after_text,
+            cursor_byte,
+        );
     }
 
     /// Canonical Tier 1 cleanup: comprehensive internal reset when no editor
