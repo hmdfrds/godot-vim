@@ -135,6 +135,21 @@ pub(crate) fn translate_key(
         }
     }
 
+    // Ctrl+Shift+non-letter: when Shift is held with Ctrl and the key is NOT
+    // a letter (A-Z), prefer the unicode value if it's a printable non-control
+    // character. This captures Ctrl+Shift+2 → '@', Ctrl+Shift+6 → '^', etc.
+    // The shifted symbol already encodes Shift, so strip it from modifiers.
+    if modifiers.contains(Modifiers::CTRL | Modifiers::SHIFT) {
+        if unicode != 0 {
+            if let Some(ch) = char::from_u32(unicode) {
+                if !ch.is_control() && !ch.is_ascii_alphabetic() {
+                    let mods = modifiers & !Modifiers::SHIFT;
+                    return Some(KeyEvent::new(Key::Char(ch), mods));
+                }
+            }
+        }
+    }
+
     // Ctrl+non-letter (e.g. Ctrl+[, Ctrl+]): Godot's unicode is again a
     // control code (Ctrl+[ = U+001B = ESC). We need Key::Char('[') + Ctrl
     // so the engine can match Vim's <C-[>, <C-]>, <C-^> notation.
@@ -448,6 +463,30 @@ mod tests {
                 Key::Char('a'),
                 Modifiers::CTRL | Modifiers::SHIFT
             ))
+        );
+    }
+
+    #[test]
+    fn ctrl_shift_2_produces_ctrl_at() {
+        // Ctrl+Shift+2 on US layout: keycode=KEY_2, unicode='@' (0x40),
+        // ctrl=true, shift=true. Should produce Key::Char('@') + CTRL.
+        let result = translate_key(GodotKey::KEY_2, 0x40, true, false, true, false);
+        assert_eq!(
+            result,
+            Some(KeyEvent::new(Key::Char('@'), Modifiers::CTRL)),
+            "Ctrl+Shift+2 with unicode '@' should produce Ctrl+@"
+        );
+    }
+
+    #[test]
+    fn ctrl_shift_6_produces_ctrl_caret() {
+        // Ctrl+Shift+6 on US layout: keycode=KEY_6, unicode='^' (0x5E),
+        // ctrl=true, shift=true. Should produce Key::Char('^') + CTRL.
+        let result = translate_key(GodotKey::KEY_6, 0x5E, true, false, true, false);
+        assert_eq!(
+            result,
+            Some(KeyEvent::new(Key::Char('^'), Modifiers::CTRL)),
+            "Ctrl+Shift+6 with unicode '^' should produce Ctrl+^"
         );
     }
 
