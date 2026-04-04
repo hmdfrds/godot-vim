@@ -1578,7 +1578,7 @@ mod tests {
     fn ctrl_bracket_left_non_latin_physical_fallback() {
         // Russian layout: logical keycode is Cyrillic х (U+0445),
         // physical keycode is BRACKETLEFT. Should resolve to Ctrl+[.
-        let cyrillic_kc = unsafe { std::mem::transmute::<i32, GodotKey>(0x0445) };
+        let cyrillic_kc = GodotKey::from_ord(0x0445);
         let result = translate_key(
             cyrillic_kc,
             GodotKey::BRACKETLEFT,
@@ -1594,7 +1594,7 @@ mod tests {
 
     #[test]
     fn ctrl_bracket_right_non_latin_physical_fallback() {
-        let cyrillic_kc = unsafe { std::mem::transmute::<i32, GodotKey>(0x044A) };
+        let cyrillic_kc = GodotKey::from_ord(0x044A);
         let result = translate_key(
             cyrillic_kc,
             GodotKey::BRACKETRIGHT,
@@ -1612,7 +1612,7 @@ mod tests {
     fn ctrl_caret_non_latin_physical_fallback() {
         // Ctrl+6 (without Shift) on non-Latin: produces Ctrl+'6', not Ctrl+'^'.
         // To get <C-^> (alternate file), the user must press Ctrl+Shift+6.
-        let cyrillic_kc = unsafe { std::mem::transmute::<i32, GodotKey>(0x0447) };
+        let cyrillic_kc = GodotKey::from_ord(0x0447);
         let result = translate_key(
             cyrillic_kc,
             GodotKey::KEY_6,
@@ -1628,7 +1628,7 @@ mod tests {
 
     #[test]
     fn ctrl_shift_6_non_latin_produces_caret() {
-        let cyrillic_kc = unsafe { std::mem::transmute::<i32, GodotKey>(0x0447) };
+        let cyrillic_kc = GodotKey::from_ord(0x0447);
         let result = translate_key(
             cyrillic_kc,
             GodotKey::KEY_6,
@@ -1644,7 +1644,7 @@ mod tests {
 
     #[test]
     fn ctrl_shift_bracket_non_latin_produces_brace() {
-        let cyrillic_kc = unsafe { std::mem::transmute::<i32, GodotKey>(0x0445) };
+        let cyrillic_kc = GodotKey::from_ord(0x0445);
         let result = translate_key(
             cyrillic_kc,
             GodotKey::BRACKETLEFT,
@@ -1789,7 +1789,7 @@ mod tests {
     fn linux_altgr_russian_still_detected() {
         // Russian AltGr: Physical=Q, Logical=Cyrillic, Unicode='@'.
         // Neither physical 'q' nor Cyrillic matches '@' — AltGr triggers.
-        let cyrillic_kc = unsafe { std::mem::transmute::<i32, GodotKey>(0x0439) };
+        let cyrillic_kc = GodotKey::from_ord(0x0439);
         let result = translate_key(
             cyrillic_kc,
             GodotKey::Q,
@@ -1807,7 +1807,7 @@ mod tests {
 
     #[test]
     fn alt_non_latin_gets_latin_key() {
-        let cyrillic_kc = unsafe { std::mem::transmute::<i32, GodotKey>(0x043E) };
+        let cyrillic_kc = GodotKey::from_ord(0x043E);
         let result = translate_key(
             cyrillic_kc,
             GodotKey::J,
@@ -1826,7 +1826,7 @@ mod tests {
 
     #[test]
     fn meta_non_latin_gets_latin_key() {
-        let cyrillic_kc = unsafe { std::mem::transmute::<i32, GodotKey>(0x043E) };
+        let cyrillic_kc = GodotKey::from_ord(0x043E);
         let result = translate_key(
             cyrillic_kc,
             GodotKey::J,
@@ -1856,7 +1856,7 @@ mod tests {
 
     #[test]
     fn ctrl_non_latin_no_latin_key() {
-        let cyrillic_kc = unsafe { std::mem::transmute::<i32, GodotKey>(0x043E) };
+        let cyrillic_kc = GodotKey::from_ord(0x043E);
         let result = translate_key(
             cyrillic_kc,
             GodotKey::J,
@@ -1868,6 +1868,56 @@ mod tests {
             event.latin_key(),
             None,
             "Ctrl + non-Latin should NOT carry latin_key (uses resolve_ctrl_key)"
+        );
+    }
+
+    // ── Minor test coverage gaps (Round 23 audit) ─────────────────────────
+
+    #[test]
+    fn bare_numlock_returns_none() {
+        assert_eq!(
+            translate_key(GodotKey::NUMLOCK, GodotKey::NUMLOCK, 0, false, false, false, false),
+            None
+        );
+    }
+
+    #[test]
+    fn bare_scrolllock_returns_none() {
+        assert_eq!(
+            translate_key(GodotKey::SCROLLLOCK, GodotKey::SCROLLLOCK, 0, false, false, false, false),
+            None
+        );
+    }
+
+    #[test]
+    fn physical_to_ascii_none_returns_none() {
+        assert_eq!(physical_to_ascii(GodotKey::NONE, false), None);
+        assert_eq!(physical_to_ascii(GodotKey::NONE, true), None);
+    }
+
+    #[test]
+    fn ctrl_unrecognized_key_zero_unicode_returns_none() {
+        assert_eq!(
+            translate_key(GodotKey::LAUNCHMAIL, GodotKey::LAUNCHMAIL, 0, true, false, false, false),
+            None,
+            "Ctrl + unrecognized non-printable key should return None"
+        );
+    }
+
+    #[test]
+    fn ctrl_shift_non_letter_zero_unicode_uses_physical_fallback() {
+        // Ctrl+Shift+KEY_6 with unicode=0: Step 4 skipped (unicode=0),
+        // Step 5 matches KEY_6 as ASCII graphic '6', shift=true so
+        // physical_to_ascii(KEY_6, true) = '^', Shift stripped.
+        let result = translate_key(
+            GodotKey::KEY_6, GodotKey::KEY_6,
+            0,
+            true, false, true, false,
+        );
+        assert_eq!(
+            result,
+            Some(KeyEvent::new(Key::Char('^'), Modifiers::CTRL)),
+            "Ctrl+Shift+6 with unicode=0 should produce Ctrl+'^' via Step 5 shift handling"
         );
     }
 }

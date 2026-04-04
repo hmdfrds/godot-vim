@@ -67,6 +67,9 @@ impl GodotVimCore {
                         | vim_core::primitives::Mode::Visual(_)
                         | vim_core::primitives::Mode::OperatorPending(_)
                     );
+                    // Select mode intentionally excluded — it's insert-like,
+                    // so Ctrl+H/J/K/L should reach the engine (backspace,
+                    // newline, etc.), not navigate panels.
                     if !is_nav_mode {
                         return false;
                     }
@@ -163,6 +166,14 @@ impl GodotVimCore {
                         log::trace!("gui_input: IME compose active in {:?}, passing through key={}", mode, key);
                         return;
                     }
+                } else {
+                    // Stale IME composition in a non-insert mode — cancel it.
+                    // This shouldn't happen (deactivate_ime cancels on mode exit),
+                    // but some platforms/IMEs can leave stale state.
+                    log::debug!("gui_input: cancelling stale IME in {:?}", mode);
+                    let mut ed = editor.clone();
+                    ed.cancel_ime();
+                    // Fall through — key reaches the engine normally
                 }
             }
         }
