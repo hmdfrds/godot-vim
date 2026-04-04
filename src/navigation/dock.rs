@@ -77,9 +77,9 @@ pub(crate) fn handle_dock_input(
         return DockInputResult::Ignored;
     }
 
-    // hjkl uses logical-then-physical fallback for non-Latin layout support.
-    // Other keys (/, Enter, Esc) use logical keycode only — they are not
-    // affected by keyboard layout (special keys, not letters).
+    // hjkl and / use logical-then-physical fallback for non-Latin layout support.
+    // Enter and Esc use logical keycode only — they are special keys with
+    // layout-independent keycodes.
     if let Some(direction) = dock_hjkl(key_event) {
         return match direction {
             DockHjkl::Down => {
@@ -117,10 +117,13 @@ pub(crate) fn handle_dock_input(
         };
     }
 
-    match key_event.get_keycode() {
+    let keycode = key_event.get_keycode();
+    let physical = key_event.get_physical_keycode();
+    match keycode {
         Key::SLASH => handle_slash(&focused),
         Key::ENTER => handle_enter(&focused, dock_kind),
         Key::ESCAPE => handle_escape_from_dock(),
+        _ if physical == Key::SLASH => handle_slash(&focused),
         _ => DockInputResult::Ignored,
     }
 }
