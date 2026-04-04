@@ -649,20 +649,18 @@ impl ProcessContext<'_> {
     // then host policy (F-keys, Alt/Meta), then the engine's own judgment.
 
     fn should_passthrough_key(&self, key: KeyEvent) -> bool {
-        // Normalize non-Latin keys for mapping lookup so that e.g.
-        // Alt+Cyrillic-о matches a user's <A-j> mapping.
-        let mapping_key = if let Some(latin) = key.latin_key() {
-            KeyEvent::new(latin, key.modifiers())
-        } else {
-            key
-        };
+        // Normalize non-Latin keys for mapping and passthrough lookup so that e.g.
+        // Alt+Cyrillic-о matches a user's <A-j> mapping or passthrough entry.
+        let mapping_key = normalize_key_for_mapping(key);
 
         // Mappings always take priority — never passthrough mid-sequence.
         if self.engine.has_pending_mapping() || self.engine.could_start_mapping(mapping_key) {
             return false;
         }
 
-        if self.passthrough_keys.contains(&key) {
+        // User overrides: check both raw and normalized keys so that a passthrough
+        // entry for 'j' works on both Latin and non-Latin layouts.
+        if self.passthrough_keys.contains(&key) || self.passthrough_keys.contains(&mapping_key) {
             return true;
         }
 
@@ -689,6 +687,19 @@ impl ProcessContext<'_> {
         self.engine.resolve_timeout();
         self.drain_pending(editor);
         self.ensure_undo_balanced(editor);
+    }
+}
+
+/// Normalize a non-Latin [`KeyEvent`] to its Latin equivalent for mapping/passthrough lookup.
+///
+/// If the event carries a `latin_key` (e.g. the physical `j` key on a Cyrillic layout), a new
+/// [`KeyEvent`] is returned with that Latin key and the original modifiers intact.  If there is
+/// no Latin override the event is returned unchanged.
+fn normalize_key_for_mapping(key: KeyEvent) -> KeyEvent {
+    if let Some(latin) = key.latin_key() {
+        KeyEvent::new(latin, key.modifiers())
+    } else {
+        key
     }
 }
 
@@ -756,4 +767,52 @@ fn update_ime_position(editor: &Gd<CodeEdit>) {
         "IME position updated to ({}, {}) window_id={}",
         ime_pos.x, ime_pos.y, window_id
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vim_core::keymap::{Key, KeyEvent, Modifiers};
+
+    #[test]
+    fn normalize_with_latin_key_returns_latin() {
+        let cyrillic_event = KeyEvent::new(Key::Char('\u{043E}'), Modifiers::ALT)
+            .with_latin(Key::Char('j'));
+        let normalized = normalize_key_for_mapping(cyrillic_event);
+        assert_eq!(normalized.key(), Key::Char('j'));
+        assert_eq!(normalized.modifiers(), Modifiers::ALT);
+    }
+
+    #[test]
+    fn normalize_without_latin_key_returns_original() {
+        let ascii_event = KeyEvent::new(Key::Char('j'), Modifiers::ALT);
+        let normalized = normalize_key_for_mapping(ascii_event);
+        assert_eq!(normalized.key(), Key::Char('j'));
+        assert_eq!(normalized.modifiers(), Modifiers::ALT);
+    }
+
+    #[test]
+    fn normalize_preserves_ctrl_modifier() {
+        let event = KeyEvent::new(Key::Char('\u{043E}'), Modifiers::CTRL | Modifiers::ALT)
+            .with_latin(Key::Char('j'));
+        let normalized = normalize_key_for_mapping(event);
+        assert_eq!(normalized.key(), Key::Char('j'));
+        assert_eq!(normalized.modifiers(), Modifiers::CTRL | Modifiers::ALT);
+    }
+
+    #[test]
+    fn normalize_no_modifiers() {
+        let event = KeyEvent::new(Key::Char('\u{043E}'), Modifiers::NONE)
+            .with_latin(Key::Char('j'));
+        let normalized = normalize_key_for_mapping(event);
+        assert_eq!(normalized.key(), Key::Char('j'));
+        assert_eq!(normalized.modifiers(), Modifiers::NONE);
+    }
+
+    #[test]
+    fn normalize_special_key_unchanged() {
+        let event = KeyEvent::new(Key::Escape, Modifiers::NONE);
+        let normalized = normalize_key_for_mapping(event);
+        assert_eq!(normalized.key(), Key::Escape);
+    }
 }
