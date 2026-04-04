@@ -192,14 +192,14 @@ impl ProcessContext<'_> {
 
         // ── IME lifecycle ─────────────────────────────────────────────────
         //
-        // Activate the OS input method when entering Insert/Replace so CJK
-        // input works; deactivate it when returning to Normal so keystrokes
-        // aren't intercepted by the IME.
+        // Activate the OS input method when entering Insert/Replace/CommandLine
+        // so CJK input works; deactivate it when returning to Normal so
+        // keystrokes aren't intercepted by the IME.
         {
             let mode_after = self.engine.mode();
             if mode_after != mode_before {
-                let was_insert_like = mode_before.is_insert() || mode_before.is_replace();
-                let is_insert_like = mode_after.is_insert() || mode_after.is_replace();
+                let was_insert_like = mode_before.is_insert() || mode_before.is_replace() || mode_before.is_command_line();
+                let is_insert_like = mode_after.is_insert() || mode_after.is_replace() || mode_after.is_command_line();
                 if !was_insert_like && is_insert_like {
                     activate_ime(editor);
                 } else if was_insert_like && !is_insert_like {
