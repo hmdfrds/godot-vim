@@ -676,18 +676,35 @@ impl ProcessContext<'_> {
 ///
 /// Cancels any in-progress composition first, then enables the OS IME so that
 /// CJK and other complex input methods work while the user is typing.
+/// Targets the editor's actual window (not MAIN_WINDOW_ID) so floating
+/// script editors get correct IME activation on Windows.
 fn activate_ime(editor: &mut Gd<CodeEdit>) {
     editor.cancel_ime();
-    DisplayServer::singleton().window_set_ime_active(true);
-    log::trace!("IME activated for insert mode");
+    let window_id = editor
+        .get_window()
+        .map(|w| w.get_window_id())
+        .unwrap_or(DisplayServer::MAIN_WINDOW_ID);
+    DisplayServer::singleton()
+        .window_set_ime_active_ex(true)
+        .window_id(window_id)
+        .done();
+    log::trace!("IME activated for insert mode (window_id={})", window_id);
 }
 
 /// Deactivate IME when leaving text input modes.
 ///
 /// Cancels any in-progress composition and disables the OS IME so that Normal
 /// mode keystrokes are not intercepted by the input method.
+/// Targets the editor's actual window for floating script editor support.
 fn deactivate_ime(editor: &mut Gd<CodeEdit>) {
     editor.cancel_ime();
-    DisplayServer::singleton().window_set_ime_active(false);
-    log::trace!("IME deactivated (left insert mode)");
+    let window_id = editor
+        .get_window()
+        .map(|w| w.get_window_id())
+        .unwrap_or(DisplayServer::MAIN_WINDOW_ID);
+    DisplayServer::singleton()
+        .window_set_ime_active_ex(false)
+        .window_id(window_id)
+        .done();
+    log::trace!("IME deactivated (window_id={})", window_id);
 }
