@@ -711,6 +711,7 @@ impl GodotVimCore {
         // Always reset — trivially infallible (u32 assignment), must happen
         // regardless of whether recovery itself panicked.
         self.pending_caret_suppressions = 0;
+        self.processing_key = false;
         // Clear pending tooltip directly rather than via cancel_pending_tooltip()
         // because set_process(false) is safe here (poll_pending_tooltip won't
         // run again until re-enabled) and direct field clear is simpler in a

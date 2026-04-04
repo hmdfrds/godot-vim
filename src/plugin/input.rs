@@ -11,6 +11,7 @@ use crate::controller::VimController;
 use crate::navigation::{self, classify_focus, FocusContext};
 use crate::ui::UiCoordinator;
 
+use super::processing_guard::ProcessingKeyGuard;
 use super::GodotVimCore;
 
 impl GodotVimCore {
@@ -129,15 +130,13 @@ impl GodotVimCore {
         // the keystroke actually moved the cursor (see suppression below).
         let pos_before = (ed.get_caret_line(), ed.get_caret_column());
 
-        self.processing_key = true;
         let consumed = {
+            let _guard = ProcessingKeyGuard::new(&mut self.processing_key);
             let Some(controller) = &mut self.controller else {
-                self.processing_key = false;
                 return;
             };
             controller.process_cycle(key, &mut ed)
         };
-        self.processing_key = false;
 
         let snap = {
             let Some(controller) = &mut self.controller else { return; };
@@ -222,11 +221,14 @@ impl GodotVimCore {
         // whether the resolved keys actually moved the cursor.
         let pos_before = (ed.get_caret_line(), ed.get_caret_column());
 
-        let had_operations = if let Some(controller) = &mut self.controller {
-            controller.resolve_mapping_timeout(&mut ed);
-            controller.operations_this_cycle() > 0
-        } else {
-            false
+        let had_operations = {
+            let _guard = ProcessingKeyGuard::new(&mut self.processing_key);
+            if let Some(controller) = &mut self.controller {
+                controller.resolve_mapping_timeout(&mut ed);
+                controller.operations_this_cycle() > 0
+            } else {
+                false
+            }
         };
 
         let editor_id = ed.instance_id();
