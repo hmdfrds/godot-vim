@@ -153,7 +153,7 @@ fn physical_to_ascii(physical: GodotKey, shift: bool) -> Option<char> {
 /// 2. Logical letter A-Z → lowercase letter
 /// 3. Physical letter A-Z → lowercase letter (non-Latin fallback)
 /// 4. Ctrl+Shift + printable non-alpha unicode → unicode char (Shift stripped)
-/// 5. Logical keycode is ASCII graphic → that character
+/// 5. Logical keycode is ASCII graphic → shifted symbol or lowercase (Shift stripped for symbols)
 /// 6. Physical keycode via `physical_to_ascii` → US-QWERTY character
 fn resolve_ctrl_key(
     keycode: GodotKey,
@@ -208,17 +208,28 @@ fn resolve_ctrl_key(
     }
 
     // Step 5: Logical keycode is ASCII graphic (e.g. Ctrl+[ on Latin layouts).
+    // For symbols with Shift, derive the shifted character from physical keycode
+    // and strip Shift — same convention as Step 6.
     if let Some(ch) = u32::try_from(key_val).ok().and_then(char::from_u32) {
         if ch.is_ascii_graphic() {
+            let has_shift = modifiers.contains(Modifiers::SHIFT);
+            let (resolved_ch, mods) = if has_shift && !ch.is_ascii_alphabetic() {
+                // Shifted symbol: derive from physical (e.g., Shift+[ → {).
+                // Letters never reach here (Steps 2/3 catch them), but the
+                // guard is defense-in-depth.
+                let shifted = physical_to_ascii(physical_keycode, true)
+                    .unwrap_or(ch);
+                (shifted, modifiers & !Modifiers::SHIFT)
+            } else {
+                (ch.to_ascii_lowercase(), modifiers)
+            };
             log::trace!(
-                "resolve_ctrl_key: logical keycode {:?} -> Key::Char({:?})",
+                "resolve_ctrl_key: logical keycode {:?} shift={} -> Key::Char({:?})",
                 keycode,
-                ch
+                has_shift,
+                resolved_ch
             );
-            return Some(KeyEvent::new(
-                Key::Char(ch.to_ascii_lowercase()),
-                modifiers,
-            ));
+            return Some(KeyEvent::new(Key::Char(resolved_ch), mods));
         }
     }
 
@@ -1652,6 +1663,47 @@ mod tests {
         let result = translate_key(
             GodotKey::BRACKETLEFT,
             GodotKey::BRACKETLEFT,
+            0x1B,
+            true, false, false, false,
+        );
+        assert_eq!(
+            result,
+            Some(KeyEvent::new(Key::Char('['), Modifiers::CTRL)),
+        );
+    }
+
+    #[test]
+    fn ctrl_shift_bracket_left_latin_produces_brace() {
+        let result = translate_key(
+            GodotKey::BRACKETLEFT, GodotKey::BRACKETLEFT,
+            0x1B,
+            true, false, true, false,
+        );
+        assert_eq!(
+            result,
+            Some(KeyEvent::new(Key::Char('{'), Modifiers::CTRL)),
+            "Ctrl+Shift+[ on Latin should produce Ctrl+'{{' with Shift stripped"
+        );
+    }
+
+    #[test]
+    fn ctrl_shift_bracket_right_latin_produces_brace() {
+        let result = translate_key(
+            GodotKey::BRACKETRIGHT, GodotKey::BRACKETRIGHT,
+            0x1D,
+            true, false, true, false,
+        );
+        assert_eq!(
+            result,
+            Some(KeyEvent::new(Key::Char('}'), Modifiers::CTRL)),
+            "Ctrl+Shift+] on Latin should produce Ctrl+'}}' with Shift stripped"
+        );
+    }
+
+    #[test]
+    fn ctrl_bracket_left_latin_no_shift_unchanged() {
+        let result = translate_key(
+            GodotKey::BRACKETLEFT, GodotKey::BRACKETLEFT,
             0x1B,
             true, false, false, false,
         );
