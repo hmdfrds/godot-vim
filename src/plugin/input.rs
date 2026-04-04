@@ -120,8 +120,12 @@ impl GodotVimCore {
 
         // IME compose guard: when TextEdit is actively composing (CJK input,
         // dead keys, alt-code unicode), don't consume the key — let it flow
-        // through to TextEdit's native IME handling. Only guard in Insert/Replace
-        // modes where text input is expected.
+        // through to TextEdit's native IME handling. Guards text-input modes
+        // (Insert/Replace/CommandLine) where IME composition is meaningful.
+        //
+        // Escape-class keys (Escape, Ctrl+C, Ctrl+[) force-cancel the IME
+        // composition so the user can always exit — even if the IME framework
+        // doesn't cancel on Escape by itself.
         if editor.has_ime_text() {
             if let Some(controller) = &self.controller {
                 let mode = controller.mode();
@@ -129,9 +133,20 @@ impl GodotVimCore {
                     vim_core::primitives::Mode::Insert
                     | vim_core::primitives::Mode::Replace
                     | vim_core::primitives::Mode::VirtualReplace
+                    | vim_core::primitives::Mode::CommandLine
                 ) {
-                    log::trace!("gui_input: IME compose active in {:?}, passing through key={}", mode, key);
-                    return;
+                    let is_escape_key = matches!(key.key(), vim_core::keymap::Key::Escape)
+                        || key == vim_core::keymap::KeyEvent::ctrl('c')
+                        || key == vim_core::keymap::KeyEvent::ctrl('[');
+                    if is_escape_key {
+                        log::debug!("gui_input: force-cancelling IME for escape key={}", key);
+                        let mut ed = editor.clone();
+                        ed.cancel_ime();
+                        // Fall through — Escape reaches the engine
+                    } else {
+                        log::trace!("gui_input: IME compose active in {:?}, passing through key={}", mode, key);
+                        return;
+                    }
                 }
             }
         }
