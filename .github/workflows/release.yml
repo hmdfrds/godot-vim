@@ -12,7 +12,7 @@ jobs:
   build-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 
       - name: Configure private repo access
         shell: bash
@@ -20,25 +20,30 @@ jobs:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8  # stable
         with:
           targets: x86_64-unknown-linux-gnu
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32  # v2
         with:
           key: linux
 
       - run: cargo build --release --locked --target x86_64-unknown-linux-gnu
 
-      - uses: actions/upload-artifact@v4
+      - name: Generate checksum
+        run: sha256sum target/x86_64-unknown-linux-gnu/release/libgodot_vim.so > libgodot_vim.so.sha256
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: libgodot_vim.so
-          path: target/x86_64-unknown-linux-gnu/release/libgodot_vim.so
+          path: |
+            target/x86_64-unknown-linux-gnu/release/libgodot_vim.so
+            libgodot_vim.so.sha256
 
   build-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 
       - name: Configure private repo access
         shell: bash
@@ -46,25 +51,30 @@ jobs:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8  # stable
         with:
           targets: x86_64-pc-windows-msvc
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32  # v2
         with:
           key: windows
 
       - run: cargo build --release --locked --target x86_64-pc-windows-msvc
 
-      - uses: actions/upload-artifact@v4
+      - name: Generate checksum
+        run: Get-FileHash target\x86_64-pc-windows-msvc\release\godot_vim.dll -Algorithm SHA256 | Select-Object -ExpandProperty Hash | Out-File godot_vim.dll.sha256
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: godot_vim.dll
-          path: target/x86_64-pc-windows-msvc/release/godot_vim.dll
+          path: |
+            target/x86_64-pc-windows-msvc/release/godot_vim.dll
+            godot_vim.dll.sha256
 
   build-macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
 
       - name: Configure private repo access
         shell: bash
@@ -72,11 +82,11 @@ jobs:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: git config --global url."https://x-access-token:${GH_PAT}@github.com/".insteadOf "https://github.com/"
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8  # stable
         with:
           targets: aarch64-apple-darwin, x86_64-apple-darwin
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32  # v2
         with:
           key: macos
 
@@ -93,23 +103,30 @@ jobs:
             target/x86_64-apple-darwin/release/libgodot_vim.dylib \
             -output libgodot_vim.dylib
 
-      - uses: actions/upload-artifact@v4
+      - name: Generate checksum
+        run: shasum -a 256 libgodot_vim.dylib > libgodot_vim.dylib.sha256
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4
         with:
           name: libgodot_vim.dylib
-          path: libgodot_vim.dylib
+          path: |
+            libgodot_vim.dylib
+            libgodot_vim.dylib.sha256
 
   release:
     needs: [build-linux, build-windows, build-macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
+      attestations: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           fetch-depth: 0
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4
         with:
           path: artifacts
 
@@ -122,7 +139,7 @@ jobs:
 
       - name: VirusTotal Scan
         id: vt
-        uses: crazy-max/ghaction-virustotal@v4
+        uses: crazy-max/ghaction-virustotal@d34968c958ae283fe976efed637081b9f9dcf74f  # v4
         with:
           vt_api_key: ${{ secrets.VT_API_KEY }}
           request_rate: 4
@@ -130,6 +147,16 @@ jobs:
             addons/godot_vim/bin/libgodot_vim.so
             addons/godot_vim/bin/godot_vim.dll
             addons/godot_vim/bin/libgodot_vim.dylib
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be  # v2
+        with:
+          subject-path: 'addons/godot_vim/bin/*'
+
+      - name: Generate SBOM
+        run: |
+          cargo install cargo-cyclonedx
+          cargo cyclonedx --format json --output-file vim-core-sbom.cdx.json
 
       - name: Generate release body
         id: body
@@ -268,7 +295,7 @@ jobs:
           zip -r "godot-vim-${VERSION}.zip" "$STAGE"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2
         with:
           tag_name: ${{ inputs.version }}
           name: GodotVim ${{ inputs.version }}
@@ -278,3 +305,7 @@ jobs:
             addons/godot_vim/bin/libgodot_vim.so
             addons/godot_vim/bin/godot_vim.dll
             addons/godot_vim/bin/libgodot_vim.dylib
+            artifacts/libgodot_vim.so/libgodot_vim.so.sha256
+            artifacts/godot_vim.dll/godot_vim.dll.sha256
+            artifacts/libgodot_vim.dylib/libgodot_vim.dylib.sha256
+            vim-core-sbom.cdx.json
