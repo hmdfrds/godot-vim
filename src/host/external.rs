@@ -178,6 +178,7 @@ pub(super) fn handle_filter(
         replacement: CompactString::from(output),
         cursor_offset: None,
         stderr,
+        mark_dot_offset: None,
     }
 }
 
@@ -230,6 +231,7 @@ pub(super) fn handle_reindent(
         replacement: CompactString::from(replacement),
         cursor_offset: None,
         stderr: None,
+        mark_dot_offset: None,
     }
 }
 

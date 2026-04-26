@@ -536,8 +536,46 @@ pub(crate) fn dispatch_pass2_effect(
         // Produced by the compose middleware when Insert+Delete annihilate.
         Effect::Noop => {}
 
+        // ── Engine-internal: exchange state (processed by effect_processor) ──
+        Effect::SetExchangeState { .. }
+        | Effect::ClearExchangeState => {
+            log::trace!("[internal] exchange state update");
+        }
+
+        // ── Engine-internal: substitute confirm (processed by effect_processor) ──
+        Effect::SubstituteConfirmShow { .. }
+        | Effect::SubstituteConfirmEnd
+        | Effect::SetSubstituteConfirmState { .. }
+        | Effect::ClearSubstituteConfirmState => {
+            log::trace!("[internal] substitute confirm state update");
+        }
+
+        // ── Engine-internal: syntax selection (VS Code / multi-cursor) ──
+        Effect::SyntaxSelectionPush { .. }
+        | Effect::SyntaxSelectionPop => {
+            log::trace!("[internal] syntax selection (no-op in CodeEdit)");
+        }
+
+        // ── Engine-internal: multi-selection / block selection state ─────
+        Effect::HighlightRows { .. }
+        | Effect::SetBlockSelections { .. }
+        | Effect::SaveSelections { .. }
+        | Effect::RestoreSelections { .. }
+        | Effect::SelectNextMatch { .. }
+        | Effect::SelectPreviousMatch { .. }
+        | Effect::SelectSyntaxNode { .. } => {
+            log::trace!("[internal] multi-selection effect (no-op in CodeEdit)");
+        }
+
+        // ── Engine-internal: scroll half-count (state-only) ─────────────
+        Effect::SetScrollHalfCount { .. } => {
+            log::trace!("[internal] SetScrollHalfCount");
+        }
+
+        // ── Forward compatibility for #[non_exhaustive] ─────────────────
+        // New effects from future vim-core versions are expected and benign.
         effect => {
-            log::error!("dispatch: unhandled effect {:?}", effect);
+            log::debug!("dispatch: unknown effect from newer vim-core: {:?}", effect);
         }
     }
 }
@@ -562,7 +600,7 @@ fn dispatch_cursor_effect(
 
 fn dispatch_mode_effect(effect: Effect, editor: &mut impl IdeCapable) {
     match effect {
-        Effect::SetMode { mode } => {
+        Effect::SetMode { mode, .. } => {
             mode::handle_set_mode(editor, mode);
         }
         Effect::CommandLineEdit(edit) => {

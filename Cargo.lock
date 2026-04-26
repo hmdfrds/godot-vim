@@ -353,6 +353,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a846cbc04412cf509efcd8f3694b114fc700a035fb5a37f21517f9fb019f1ebc"
 
 [[package]]
+name = "nonmax"
+version = "0.5.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "610a5acd306ec67f907abe5567859a3c693fb9886eb1f012ab8f2a47bef3db51"
+
+[[package]]
 name = "num-traits"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -739,8 +745,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vim-core"
-version = "0.4.0"
-source = "git+https://github.com/hmdfrds/vim-core.git?tag=v0.4.0#c5ac6795bd97f8b83e9962bdaabc241a4e7545ac"
+version = "0.1.0"
 dependencies = [
  "ahash",
  "arrayvec",
@@ -749,6 +754,7 @@ dependencies = [
  "compact_str",
  "derive_more",
  "memchr",
+ "nonmax",
  "smallvec",
  "smart-default",
  "static_assertions",

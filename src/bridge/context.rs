@@ -76,6 +76,12 @@ pub(crate) struct GodotIndentProvider<'a> {
     editor: &'a Gd<CodeEdit>,
 }
 
+// SAFETY: GodotIndentProvider is only constructed and used on the main thread
+// (Godot's scene tree callback path). The `Send` bound on `IndentProvider`
+// exists for hosts that may transfer providers across threads; Godot's
+// single-threaded model ensures no actual cross-thread transfer occurs.
+unsafe impl Send for GodotIndentProvider<'_> {}
+
 impl IndentProvider for GodotIndentProvider<'_> {
     fn indent_for_new_line(&self, line: LineNumber) -> compact_str::CompactString {
         use compact_str::CompactString;

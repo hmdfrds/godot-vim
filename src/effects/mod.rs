@@ -12,7 +12,7 @@ pub(crate) mod cursor;
 pub(crate) mod dispatch;
 pub(crate) mod messages;
 pub(crate) mod mode;
-mod navigation;
+pub(crate) mod navigation;
 mod registers;
 pub(crate) mod scroll;
 pub(crate) mod search;

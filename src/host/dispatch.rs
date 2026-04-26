@@ -150,6 +150,7 @@ pub(crate) fn execute(
             range,
             motion_type: _,
             input_text,
+            ..
         } => super::external::handle_reindent(
             request.id(),
             editor,
@@ -298,10 +299,125 @@ pub(crate) fn execute(
             }
         }
 
+        // ── Window management ────────────────────────────────────────────
+        // Godot uses a single-editor-per-tab model. Window split/resize
+        // operations have no meaningful mapping, but nav commands can map
+        // to tab switching (handled via CompoundAction in effect dispatch).
+        // As host requests they return descriptive failures.
+        HostRequest::SplitWindow { .. } => {
+            host_failure(request.id(), "Window splitting is not supported in the Godot editor")
+        }
+        HostRequest::CloseWindow { meta: _, force } => {
+            let mut host = super::GodotEditorHost(editor);
+            super::file::handle_quit(request.id(), &mut host, ForceOverride::from(*force))
+        }
+        HostRequest::CloseOtherWindows { .. } => {
+            host_failure(request.id(), "Window management is not supported in the Godot editor")
+        }
+        HostRequest::WriteAll { .. } => {
+            // TODO: iterate all open scripts and save each
+            host_failure(request.id(), ":wall is not yet supported in the Godot editor")
+        }
+        HostRequest::QuitAll { meta: _, force } => {
+            let mut host = super::GodotEditorHost(editor);
+            super::file::handle_quit(request.id(), &mut host, ForceOverride::from(*force))
+        }
+        HostRequest::WriteQuitAll { .. } => {
+            let mut host = super::GodotEditorHost(editor);
+            super::file::handle_write_quit(request.id(), &mut host, ForceOverride::Normal)
+        }
+        HostRequest::CloseBuffer { meta: _, force, .. } => {
+            let mut host = super::GodotEditorHost(editor);
+            super::file::handle_quit(request.id(), &mut host, ForceOverride::from(*force))
+        }
+
+        // ── Window navigation (Ctrl-W commands) ─────────────────────────
+        // These are now routed as HostRequests rather than Effects. In
+        // Godot's tab model, nav commands map to tab switching.
+        HostRequest::WindowNext { .. } => {
+            super::buffer::handle_switch_buffer(request.id(), 1)
+        }
+        HostRequest::WindowPrev { .. } => {
+            super::buffer::handle_switch_buffer(request.id(), -1)
+        }
+        HostRequest::WindowMoveLeft { .. } => {
+            super::buffer::handle_switch_buffer(request.id(), -1)
+        }
+        HostRequest::WindowMoveRight { .. } => {
+            super::buffer::handle_switch_buffer(request.id(), 1)
+        }
+        HostRequest::WindowMoveUp { .. } => {
+            super::buffer::handle_switch_buffer(request.id(), -1)
+        }
+        HostRequest::WindowMoveDown { .. } => {
+            super::buffer::handle_switch_buffer(request.id(), 1)
+        }
+        // No meaningful mapping in Godot's single-editor-per-tab model.
+        HostRequest::WindowRotateDown { .. }
+        | HostRequest::WindowRotateUp { .. }
+        | HostRequest::WindowEqualSize { .. }
+        | HostRequest::WindowIncreaseHeight { .. }
+        | HostRequest::WindowDecreaseHeight { .. }
+        | HostRequest::WindowIncreaseWidth { .. }
+        | HostRequest::WindowDecreaseWidth { .. } => {
+            log::trace!("Window resize/rotate request (no-op in Godot single-editor)");
+            host_success(request.id())
+        }
+
+        // ── LSP / Navigation ────────────────────────────────────────────
+        HostRequest::GotoDefinition { .. } => {
+            let mut port = crate::bridge::port_impl::CodeEditPort(editor);
+            crate::effects::navigation::handle_goto_definition(&mut port);
+            host_success(request.id())
+        }
+        HostRequest::ShowDocumentation { .. } => {
+            let mut port = crate::bridge::port_impl::CodeEditPort(editor);
+            crate::effects::navigation::handle_show_documentation(&mut port);
+            host_success(request.id())
+        }
+
+        // ── Command-line / extension ────────────────────────────────────
+        HostRequest::OpenCommandWindow { .. } => {
+            log::warn!("q: / q/ command window not supported in CodeEdit");
+            host_failure(request.id(), "E11: Command window not supported in CodeEdit")
+        }
+        HostRequest::CallOperatorFunc { .. } => {
+            log::warn!("operatorfunc (g@) not yet supported in the Godot editor");
+            host_failure(request.id(), "E774: operatorfunc (g@) not yet supported")
+        }
+        HostRequest::ExecuteNorm { .. } => {
+            // :norm is handled as a compound action in effect dispatch, not
+            // as a host request. If it arrives here, something is unexpected.
+            log::warn!("ExecuteNorm arrived as host request — expected compound action path");
+            host_failure(request.id(), ":norm host request routing not expected in Godot editor")
+        }
+
+        // ── Global mark / action / cmdline completion ───────────────────
+        HostRequest::JumpToGlobalMark { meta: _, buffer_id, offset: jump_offset, .. } => {
+            super::buffer::handle_jump_to_buffer(
+                request.id(),
+                buffer_id.get(),
+                jump_offset.get(),
+                buffer_id,
+            )
+        }
+        HostRequest::RunAction { meta: _, ref name } => {
+            log::debug!("RunAction: {}", name);
+            host_failure(request.id(), format!("Host action '{}' is not available in the Godot editor", name))
+        }
+        HostRequest::RequestCmdlineCompletion { .. } => {
+            // Return empty candidates — Godot doesn't provide cmdline completion.
+            HostResult::CmdlineCompletionCandidates {
+                id: request.id(),
+                candidates: Vec::new(),
+            }
+        }
+
+        // ── Forward compatibility for #[non_exhaustive] ─────────────────
         _ => {
             let kind = format!("{:?}", request.kind());
-            log::warn!("Unhandled host request variant: {kind}");
-            host_failure(request.id(), format!("Unhandled host request: {kind}"))
+            log::debug!("Unknown host request variant from newer vim-core: {kind}");
+            host_failure(request.id(), format!("Unsupported host request: {kind}"))
         }
     }
 }
