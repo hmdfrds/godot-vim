@@ -17,6 +17,7 @@ pub(crate) mod code_edit_ext;
 pub(crate) mod codec;
 pub(crate) mod context;
 pub(crate) mod godot_calls;
+pub(crate) mod godot_host;
 pub(crate) mod document;
 pub(crate) mod input;
 pub(crate) mod port;
