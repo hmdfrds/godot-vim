@@ -67,10 +67,8 @@ impl GodotVimCore {
         let caret_callable = self.base().callable("on_caret_changed");
         connect_deferred(&mut editor, SIG_CARET_CHANGED, &caret_callable);
 
-        // Catches external text changes (Find-and-Replace, plugins, auto-format)
-        // that bypass the Vim keystroke pipeline. Vim-driven edits already
-        // invalidate the cache inline, so this is harmless but necessary for
-        // external edits.
+        // Godot requires the connected handler to exist; the handler is a
+        // no-op (engine-handled insert keeps state in sync via effects).
         let text_changed_callable = self.base().callable("on_text_changed");
         connect_deferred(&mut editor, SIG_TEXT_CHANGED, &text_changed_callable);
 
