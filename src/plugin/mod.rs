@@ -616,11 +616,15 @@ impl GodotVimCore {
 impl GodotVimCore {
     /// Execute a pending UI action that requires plugin-level access (scene tree,
     /// settings snapshot) which the controller cannot reach directly.
+    ///
+    /// Only `OpenMappingDialog` and `SourceConfigFile` reach the plugin layer;
+    /// the controller handles all other variants inline before storing. The
+    /// catch-all arm is defense-in-depth.
     pub(super) fn handle_pending_ui_action(
         &mut self,
-        action: crate::controller::PendingUiAction,
+        action: crate::bridge::godot_host::PendingUiAction,
     ) {
-        use crate::controller::PendingUiAction;
+        use crate::bridge::godot_host::PendingUiAction;
         match action {
             PendingUiAction::OpenMappingDialog => {
                 let resolved = self.resolve_config_path();
@@ -647,6 +651,12 @@ impl GodotVimCore {
                         "pending_ui_action: SourceConfigFile — file not found at '{path}'",
                     );
                 }
+            }
+            other => {
+                log::warn!(
+                    "handle_pending_ui_action: unexpected variant {:?} reached plugin layer",
+                    other,
+                );
             }
         }
     }

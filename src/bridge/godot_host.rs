@@ -567,10 +567,10 @@ impl GodotHost {
 
 /// Estimate viewport width in columns from pixel dimensions and font metrics.
 ///
-/// Duplicated from `context.rs` — both call-sites need this independently:
-/// `context::build_context` (old path) and `GodotHost::refresh_from_editor`
-/// (new path). The function is cheap (two FFI calls) so sharing via
-/// re-export would add coupling for no real benefit.
+/// CodeEdit exposes no column-count API, so we divide pixel width by the
+/// space-character advance. Exact for monospace fonts (the code editor case);
+/// only approximate if a proportional font is somehow configured. Falls back
+/// to 80 columns when font metrics are unavailable or degenerate.
 fn approximate_viewport_width(editor: &Gd<CodeEdit>) -> usize {
     const DEFAULT_VIEWPORT_WIDTH: usize = 80;
 

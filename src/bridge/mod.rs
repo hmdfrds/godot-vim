@@ -6,7 +6,7 @@
 //!
 //! Submodule responsibilities:
 //! - `codec` — UTF-8 byte offset <-> (line, char-column) conversion, `LineIndex`
-//! - `context` — builds an `InputContext` snapshot from live CodeEdit state
+//! - `context` — fold/indent provider adapters for vim-core traits
 //! - `document` — `GodotDocument`: vim-core `Document` trait over `&str`
 //! - `input` — Godot `InputEventKey` -> vim-core `KeyEvent` translation
 //! - `port` / `port_impl` — `TextEditorPort` trait and CodeEdit implementation

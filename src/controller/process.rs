@@ -194,6 +194,11 @@ impl VimController {
 
     /// Handle pending UI actions from GodotHost (deferred commands that need
     /// controller-level access).
+    ///
+    /// Actions that the plugin layer handles (OpenMappingDialog, SourceConfigFile)
+    /// are stored in `transient.pending_ui_action` for the plugin to consume.
+    /// Actions the controller handles directly (ShowUndoTree, Perf*, Vimdebug)
+    /// are executed inline.
     fn handle_host_pending_ui_action(
         &mut self,
         action: crate::bridge::godot_host::PendingUiAction,
@@ -201,11 +206,8 @@ impl VimController {
     ) {
         use crate::bridge::godot_host::PendingUiAction;
         match action {
-            PendingUiAction::OpenMappingDialog => {
-                self.transient.pending_ui_action = Some(super::PendingUiAction::OpenMappingDialog);
-            }
-            PendingUiAction::SourceConfigFile => {
-                self.transient.pending_ui_action = Some(super::PendingUiAction::SourceConfigFile);
+            PendingUiAction::OpenMappingDialog | PendingUiAction::SourceConfigFile => {
+                self.transient.pending_ui_action = Some(action);
             }
             PendingUiAction::ShowUndoTree => {
                 let editor_id = editor.instance_id();

@@ -296,21 +296,6 @@ pub(crate) fn dispatch(
     compound_actions
 }
 
-/// Categorize effects into pass1 (text mutations + undo) and pass2 (everything else).
-///
-/// Used by vimdebug step mode to apply text mutations immediately while
-/// deferring pass2 effects for interactive inspection.
-#[allow(dead_code)] // Used by vimdebug step mode; currently disabled in new session pipeline.
-pub(crate) fn split_effects_by_pass(effects: Vec<Effect>) -> (Vec<Effect>, Vec<Effect>) {
-    effects.into_iter().partition(|effect| {
-        effect.is_text_mutation()
-            || matches!(
-                effect,
-                Effect::BeginUndoGroup { .. } | Effect::EndUndoGroup { .. }
-            )
-    })
-}
-
 /// Route a single pass-2 effect to its domain handler. Compound actions
 /// (`:norm`, window nav) are collected for the controller to handle after
 /// dispatch completes.

@@ -27,12 +27,12 @@
 //!   ▼                              ▼
 //! controller::process_single_key   KeyEvent
 //!   │
-//!   ├─1─▶ bridge::context::build_context  →  InputContext
+//!   ├─1─▶ bridge::godot_host::refresh_from_editor  (sync text/cursor/viewport)
 //!   │
-//!   ├─2─▶ vim_core::VimEngine::process_key(InputContext)
+//!   ├─2─▶ VimSession<GodotHost>::process_key(KeyEvent)
 //!   │         │
 //!   │         ▼
-//!   │     Response { effects: Vec<Effect>, host_requests: Vec<HostRequest> }
+//!   │     GodotHost::apply_effects  →  effects::dispatch (two-pass)
 //!   │
 //!   ├─3─▶ effects::dispatch  (two-pass: text mutations, then cursor/scroll/mode)
 //!   │         │

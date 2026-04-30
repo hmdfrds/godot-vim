@@ -6,7 +6,7 @@
 //! `VimSession::process_key()` with pre/post hooks for completion, passthrough,
 //! vimdebug, IME, and perf. The controller never touches the Godot scene tree
 //! directly -- UI actions that require tree access are deferred via
-//! [`PendingUiAction`] for the plugin layer to execute.
+//! [`crate::bridge::godot_host::PendingUiAction`] for the plugin layer to execute.
 //!
 //! Sub-modules:
 //! - [`process`] -- keystroke pipeline (`process_cycle`, `resolve_mapping_timeout`)
@@ -31,18 +31,10 @@ use vim_core::execution::{VimEngine, VimSession};
 use vim_core::keymap::KeyEvent;
 use vim_core::primitives::Direction;
 
-use crate::bridge::godot_host::GodotHost;
+use crate::bridge::godot_host::{GodotHost, PendingUiAction};
 use crate::host::SecurityPolicy;
 use crate::settings::{FileAccessScope, ShellExecution};
 use crate::state::ShellState;
-
-/// Actions deferred for the plugin layer (which owns the scene tree) to
-/// execute after `process_cycle`. The controller has no scene tree access.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum PendingUiAction {
-    OpenMappingDialog,
-    SourceConfigFile,
-}
 
 const PERF_RING_CAPACITY: usize = 1000;
 /// Per-keystroke budget; exceeding this logs a warning with phase breakdown.
