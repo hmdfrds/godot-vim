@@ -10,7 +10,9 @@ use godot::classes::CodeEdit;
 use godot::prelude::*;
 use vim_core::document::{Document, Providers};
 use vim_core::effects::Effect;
-use vim_core::execution::{HostCapabilitySet, HostRequest, HostResult, ViewportInfo, VimHost};
+use vim_core::execution::{
+    HostCapability, HostCapabilitySet, HostRequest, HostResult, ViewportInfo, VimHost,
+};
 use vim_core::primitives::{Mode, Offset, Position, SelectionRange, VisualType};
 
 use super::clipboard::GodotClipboard;
@@ -131,7 +133,7 @@ impl Document for GodotHost {
 
 impl VimHost for GodotHost {
     fn capabilities(&self) -> HostCapabilitySet {
-        HostCapabilitySet::FULL
+        HostCapabilitySet::FULL.without(HostCapability::NativeInsert)
     }
 
     fn cursor_offset(&self) -> usize {
