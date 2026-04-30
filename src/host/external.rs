@@ -51,10 +51,7 @@ fn platform_shell() -> (&'static str, &'static str) {
 fn run_shell_command(cmd: &str, capture_stderr: bool) -> (i32, String) {
     let (shell, flag) = platform_shell();
     log::debug!("shell: executing via {} {}: {}", shell, flag, cmd);
-    let args = PackedStringArray::from(&[
-        GString::from(flag),
-        GString::from(cmd),
-    ]);
+    let args = PackedStringArray::from(&[GString::from(flag), GString::from(cmd)]);
     let output_array = Array::<Variant>::new();
 
     let exit_code = Os::singleton()
@@ -69,7 +66,11 @@ fn run_shell_command(cmd: &str, capture_stderr: bool) -> (i32, String) {
         .map(|s: GString| s.to_string())
         .unwrap_or_default();
 
-    log::debug!("shell: exit_code={} output_len={}", exit_code, output_text.len());
+    log::debug!(
+        "shell: exit_code={} output_len={}",
+        exit_code,
+        output_text.len()
+    );
     (exit_code, output_text)
 }
 
@@ -97,16 +98,21 @@ fn write_temp_input(text: &str) -> Option<String> {
         opts.mode(0o600);
     }
 
-    let mut file = opts.open(&path).map_err(|e| {
-        log::warn!("temp file creation failed: {e}");
-        e
-    }).ok()?;
-    file.write_all(text.as_bytes()).map_err(|e| {
-        log::warn!("Failed to write temp file {}: {}", path.display(), e);
-        // Clean up the empty file we already created
-        let _ = std::fs::remove_file(&path);
-        e
-    }).ok()?;
+    let mut file = opts
+        .open(&path)
+        .map_err(|e| {
+            log::warn!("temp file creation failed: {e}");
+            e
+        })
+        .ok()?;
+    file.write_all(text.as_bytes())
+        .map_err(|e| {
+            log::warn!("Failed to write temp file {}: {}", path.display(), e);
+            // Clean up the empty file we already created
+            let _ = std::fs::remove_file(&path);
+            e
+        })
+        .ok()?;
 
     Some(path.to_string_lossy().into_owned())
 }
@@ -116,16 +122,11 @@ fn shell_escape_single_quotes(s: &str) -> String {
 }
 
 /// `:!command` — run a shell command, capturing both stdout and stderr.
-pub(super) fn handle_external_command(
-    id: HostRequestId,
-    command: &str,
-) -> HostResult {
+pub(super) fn handle_external_command(id: HostRequestId, command: &str) -> HostResult {
     let (exit_code, output) = run_shell_command(command, true);
 
     if exit_code != 0 {
-        log::warn!(
-            "External command exited with code {exit_code}: {command}"
-        );
+        log::warn!("External command exited with code {exit_code}: {command}");
     }
 
     HostResult::Data {
@@ -140,20 +141,21 @@ pub(super) fn handle_external_command(
 /// Input is written to a temp file (avoiding shell escaping issues with
 /// multi-line text) and piped via `cat`/`type` to the filter command. Stderr
 /// is discarded so it cannot corrupt the replacement text.
-pub(super) fn handle_filter(
-    id: HostRequestId,
-    input_text: &str,
-    command: &str,
-) -> HostResult {
+pub(super) fn handle_filter(id: HostRequestId, input_text: &str, command: &str) -> HostResult {
     let windows = is_windows();
     let temp_result = write_temp_input(input_text);
     let (exit_code, output) = match temp_result {
         Some(temp_path) => {
-            let _guard = TempFileGuard { path: std::path::PathBuf::from(&temp_path) };
+            let _guard = TempFileGuard {
+                path: std::path::PathBuf::from(&temp_path),
+            };
             let full_cmd = if windows {
                 format!("type \"{temp_path}\" | {command}")
             } else {
-                format!("cat '{}' | {command}", shell_escape_single_quotes(&temp_path))
+                format!(
+                    "cat '{}' | {command}",
+                    shell_escape_single_quotes(&temp_path)
+                )
             };
             run_shell_command(&full_cmd, false)
         }
@@ -163,12 +165,8 @@ pub(super) fn handle_filter(
     };
 
     let stderr = if exit_code != 0 {
-        log::warn!(
-            "Filter command exited with code {exit_code}: {command}"
-        );
-        Some(CompactString::from(format!(
-            "shell returned {exit_code}"
-        )))
+        log::warn!("Filter command exited with code {exit_code}: {command}");
+        Some(CompactString::from(format!("shell returned {exit_code}")))
     } else {
         None
     };
@@ -196,7 +194,9 @@ pub(super) fn handle_reindent(
     let lines_count = input_text.split('\n').count();
     log::debug!(
         "reindent: range={}..{} lines={}",
-        range.start().get(), range.end().get(), lines_count
+        range.start().get(),
+        range.end().get(),
+        lines_count
     );
 
     // Convert the engine's byte range to a Godot line number.
@@ -206,7 +206,8 @@ pub(super) fn handle_reindent(
     while start_byte > 0 && !full_text.is_char_boundary(start_byte) {
         start_byte -= 1;
     }
-    let start_line = crate::bridge::codec::usize_to_i32(full_text[..start_byte].matches('\n').count());
+    let start_line =
+        crate::bridge::codec::usize_to_i32(full_text[..start_byte].matches('\n').count());
 
     let use_spaces = editor.is_indent_using_spaces();
     let indent_size = editor.safe_indent_size();
@@ -222,7 +223,10 @@ pub(super) fn handle_reindent(
         None
     };
 
-    let lines: Vec<&str> = input_text.split('\n').map(|l| l.trim_end_matches('\r')).collect();
+    let lines: Vec<&str> = input_text
+        .split('\n')
+        .map(|l| l.trim_end_matches('\r'))
+        .collect();
     let result_lines = reindent_lines(&lines, &one_indent, ref_line_before_range.as_deref());
     let replacement = result_lines.join("\n");
 
@@ -297,7 +301,10 @@ fn reindent_lines(
 /// block opener (`:`, `{`, `(`, `[`).
 fn compute_indent_from_ref<'a>(ref_line: &'a str, one_indent: &str) -> std::borrow::Cow<'a, str> {
     // Indent chars are always ASCII, so byte iteration is safe here.
-    let indent_len = ref_line.bytes().take_while(|&b| b == b' ' || b == b'\t').count();
+    let indent_len = ref_line
+        .bytes()
+        .take_while(|&b| b == b' ' || b == b'\t')
+        .count();
     let base = &ref_line[..indent_len];
     let trimmed = ref_line.trim_end();
     let opens_block = trimmed.ends_with(':')
@@ -368,15 +375,15 @@ mod tests {
 
     #[test]
     fn backslashes_not_escaped() {
-        assert_eq!(
-            shell_escape_single_quotes(r"path\to\file"),
-            r"path\to\file"
-        );
+        assert_eq!(shell_escape_single_quotes(r"path\to\file"), r"path\to\file");
     }
 
     #[test]
     fn single_quote_at_start() {
-        assert_eq!(shell_escape_single_quotes("'hello"), "'\\''" .to_owned() + "hello");
+        assert_eq!(
+            shell_escape_single_quotes("'hello"),
+            "'\\''".to_owned() + "hello"
+        );
         assert_eq!(shell_escape_single_quotes("'hello"), "'\\''hello");
     }
 
@@ -400,7 +407,7 @@ mod tests {
 
     #[test]
     fn consecutive_single_quotes() {
-        assert_eq!(shell_escape_single_quotes("''"), "'\\'''\\''" );
+        assert_eq!(shell_escape_single_quotes("''"), "'\\'''\\''");
     }
 
     #[test]
@@ -496,7 +503,10 @@ mod tests {
 
     #[test]
     fn compute_indent_brace_opener_indented() {
-        assert_eq!(compute_indent_from_ref("    fn main() {", "    "), "        ");
+        assert_eq!(
+            compute_indent_from_ref("    fn main() {", "    "),
+            "        "
+        );
     }
 
     // --- Paren opener ---
@@ -713,11 +723,7 @@ mod tests {
 
     #[test]
     fn reindent_simple_no_openers_flat() {
-        let result = reindent_lines(
-            &["a = 1", "b = 2"],
-            "    ",
-            Some("var x = 0"),
-        );
+        let result = reindent_lines(&["a = 1", "b = 2"], "    ", Some("var x = 0"));
         assert_eq!(result[0], "a = 1");
         assert_eq!(result[1], "b = 2");
     }
@@ -749,11 +755,7 @@ mod tests {
 
     #[test]
     fn reindent_block_opener_paren() {
-        let result = reindent_lines(
-            &["call(", "arg1,", "arg2", ")"],
-            "    ",
-            None,
-        );
+        let result = reindent_lines(&["call(", "arg1,", "arg2", ")"], "    ", None);
         assert_eq!(result[0], "call(");
         assert_eq!(result[1], "    arg1,");
         assert_eq!(result[2], "    arg2");
@@ -762,11 +764,7 @@ mod tests {
 
     #[test]
     fn reindent_block_opener_bracket() {
-        let result = reindent_lines(
-            &["arr = [", "1,", "2", "]"],
-            "    ",
-            None,
-        );
+        let result = reindent_lines(&["arr = [", "1,", "2", "]"], "    ", None);
         assert_eq!(result[0], "arr = [");
         assert_eq!(result[1], "    1,");
         assert_eq!(result[2], "    2");
@@ -789,22 +787,14 @@ mod tests {
 
     #[test]
     fn reindent_outdent_elif() {
-        let result = reindent_lines(
-            &["    pass", "elif y:"],
-            "    ",
-            Some("    if x:"),
-        );
+        let result = reindent_lines(&["    pass", "elif y:"], "    ", Some("    if x:"));
         assert_eq!(result[0], "        pass");
         assert_eq!(result[1], "    elif y:");
     }
 
     #[test]
     fn reindent_outdent_except() {
-        let result = reindent_lines(
-            &["    risky()", "except:"],
-            "    ",
-            Some("try:"),
-        );
+        let result = reindent_lines(&["    risky()", "except:"], "    ", Some("try:"));
         assert_eq!(result[0], "    risky()");
         assert_eq!(result[1], "except:");
     }
@@ -823,33 +813,21 @@ mod tests {
 
     #[test]
     fn reindent_outdent_closing_brace() {
-        let result = reindent_lines(
-            &["    x += 1;", "}"],
-            "    ",
-            Some("    if (cond) {"),
-        );
+        let result = reindent_lines(&["    x += 1;", "}"], "    ", Some("    if (cond) {"));
         assert_eq!(result[0], "        x += 1;");
         assert_eq!(result[1], "    }");
     }
 
     #[test]
     fn reindent_outdent_closing_paren() {
-        let result = reindent_lines(
-            &["    arg", ")"],
-            "    ",
-            Some("func("),
-        );
+        let result = reindent_lines(&["    arg", ")"], "    ", Some("func("));
         assert_eq!(result[0], "    arg");
         assert_eq!(result[1], ")");
     }
 
     #[test]
     fn reindent_outdent_closing_bracket() {
-        let result = reindent_lines(
-            &["    val", "]"],
-            "    ",
-            Some("arr = ["),
-        );
+        let result = reindent_lines(&["    val", "]"], "    ", Some("arr = ["));
         assert_eq!(result[0], "    val");
         assert_eq!(result[1], "]");
     }
@@ -858,11 +836,7 @@ mod tests {
 
     #[test]
     fn reindent_empty_lines_preserved() {
-        let result = reindent_lines(
-            &["if x:", "", "    body()"],
-            "    ",
-            None,
-        );
+        let result = reindent_lines(&["if x:", "", "    body()"], "    ", None);
         assert_eq!(result[0], "if x:");
         assert_eq!(result[1], "");
         assert_eq!(result[2], "    body()");
@@ -870,11 +844,7 @@ mod tests {
 
     #[test]
     fn reindent_multiple_empty_lines() {
-        let result = reindent_lines(
-            &["if x:", "", "", "body()"],
-            "    ",
-            None,
-        );
+        let result = reindent_lines(&["if x:", "", "", "body()"], "    ", None);
         assert_eq!(result[0], "if x:");
         assert_eq!(result[1], "");
         assert_eq!(result[2], "");
@@ -885,11 +855,7 @@ mod tests {
 
     #[test]
     fn reindent_nested_blocks() {
-        let result = reindent_lines(
-            &["if a:", "    if b:", "        pass"],
-            "    ",
-            None,
-        );
+        let result = reindent_lines(&["if a:", "    if b:", "        pass"], "    ", None);
         assert_eq!(result[0], "if a:");
         assert_eq!(result[1], "    if b:");
         assert_eq!(result[2], "        pass");
@@ -897,11 +863,7 @@ mod tests {
 
     #[test]
     fn reindent_nested_blocks_with_outdent() {
-        let result = reindent_lines(
-            &["if a:", "    pass", "else:", "    other()"],
-            "    ",
-            None,
-        );
+        let result = reindent_lines(&["if a:", "    pass", "else:", "    other()"], "    ", None);
         assert_eq!(result[0], "if a:");
         assert_eq!(result[1], "    pass");
         assert_eq!(result[2], "else:");
@@ -954,31 +916,19 @@ mod tests {
 
     #[test]
     fn reindent_ref_before_range_indented() {
-        let result = reindent_lines(
-            &["pass"],
-            "    ",
-            Some("        if nested:"),
-        );
+        let result = reindent_lines(&["pass"], "    ", Some("        if nested:"));
         assert_eq!(result[0], "            pass");
     }
 
     #[test]
     fn reindent_ref_before_range_none() {
-        let result = reindent_lines(
-            &["var x = 1"],
-            "    ",
-            None,
-        );
+        let result = reindent_lines(&["var x = 1"], "    ", None);
         assert_eq!(result[0], "var x = 1");
     }
 
     #[test]
     fn reindent_ref_before_range_no_opener() {
-        let result = reindent_lines(
-            &["next_line()"],
-            "    ",
-            Some("    let x = 5"),
-        );
+        let result = reindent_lines(&["next_line()"], "    ", Some("    let x = 5"));
         assert_eq!(result[0], "    next_line()");
     }
 
@@ -986,11 +936,7 @@ mod tests {
 
     #[test]
     fn reindent_all_lines_empty() {
-        let result = reindent_lines(
-            &["", "", ""],
-            "    ",
-            Some("if x:"),
-        );
+        let result = reindent_lines(&["", "", ""], "    ", Some("if x:"));
         assert_eq!(result.len(), 3);
         assert_eq!(result[0], "");
         assert_eq!(result[1], "");
@@ -999,11 +945,7 @@ mod tests {
 
     #[test]
     fn reindent_all_lines_empty_no_ref() {
-        let result = reindent_lines(
-            &["", ""],
-            "    ",
-            None,
-        );
+        let result = reindent_lines(&["", ""], "    ", None);
         assert_eq!(result.len(), 2);
         assert_eq!(result[0], "");
         assert_eq!(result[1], "");
@@ -1013,11 +955,7 @@ mod tests {
 
     #[test]
     fn reindent_tab_indent() {
-        let result = reindent_lines(
-            &["if x:", "pass", "else:", "other()"],
-            "\t",
-            None,
-        );
+        let result = reindent_lines(&["if x:", "pass", "else:", "other()"], "\t", None);
         assert_eq!(result[0], "if x:");
         assert_eq!(result[1], "\tpass");
         // "\tpass" no opener → base "\t", outdent → ""
@@ -1027,11 +965,7 @@ mod tests {
 
     #[test]
     fn reindent_tab_nested() {
-        let result = reindent_lines(
-            &["func f():", "if true:", "pass"],
-            "\t",
-            None,
-        );
+        let result = reindent_lines(&["func f():", "if true:", "pass"], "\t", None);
         assert_eq!(result[0], "func f():");
         assert_eq!(result[1], "\tif true:");
         assert_eq!(result[2], "\t\tpass");
@@ -1041,11 +975,7 @@ mod tests {
 
     #[test]
     fn reindent_two_space_indent() {
-        let result = reindent_lines(
-            &["if x:", "pass", "else:", "other()"],
-            "  ",
-            None,
-        );
+        let result = reindent_lines(&["if x:", "pass", "else:", "other()"], "  ", None);
         assert_eq!(result[0], "if x:");
         assert_eq!(result[1], "  pass");
         assert_eq!(result[2], "else:");
@@ -1056,11 +986,7 @@ mod tests {
 
     #[test]
     fn reindent_single_line_with_ref() {
-        let result = reindent_lines(
-            &["body()"],
-            "    ",
-            Some("    if cond:"),
-        );
+        let result = reindent_lines(&["body()"], "    ", Some("    if cond:"));
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], "        body()");
     }
@@ -1084,11 +1010,7 @@ mod tests {
 
     #[test]
     fn reindent_whitespace_only_lines_treated_as_empty() {
-        let result = reindent_lines(
-            &["    ", "  pass"],
-            "    ",
-            Some("if x:"),
-        );
+        let result = reindent_lines(&["    ", "  pass"], "    ", Some("if x:"));
         assert_eq!(result[0], "");
         assert_eq!(result[1], "    pass");
     }
@@ -1097,11 +1019,7 @@ mod tests {
 
     #[test]
     fn reindent_fallback_to_ref_when_all_preceding_empty() {
-        let result = reindent_lines(
-            &["", "", "code()"],
-            "    ",
-            Some("    for i in range:"),
-        );
+        let result = reindent_lines(&["", "", "code()"], "    ", Some("    for i in range:"));
         assert_eq!(result[0], "");
         assert_eq!(result[1], "");
         assert_eq!(result[2], "        code()");
@@ -1109,11 +1027,7 @@ mod tests {
 
     #[test]
     fn reindent_fallback_to_none_when_all_preceding_empty() {
-        let result = reindent_lines(
-            &["", "code()"],
-            "    ",
-            None,
-        );
+        let result = reindent_lines(&["", "code()"], "    ", None);
         assert_eq!(result[0], "");
         assert_eq!(result[1], "code()");
     }
@@ -1146,16 +1060,7 @@ mod tests {
 
     #[test]
     fn reindent_deep_nesting() {
-        let result = reindent_lines(
-            &[
-                "if a:",
-                "if b:",
-                "if c:",
-                "pass",
-            ],
-            "    ",
-            None,
-        );
+        let result = reindent_lines(&["if a:", "if b:", "if c:", "pass"], "    ", None);
         assert_eq!(result[0], "if a:");
         assert_eq!(result[1], "    if b:");
         assert_eq!(result[2], "        if c:");

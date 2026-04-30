@@ -6,7 +6,11 @@ use vim_core::primitives::RegisterName;
 
 /// Mirror `*`/`+` register writes to the OS clipboard. vim-core owns
 /// register storage — this is a one-way sync for clipboard integration.
-pub(super) fn sync_register_to_clipboard(name: RegisterName, content: &str, clipboard: &mut dyn ClipboardPort) {
+pub(super) fn sync_register_to_clipboard(
+    name: RegisterName,
+    content: &str,
+    clipboard: &mut dyn ClipboardPort,
+) {
     let ch = name.char();
     if ch == '*' || ch == '+' {
         log::trace!("sync_clipboard: register='{}' len={}", ch, content.len());

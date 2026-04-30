@@ -75,7 +75,11 @@ impl SearchHighlighter {
         let old_pattern = self.last_pattern.as_deref();
 
         if whole_word != self.last_whole_word {
-            let flags: u32 = if whole_word { godot_calls::SEARCH_WHOLE_WORDS } else { 0 };
+            let flags: u32 = if whole_word {
+                godot_calls::SEARCH_WHOLE_WORDS
+            } else {
+                0
+            };
             godot_calls::set_search_flags(editor, flags);
             self.last_whole_word = whole_word;
         }
@@ -83,7 +87,11 @@ impl SearchHighlighter {
         if new_pattern == old_pattern {
             return;
         }
-        log::trace!("search_hl: pattern changed to {} (whole_word={})", new_pattern.unwrap_or("<none>"), whole_word);
+        log::trace!(
+            "search_hl: pattern changed to {} (whole_word={})",
+            new_pattern.unwrap_or("<none>"),
+            whole_word
+        );
 
         match new_pattern {
             Some(pattern) => {
@@ -145,7 +153,9 @@ fn extract_literal_pattern(pattern: &str) -> Option<(&str, bool)> {
 ///
 /// Covers both standard regex syntax and Vim's `magic` mode metacharacters.
 fn contains_regex_metacharacters(pattern: &str) -> bool {
-    pattern.contains(['\\', '.', '^', '$', '*', '+', '?', '(', ')', '[', ']', '{', '}', '|'])
+    pattern.contains([
+        '\\', '.', '^', '$', '*', '+', '?', '(', ')', '[', ']', '{', '}', '|',
+    ])
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -361,12 +371,18 @@ mod tests {
 
     #[test]
     fn extract_word_boundary_with_underscores() {
-        assert_eq!(extract_literal_pattern("\\<my_var\\>"), Some(("my_var", true)));
+        assert_eq!(
+            extract_literal_pattern("\\<my_var\\>"),
+            Some(("my_var", true))
+        );
     }
 
     #[test]
     fn extract_word_boundary_with_digits() {
-        assert_eq!(extract_literal_pattern("\\<foo123\\>"), Some(("foo123", true)));
+        assert_eq!(
+            extract_literal_pattern("\\<foo123\\>"),
+            Some(("foo123", true))
+        );
     }
 
     #[test]

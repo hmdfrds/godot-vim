@@ -33,7 +33,11 @@ pub(super) fn connect_deferred(
     if !obj.is_connected(signal, callable) {
         let err = obj.connect_flags(signal, callable, ConnectFlags::DEFERRED);
         if err != godot::global::Error::OK {
-            log::warn!("Failed to connect signal '{}' (deferred): {:?}", signal, err);
+            log::warn!(
+                "Failed to connect signal '{}' (deferred): {:?}",
+                signal,
+                err
+            );
         }
     }
 }
@@ -50,7 +54,11 @@ pub(super) fn connect_immediate(
     if !obj.is_connected(signal, callable) {
         let err = obj.connect(signal, callable);
         if err != godot::global::Error::OK {
-            log::warn!("Failed to connect signal '{}' (immediate): {:?}", signal, err);
+            log::warn!(
+                "Failed to connect signal '{}' (immediate): {:?}",
+                signal,
+                err
+            );
         }
     }
 }

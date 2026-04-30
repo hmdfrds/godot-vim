@@ -47,7 +47,9 @@ fn diff_texts<'a>(
     // position in after_text, so bound suffix length by the bytes AFTER
     // the cursor in after_text. The second term prevents overlap with
     // the prefix in before_text.
-    let max_suffix = after_text.len().saturating_sub(cursor_byte)
+    let max_suffix = after_text
+        .len()
+        .saturating_sub(cursor_byte)
         .min(before_text.len().saturating_sub(common_prefix));
     let raw_suffix = before_text
         .bytes()
@@ -56,8 +58,8 @@ fn diff_texts<'a>(
         .take_while(|(a, b)| a == b)
         .count()
         .min(max_suffix);
-    let common_suffix = before_text.len()
-        - snap_to_char_boundary_up(before_text, before_text.len() - raw_suffix);
+    let common_suffix =
+        before_text.len() - snap_to_char_boundary_up(before_text, before_text.len() - raw_suffix);
 
     let deleted_end = before_text.len().saturating_sub(common_suffix);
     let inserted_end = after_text.len().saturating_sub(common_suffix);
@@ -140,34 +142,19 @@ mod tests {
     #[test]
     fn reconcile_simple_insertion() {
         let mut engine = VimEngine::new();
-        reconcile_external_text_change(
-            &mut engine,
-            "hello\n",
-            "hello world\n",
-            11,
-        );
+        reconcile_external_text_change(&mut engine, "hello\n", "hello world\n", 11);
     }
 
     #[test]
     fn reconcile_no_change_is_noop() {
         let mut engine = VimEngine::new();
-        reconcile_external_text_change(
-            &mut engine,
-            "hello\n",
-            "hello\n",
-            5,
-        );
+        reconcile_external_text_change(&mut engine, "hello\n", "hello\n", 5);
     }
 
     #[test]
     fn reconcile_cjk_insertion() {
         let mut engine = VimEngine::new();
-        reconcile_external_text_change(
-            &mut engine,
-            "abc\n",
-            "ab你好c\n",
-            8,
-        );
+        reconcile_external_text_change(&mut engine, "abc\n", "ab你好c\n", 8);
     }
 
     // ── diff_texts pure assertions ──────────────────────────────────────
@@ -250,7 +237,7 @@ mod tests {
         // Before: "func f():\n    p\n    print(\"Test\")\n"
         // After:  "func f():\n    physics_interpolation_mode\n    print(\"Test\")\n"
         let before = "func f():\n    p\n    print(\"Test\")\n";
-        let after  = "func f():\n    physics_interpolation_mode\n    print(\"Test\")\n";
+        let after = "func f():\n    physics_interpolation_mode\n    print(\"Test\")\n";
         let cursor_byte = "func f():\n    physics_interpolation_mode".len(); // 40
 
         let diff = diff_texts(before, after, cursor_byte).unwrap();
@@ -258,7 +245,11 @@ mod tests {
         // The prefix "p" is shared, so the diff is a pure insertion after "p".
         // Critically, the suffix "\n    print(\"Test\")\n" must be absorbed —
         // otherwise dot-repeat records the wrong text.
-        assert_eq!(diff.deleted_range, (15, 15), "nothing deleted (pure insertion)");
+        assert_eq!(
+            diff.deleted_range,
+            (15, 15),
+            "nothing deleted (pure insertion)"
+        );
         assert_eq!(diff.deleted_text, "");
         assert_eq!(
             diff.inserted_text, "hysics_interpolation_mode",

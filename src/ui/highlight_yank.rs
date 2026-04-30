@@ -68,49 +68,64 @@ impl IControl for HighlightYankOverlay {
     }
 
     fn process(&mut self, delta: f64) {
-        panic_guard("highlight_yank::process", || {
-            if matches!(self.phase, AnimationPhase::Inactive) {
-                return;
-            }
-            self.elapsed += delta as f32;
-            if self.elapsed >= self.fade_duration {
-                self.phase = AnimationPhase::Inactive;
-                self.alpha = 0.0;
-                self.cached_rects.clear();
+        panic_guard(
+            "highlight_yank::process",
+            || {
+                if matches!(self.phase, AnimationPhase::Inactive) {
+                    return;
+                }
+                self.elapsed += delta as f32;
+                if self.elapsed >= self.fade_duration {
+                    self.phase = AnimationPhase::Inactive;
+                    self.alpha = 0.0;
+                    self.cached_rects.clear();
+                    self.base_mut().queue_redraw();
+                    self.base_mut().set_process(false);
+                    return;
+                }
+                self.alpha = HIGHLIGHT_ALPHA * (1.0 - self.elapsed / self.fade_duration);
                 self.base_mut().queue_redraw();
-                self.base_mut().set_process(false);
-                return;
-            }
-            self.alpha = HIGHLIGHT_ALPHA * (1.0 - self.elapsed / self.fade_duration);
-            self.base_mut().queue_redraw();
-        }, ());
+            },
+            (),
+        );
     }
 
     fn draw(&mut self) {
-        panic_guard("highlight_yank::draw", || {
-            if matches!(self.phase, AnimationPhase::Inactive) {
-                return;
-            }
+        panic_guard(
+            "highlight_yank::draw",
+            || {
+                if matches!(self.phase, AnimationPhase::Inactive) {
+                    return;
+                }
 
-            let color = Color::from_rgba(1.0, 1.0, 0.0, self.alpha);
+                let color = Color::from_rgba(1.0, 1.0, 0.0, self.alpha);
 
-            // Lazy-compute on first draw frame of this animation cycle.
-            if matches!(self.phase, AnimationPhase::WaitingForRects) {
-                self.phase = AnimationPhase::Drawing;
-                let Some(parent) = self.base().get_parent() else { return };
-                let Ok(editor) = parent.try_cast::<CodeEdit>() else { return };
+                // Lazy-compute on first draw frame of this animation cycle.
+                if matches!(self.phase, AnimationPhase::WaitingForRects) {
+                    self.phase = AnimationPhase::Drawing;
+                    let Some(parent) = self.base().get_parent() else {
+                        return;
+                    };
+                    let Ok(editor) = parent.try_cast::<CodeEdit>() else {
+                        return;
+                    };
 
-                self.cached_rects = super::geometry::compute_highlight_rects(
-                    &editor, &self.start, &self.end, MAX_HIGHLIGHT_RECTS,
-                );
-            }
+                    self.cached_rects = super::geometry::compute_highlight_rects(
+                        &editor,
+                        &self.start,
+                        &self.end,
+                        MAX_HIGHLIGHT_RECTS,
+                    );
+                }
 
-            // Index loop avoids iterator borrow conflict with base_mut().
-            for i in 0..self.cached_rects.len() {
-                let rect = self.cached_rects[i];
-                self.base_mut().draw_rect(rect, color);
-            }
-        }, ());
+                // Index loop avoids iterator borrow conflict with base_mut().
+                for i in 0..self.cached_rects.len() {
+                    let rect = self.cached_rects[i];
+                    self.base_mut().draw_rect(rect, color);
+                }
+            },
+            (),
+        );
     }
 }
 
@@ -138,5 +153,4 @@ impl HighlightYankOverlay {
         self.base_mut().set_process(true);
         self.base_mut().queue_redraw();
     }
-
 }

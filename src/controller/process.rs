@@ -39,7 +39,10 @@ impl VimController {
         // Messages are one-shot: displayed after the producing keystroke,
         // cleared on the next. Mirrors vim-core's clear_transient().
         {
-            let session = self.session.as_mut().expect("process_cycle: requires active session");
+            let session = self
+                .session
+                .as_mut()
+                .expect("process_cycle: requires active session");
             session.host_mut().state_mut().globals_mut().clear_message();
         }
 
@@ -50,9 +53,18 @@ impl VimController {
 
         // Completion interception (pre-engine): check if completion popup handles key.
         {
-            let session = self.session.as_mut().expect("process_cycle: requires active session");
-            if let Some(consumed) = completion::try_handle_completion(session.engine_mut(), key, editor) {
-                log::debug!("process_cycle: completion intercepted key={} consumed={}", key, consumed);
+            let session = self
+                .session
+                .as_mut()
+                .expect("process_cycle: requires active session");
+            if let Some(consumed) =
+                completion::try_handle_completion(session.engine_mut(), key, editor)
+            {
+                log::debug!(
+                    "process_cycle: completion intercepted key={} consumed={}",
+                    key,
+                    consumed
+                );
                 let mode = session.engine().mode();
                 session.host_mut().ensure_undo_balanced(mode);
                 return consumed;
@@ -61,7 +73,11 @@ impl VimController {
 
         // Passthrough check: does this key bypass Vim entirely?
         if self.should_passthrough_key(key) {
-            log::debug!("process_cycle: passthrough key={} mode={}", key, self.engine().mode());
+            log::debug!(
+                "process_cycle: passthrough key={} mode={}",
+                key,
+                self.engine().mode()
+            );
             return false;
         }
 
@@ -72,16 +88,25 @@ impl VimController {
 
         // ── Pre-processing setup ────────────────────────────────────────
         {
-            let session = self.session.as_mut().expect("process_cycle: requires active session");
+            let session = self
+                .session
+                .as_mut()
+                .expect("process_cycle: requires active session");
             let engine_mode = session.engine().mode();
             let auto_pairs_active = session.engine().options().auto_pairs().is_some();
             let scrolloff = usize_to_i32(session.engine().options().scrolloff());
             session.host_mut().refresh_from_editor();
-            session.host_mut().set_auto_brace_eligible(engine_mode.is_insert());
-            session.host_mut().set_engine_auto_pairs_active(auto_pairs_active);
+            session
+                .host_mut()
+                .set_auto_brace_eligible(engine_mode.is_insert());
+            session
+                .host_mut()
+                .set_engine_auto_pairs_active(auto_pairs_active);
             session.host_mut().set_scrolloff(scrolloff);
             session.host_mut().set_current_mode(engine_mode);
-            session.host_mut().set_vimdebug_enabled(self.transient.vimdebug.is_enabled());
+            session
+                .host_mut()
+                .set_vimdebug_enabled(self.transient.vimdebug.is_enabled());
         }
 
         // ── Vimdebug: capture provenance before engine process ──────────
@@ -89,30 +114,38 @@ impl VimController {
 
         // ── CORE: session.process_key(key) ──────────────────────────────
         let result = {
-            let session = self.session.as_mut().expect("process_cycle: requires active session");
+            let session = self
+                .session
+                .as_mut()
+                .expect("process_cycle: requires active session");
             session.process_key(key)
         };
         let consumed = result.consumed;
 
-        self.transient.operations_this_cycle = self.transient.operations_this_cycle.saturating_add(1);
+        self.transient.operations_this_cycle =
+            self.transient.operations_this_cycle.saturating_add(1);
 
         // ── Post-processing: deferred actions ───────────────────────────
         for action in &result.deferred_actions {
             match action {
                 DeferredAction::WindowNav(nav) => {
-                    let nav_action = convert_window_nav_action(*nav);
-                    let control: Gd<godot::classes::Control> = editor.clone().upcast();
-                    crate::navigation::handle_window_nav_action(&control, nav_action);
+                    if let Some(nav_action) = convert_window_nav_action(*nav) {
+                        let control: Gd<godot::classes::Control> = editor.clone().upcast();
+                        crate::navigation::handle_window_nav_action(&control, nav_action);
+                    }
                 }
                 _ => {
-                    log::debug!("process_cycle: unhandled deferred action {:?}", action);
+                    log::warn!("process_cycle: unhandled deferred action {:?}", action);
                 }
             }
         }
 
         // ── Post-processing: drain pending UI actions from host ─────────
         {
-            let session = self.session.as_mut().expect("process_cycle: requires active session");
+            let session = self
+                .session
+                .as_mut()
+                .expect("process_cycle: requires active session");
             let pending_actions = session.host_mut().take_pending_ui_actions();
             for action in pending_actions {
                 self.handle_host_pending_ui_action(action, editor);
@@ -121,15 +154,26 @@ impl VimController {
 
         // ── Post-processing: ensure undo balanced ───────────────────────
         {
-            let session = self.session.as_mut().expect("process_cycle: requires active session");
+            let session = self
+                .session
+                .as_mut()
+                .expect("process_cycle: requires active session");
             let mode = session.engine().mode();
             session.host_mut().ensure_undo_balanced(mode);
         }
 
         // ── Post-processing: completion re-trigger ──────────────────────
         {
-            let session = self.session.as_mut().expect("process_cycle: requires active session");
-            completion::maybe_retrigger_completion(session.engine(), key, editor, self.code_complete_enabled);
+            let session = self
+                .session
+                .as_mut()
+                .expect("process_cycle: requires active session");
+            completion::maybe_retrigger_completion(
+                session.engine(),
+                key,
+                editor,
+                self.code_complete_enabled,
+            );
         }
 
         let total_elapsed = total_start.elapsed();
@@ -137,8 +181,11 @@ impl VimController {
         // ── IME lifecycle ────────────────────────────────────────────────
         let mode_after = self.engine().mode();
         if mode_after != mode_before {
-            let was_insert_like = mode_before.is_insert() || mode_before.is_replace() || mode_before.is_command_line();
-            let is_insert_like = mode_after.is_insert() || mode_after.is_replace() || mode_after.is_command_line();
+            let was_insert_like = mode_before.is_insert()
+                || mode_before.is_replace()
+                || mode_before.is_command_line();
+            let is_insert_like =
+                mode_after.is_insert() || mode_after.is_replace() || mode_after.is_command_line();
             if !was_insert_like && is_insert_like {
                 activate_ime(editor);
             } else if was_insert_like && !is_insert_like {
@@ -157,7 +204,9 @@ impl VimController {
             engine_process_us: perf::Microseconds(0),
             effects_dispatch_us: perf::Microseconds(0),
             ui_update_us: perf::Microseconds(0),
-            total_us: perf::Microseconds(u64::try_from(total_elapsed.as_micros()).unwrap_or(u64::MAX)),
+            total_us: perf::Microseconds(
+                u64::try_from(total_elapsed.as_micros()).unwrap_or(u64::MAX),
+            ),
         });
 
         // ── Per-keystroke DEBUG summary ──────────────────────────────────
@@ -171,8 +220,7 @@ impl VimController {
                 let _ = write!(
                     summary,
                     "  cursor={}:{}\u{2192}{}:{}",
-                    cursor_before.0, cursor_before.1,
-                    cursor_after.0, cursor_after.1,
+                    cursor_before.0, cursor_before.1, cursor_after.0, cursor_after.1,
                 );
             }
 
@@ -180,11 +228,7 @@ impl VimController {
                 let _ = write!(summary, "  mode\u{2192}{}", mode_after);
             }
 
-            let _ = write!(
-                summary,
-                "  {}\u{00b5}s",
-                total_elapsed.as_micros(),
-            );
+            let _ = write!(summary, "  {}\u{00b5}s", total_elapsed.as_micros(),);
 
             log::debug!(target: "key", "{}", summary);
         }
@@ -213,7 +257,11 @@ impl VimController {
                 let editor_id = editor.instance_id();
                 let msg = {
                     let session = self.session.as_mut().expect("requires active session");
-                    session.host_mut().state_mut().buffer(editor_id).undo_tree()
+                    session
+                        .host_mut()
+                        .state_mut()
+                        .buffer(editor_id)
+                        .undo_tree()
                         .map_or_else(
                             || "No undo tree for this buffer".to_owned(),
                             |tree| tree.format_tree(),
@@ -278,30 +326,44 @@ impl VimController {
         self.transient.operations_this_cycle = 0;
 
         {
-            let session = self.session.as_mut().expect("resolve_mapping_timeout: requires active session");
+            let session = self
+                .session
+                .as_mut()
+                .expect("resolve_mapping_timeout: requires active session");
             let engine_mode = session.engine().mode();
             let auto_pairs_active = session.engine().options().auto_pairs().is_some();
             let scrolloff = usize_to_i32(session.engine().options().scrolloff());
             session.host_mut().refresh_from_editor();
-            session.host_mut().set_auto_brace_eligible(engine_mode.is_insert());
-            session.host_mut().set_engine_auto_pairs_active(auto_pairs_active);
+            session
+                .host_mut()
+                .set_auto_brace_eligible(engine_mode.is_insert());
+            session
+                .host_mut()
+                .set_engine_auto_pairs_active(auto_pairs_active);
             session.host_mut().set_scrolloff(scrolloff);
             session.host_mut().set_current_mode(engine_mode);
         }
 
         {
-            let session = self.session.as_mut().expect("resolve_mapping_timeout: requires active session");
+            let session = self
+                .session
+                .as_mut()
+                .expect("resolve_mapping_timeout: requires active session");
             session.engine_mut().resolve_timeout();
             // drain_and_process_one calls build_context -> process -> deliver_effects
             // for each pending key, so effects are applied by GodotHost.
             while session.drain_and_process_one() {
-                self.transient.operations_this_cycle = self.transient.operations_this_cycle.saturating_add(1);
+                self.transient.operations_this_cycle =
+                    self.transient.operations_this_cycle.saturating_add(1);
             }
         }
 
         // Handle any deferred actions produced during drain.
         {
-            let session = self.session.as_mut().expect("resolve_mapping_timeout: requires active session");
+            let session = self
+                .session
+                .as_mut()
+                .expect("resolve_mapping_timeout: requires active session");
             let pending_actions = session.host_mut().take_pending_ui_actions();
             for action in pending_actions {
                 self.handle_host_pending_ui_action(action, editor);
@@ -309,7 +371,10 @@ impl VimController {
         }
 
         {
-            let session = self.session.as_mut().expect("resolve_mapping_timeout: requires active session");
+            let session = self
+                .session
+                .as_mut()
+                .expect("resolve_mapping_timeout: requires active session");
             let mode = session.engine().mode();
             session.host_mut().ensure_undo_balanced(mode);
         }
@@ -346,11 +411,7 @@ impl VimController {
 
     /// Vimdebug step-mode key handler: n=next, p=prev, c=continue, q=quit.
     /// All keys are consumed while stepping.
-    fn process_step_key(
-        &mut self,
-        key: KeyEvent,
-        editor: &mut Gd<CodeEdit>,
-    ) -> bool {
+    fn process_step_key(&mut self, key: KeyEvent, editor: &mut Gd<CodeEdit>) -> bool {
         let scrolloff = usize_to_i32(self.engine().options().scrolloff());
         let editor_id = editor.instance_id();
         let ch = key.as_char();
@@ -363,7 +424,10 @@ impl VimController {
                             let effect = effects[idx].clone();
                             apply_step_effect_to_host(
                                 self.session.as_mut().expect("requires active session"),
-                                effect, editor, editor_id, scrolloff,
+                                effect,
+                                editor,
+                                editor_id,
+                                scrolloff,
                             );
                         }
                     }
@@ -378,8 +442,13 @@ impl VimController {
             }
             Some('c') => {
                 let remaining = self.transient.vimdebug.step_continue();
-                let mut all_effects = self.transient.pending_step_effects.take().unwrap_or_default();
-                let remaining_set: std::collections::HashSet<usize> = remaining.into_iter().collect();
+                let mut all_effects = self
+                    .transient
+                    .pending_step_effects
+                    .take()
+                    .unwrap_or_default();
+                let remaining_set: std::collections::HashSet<usize> =
+                    remaining.into_iter().collect();
                 let to_apply: Vec<vim_core::effects::Effect> = all_effects
                     .drain(..)
                     .enumerate()
@@ -388,7 +457,10 @@ impl VimController {
                 for effect in to_apply {
                     apply_step_effect_to_host(
                         self.session.as_mut().expect("requires active session"),
-                        effect, editor, editor_id, scrolloff,
+                        effect,
+                        editor,
+                        editor_id,
+                        scrolloff,
                     );
                 }
                 self.transient.vimdebug.step_quit();
@@ -427,11 +499,23 @@ fn apply_step_effect_to_host(
     let (_, host) = session.engine_and_host_mut();
 
     match effect {
-        Effect::SetSelection { anchor, head, shape } => {
+        Effect::SetSelection {
+            anchor,
+            head,
+            shape,
+        } => {
             let mut port = crate::bridge::port_impl::CodeEditPort(editor);
-            crate::effects::cursor::handle_set_selection(&mut port, &doc, anchor.get(), head.get(), shape);
+            crate::effects::cursor::handle_set_selection(
+                &mut port,
+                &doc,
+                anchor.get(),
+                head.get(),
+                shape,
+            );
             let head_pos = doc.line_index.byte_to_line_col(doc.text, head.get());
-            host.state_mut().buffer(editor_id).update_visual_selection(anchor, head, head_pos);
+            host.state_mut()
+                .buffer(editor_id)
+                .update_visual_selection(anchor, head, head_pos);
         }
         Effect::ClearSelection => {
             let mut port = crate::bridge::port_impl::CodeEditPort(editor);
@@ -462,30 +546,26 @@ fn apply_step_effect_to_host(
 
 /// Convert a VimSession [`WindowNavAction`] to the godot-vim effect-layer
 /// [`crate::effects::WindowNavAction`] for the navigation module.
-pub(super) fn convert_window_nav_action(nav: WindowNavAction) -> crate::effects::WindowNavAction {
+///
+/// Returns `None` for actions not supported in the Godot editor, logging a
+/// warning so they are visible in the log output.
+pub(super) fn convert_window_nav_action(
+    nav: WindowNavAction,
+) -> Option<crate::effects::WindowNavAction> {
     use crate::effects::WindowNavAction as GodotNav;
     match nav {
-        WindowNavAction::MoveLeft => GodotNav::MoveLeft,
-        WindowNavAction::MoveRight => GodotNav::MoveRight,
-        WindowNavAction::MoveUp => GodotNav::MoveUp,
-        WindowNavAction::MoveDown => GodotNav::MoveDown,
-        WindowNavAction::CycleNext => GodotNav::CycleNext,
-        WindowNavAction::CyclePrev => GodotNav::CyclePrev,
-        WindowNavAction::Close => GodotNav::CloseTab,
-        WindowNavAction::Split => GodotNav::MoveLeft, // TODO: proper split handling
-        WindowNavAction::VSplit => GodotNav::MoveRight, // TODO: proper vsplit handling
-        WindowNavAction::Only => GodotNav::CloseTab, // TODO: proper :only handling
-        WindowNavAction::New => GodotNav::MoveLeft, // TODO: proper :new handling
-        WindowNavAction::EqualSize => return GodotNav::MoveLeft, // TODO: not supported
-        WindowNavAction::RotateDown => return GodotNav::CycleNext, // approximate
-        WindowNavAction::RotateUp => return GodotNav::CyclePrev, // approximate
-        WindowNavAction::IncreaseHeight { .. } => return GodotNav::MoveLeft, // TODO: not supported
-        WindowNavAction::DecreaseHeight { .. } => return GodotNav::MoveLeft, // TODO: not supported
-        WindowNavAction::IncreaseWidth { .. } => return GodotNav::MoveLeft, // TODO: not supported
-        WindowNavAction::DecreaseWidth { .. } => return GodotNav::MoveLeft, // TODO: not supported
-        _ => {
-            log::debug!("convert_window_nav_action: unhandled variant {:?}", nav);
-            return GodotNav::MoveLeft;
+        WindowNavAction::MoveLeft => Some(GodotNav::MoveLeft),
+        WindowNavAction::MoveRight => Some(GodotNav::MoveRight),
+        WindowNavAction::MoveUp => Some(GodotNav::MoveUp),
+        WindowNavAction::MoveDown => Some(GodotNav::MoveDown),
+        WindowNavAction::CycleNext => Some(GodotNav::CycleNext),
+        WindowNavAction::CyclePrev => Some(GodotNav::CyclePrev),
+        WindowNavAction::Close => Some(GodotNav::CloseTab),
+        WindowNavAction::RotateDown => Some(GodotNav::CycleNext),
+        WindowNavAction::RotateUp => Some(GodotNav::CyclePrev),
+        unsupported => {
+            log::warn!("Ctrl-W {:?}: not supported in Godot editor", unsupported);
+            None
         }
     }
 }
@@ -565,7 +645,9 @@ fn update_ime_position(editor: &Gd<CodeEdit>) {
         .done();
     log::trace!(
         "IME position updated to ({}, {}) window_id={}",
-        ime_pos.x, ime_pos.y, window_id
+        ime_pos.x,
+        ime_pos.y,
+        window_id
     );
 }
 
@@ -576,8 +658,8 @@ mod tests {
 
     #[test]
     fn normalize_with_latin_key_returns_latin() {
-        let cyrillic_event = KeyEvent::new(Key::Char('\u{043E}'), Modifiers::ALT)
-            .with_latin(Key::Char('j'));
+        let cyrillic_event =
+            KeyEvent::new(Key::Char('\u{043E}'), Modifiers::ALT).with_latin(Key::Char('j'));
         let normalized = normalize_key_for_mapping(cyrillic_event);
         assert_eq!(normalized.key(), Key::Char('j'));
         assert_eq!(normalized.modifiers(), Modifiers::ALT);
@@ -602,8 +684,8 @@ mod tests {
 
     #[test]
     fn normalize_no_modifiers() {
-        let event = KeyEvent::new(Key::Char('\u{043E}'), Modifiers::NONE)
-            .with_latin(Key::Char('j'));
+        let event =
+            KeyEvent::new(Key::Char('\u{043E}'), Modifiers::NONE).with_latin(Key::Char('j'));
         let normalized = normalize_key_for_mapping(event);
         assert_eq!(normalized.key(), Key::Char('j'));
         assert_eq!(normalized.modifiers(), Modifiers::NONE);

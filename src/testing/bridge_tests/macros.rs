@@ -265,7 +265,11 @@ impl DispatchCtx {
     /// Run effects through the full bridge dispatch pipeline, including text
     /// cache invalidation, undo depth tracking, and selection/cursor interplay.
     /// This is the closest to production behavior achievable without Godot.
-    pub(super) fn dispatch(&mut self, mock: &mut MockTextEdit, effects: Vec<vim_core::effects::Effect>) {
+    pub(super) fn dispatch(
+        &mut self,
+        mock: &mut MockTextEdit,
+        effects: Vec<vim_core::effects::Effect>,
+    ) {
         let text = mock.get_text();
         crate::effects::dispatch(
             effects,

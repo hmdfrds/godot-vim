@@ -14,9 +14,13 @@ pub(crate) struct LineNumber(usize);
 #[allow(dead_code)] // Used by dispatch.rs for compound action construction.
 impl LineNumber {
     #[must_use]
-    pub(crate) const fn new(val: usize) -> Self { Self(val) }
+    pub(crate) const fn new(val: usize) -> Self {
+        Self(val)
+    }
     #[must_use]
-    pub(crate) const fn get(self) -> usize { self.0 }
+    pub(crate) const fn get(self) -> usize {
+        self.0
+    }
 }
 
 /// Window navigation action produced by `Ctrl-W` window commands.
@@ -47,7 +51,5 @@ pub(crate) enum CompoundAction {
         remap: RemapPolicy,
     },
     /// Window navigation requiring Godot scene tree access.
-    WindowNav {
-        action: WindowNavAction,
-    },
+    WindowNav { action: WindowNavAction },
 }

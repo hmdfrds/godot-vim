@@ -33,7 +33,9 @@ pub(crate) struct MockClipboard {
 #[cfg(test)]
 impl MockClipboard {
     pub fn new() -> Self {
-        Self { content: String::new() }
+        Self {
+            content: String::new(),
+        }
     }
 }
 

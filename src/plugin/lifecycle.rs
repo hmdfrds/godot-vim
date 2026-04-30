@@ -8,12 +8,11 @@
 use godot::classes::{EditorInterface, Timer};
 use godot::prelude::*;
 
-use super::GodotVimCore;
 use super::signals::{
-    connect_deferred, connect_immediate, safe_disconnect,
-    SIG_EDITOR_SCRIPT_CHANGED, SIG_GUI_FOCUS_CHANGED,
-    SIG_SETTINGS_CHANGED, SIG_TIMEOUT,
+    connect_deferred, connect_immediate, safe_disconnect, SIG_EDITOR_SCRIPT_CHANGED,
+    SIG_GUI_FOCUS_CHANGED, SIG_SETTINGS_CHANGED, SIG_TIMEOUT,
 };
+use super::GodotVimCore;
 
 impl GodotVimCore {
     // ── Settings ──────────────────────────────────────────────────────
@@ -65,8 +64,7 @@ impl GodotVimCore {
         timer.set_wait_time(1.0); // placeholder; overridden each start
         let callable = self.base().callable("on_mapping_timeout");
         connect_immediate(&mut timer, SIG_TIMEOUT, &callable);
-        self.base_mut()
-            .add_child(&timer.clone().upcast::<Node>());
+        self.base_mut().add_child(&timer.clone().upcast::<Node>());
         self.mapping_timer = Some(timer);
     }
 

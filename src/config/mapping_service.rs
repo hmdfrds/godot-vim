@@ -104,7 +104,9 @@ impl MappingService {
             if payload.preset_id.is_some() {
                 continue;
             }
-            let MappingPayload { enabled, parsed, .. } = payload.as_ref();
+            let MappingPayload {
+                enabled, parsed, ..
+            } = payload.as_ref();
 
             // Mode filtering is the caller's job (via `row_passes_mode_filter`).
             if !search_lower.is_empty()
@@ -152,7 +154,9 @@ impl MappingService {
             if payload.preset_id.is_none() {
                 continue;
             }
-            let MappingPayload { enabled, parsed, .. } = payload.as_ref();
+            let MappingPayload {
+                enabled, parsed, ..
+            } = payload.as_ref();
 
             let modes_display = mode_prefix_display(parsed.modes).to_string();
 

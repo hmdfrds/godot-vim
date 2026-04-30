@@ -139,7 +139,10 @@ impl VimController {
                 project_vimrc: crate::settings::ProjectVimrc::Sandbox,
             },
             perf: perf::PerfTracker::new(PERF_RING_CAPACITY, PERF_BUDGET_US),
-            highlight_yank_duration_ms: u32::try_from(crate::settings::defaults::HIGHLIGHT_YANK_DURATION).unwrap_or(150),
+            highlight_yank_duration_ms: u32::try_from(
+                crate::settings::defaults::HIGHLIGHT_YANK_DURATION,
+            )
+            .unwrap_or(150),
             code_complete_enabled: true,
         }
     }
@@ -148,7 +151,9 @@ impl VimController {
 
     /// Immutable access to the engine, regardless of attach state.
     fn engine(&self) -> &VimEngine {
-        self.session.as_ref().map(|s| s.engine())
+        self.session
+            .as_ref()
+            .map(|s| s.engine())
             .or(self.detached_engine.as_ref())
             .expect("VimController invariant: engine always available")
     }
@@ -158,7 +163,8 @@ impl VimController {
         if let Some(ref mut session) = self.session {
             return session.engine_mut();
         }
-        self.detached_engine.as_mut()
+        self.detached_engine
+            .as_mut()
             .expect("VimController invariant: engine always available")
     }
 
@@ -184,7 +190,9 @@ impl VimController {
     /// Syncs controller-level config (security policy, highlight yank duration)
     /// into the new host.
     pub(crate) fn attach_session(&mut self, editor: Gd<CodeEdit>) {
-        let engine = self.detached_engine.take()
+        let engine = self
+            .detached_engine
+            .take()
             .expect("attach_session: must be in detached state");
         let mut host = GodotHost::new(editor);
         host.set_security_policy(self.security_policy.clone());
@@ -252,9 +260,17 @@ impl VimController {
         };
         let cmdline_input = CompactString::from(self.engine().state().command_line().input());
         let cmdline_cursor = self.engine().state().command_line().cursor();
-        let recording_register = self.engine().state().macros().recording_register().map(|r| r.char());
+        let recording_register = self
+            .engine()
+            .state()
+            .macros()
+            .recording_register()
+            .map(|r| r.char());
         let search_pattern = self.engine().state().search().pattern().map(|p| {
-            (CompactString::from(p), Direction::from(self.engine().state().search().direction()))
+            (
+                CompactString::from(p),
+                Direction::from(self.engine().state().search().direction()),
+            )
         });
         let pending_keys = self.engine().pending_mapping_display();
         let pending_command = self.engine().pending_command_display();
@@ -263,26 +279,29 @@ impl VimController {
         let state = self.host_state_mut();
         let message = state.globals().message_status().clone();
         let hlsearch_enabled = state.globals().hlsearch_enabled();
-        let visual_head = state.buffer_ref(editor_id).and_then(|b| b.visual().map(|v| v.head_pos));
+        let visual_head = state
+            .buffer_ref(editor_id)
+            .and_then(|b| b.visual().map(|v| v.head_pos));
         let substitute_preview = state.take_substitute_preview();
         let highlight_yank = state.take_highlight_yank();
 
-        let vimdebug = match (self.transient.vimdebug.provenance().cloned(), self.transient.vimdebug.effects_summary().cloned()) {
-            (Some(provenance), Some(effects)) => {
-                match self.transient.vimdebug.step_status_line() {
-                    Some(step_status) => crate::types::VimdebugSnapshot::Step {
-                        provenance,
-                        effects,
-                        range: self.transient.vimdebug.range(),
-                        step_status,
-                    },
-                    None => crate::types::VimdebugSnapshot::Watch {
-                        provenance,
-                        effects,
-                        range: self.transient.vimdebug.range(),
-                    },
-                }
-            }
+        let vimdebug = match (
+            self.transient.vimdebug.provenance().cloned(),
+            self.transient.vimdebug.effects_summary().cloned(),
+        ) {
+            (Some(provenance), Some(effects)) => match self.transient.vimdebug.step_status_line() {
+                Some(step_status) => crate::types::VimdebugSnapshot::Step {
+                    provenance,
+                    effects,
+                    range: self.transient.vimdebug.range(),
+                    step_status,
+                },
+                None => crate::types::VimdebugSnapshot::Watch {
+                    provenance,
+                    effects,
+                    range: self.transient.vimdebug.range(),
+                },
+            },
             _ => crate::types::VimdebugSnapshot::Inactive,
         };
 
@@ -355,7 +374,9 @@ impl VimController {
 
         self.engine_mut()
             .options_mut()
-            .set_auto_pairs(Some(AutoPairs { pairs: pairs.into() }));
+            .set_auto_pairs(Some(AutoPairs {
+                pairs: pairs.into(),
+            }));
     }
 
     /// Restore per-buffer engine state for the given editor.
@@ -365,7 +386,10 @@ impl VimController {
     /// to restore marks, changelist, last_visual, sticky_column, buffer_overrides,
     /// buffer_mappings, and exchange.
     pub(crate) fn restore_buffer_engine_state(&mut self, editor_id: InstanceId) {
-        let state = self.host_state_mut().buffer(editor_id).take_engine_state()
+        let state = self
+            .host_state_mut()
+            .buffer(editor_id)
+            .take_engine_state()
             .unwrap_or_default();
         self.engine_mut().on_buffer_enter(state);
     }
@@ -391,7 +415,10 @@ impl VimController {
             Gd::<godot::classes::Object>::try_from_instance_id(id).is_ok()
         });
         if !removed.is_empty() {
-            log::debug!("sweep_stale_buffers: evicted {} stale buffer(s)", removed.len());
+            log::debug!(
+                "sweep_stale_buffers: evicted {} stale buffer(s)",
+                removed.len()
+            );
         }
         for id in removed {
             log::debug!("Evicted stale buffer state for editor #{}", id.to_i64());
@@ -427,9 +454,7 @@ impl VimController {
         }
 
         let Some((_, before_text)) = self.transient.persistent_text.take() else {
-            log::trace!(
-                "reconcile_external: no cached text available, skipping"
-            );
+            log::trace!("reconcile_external: no cached text available, skipping");
             return;
         };
 
@@ -508,14 +533,20 @@ impl VimController {
     /// extract all per-buffer state (marks, changelist, last_visual, sticky_column,
     /// buffer_overrides, buffer_mappings, exchange), and stores the result in
     /// `BufferState` for later restoration.
-    pub(crate) fn save_buffer_engine_state(&mut self, editor_id: InstanceId, editor: &Gd<CodeEdit>) {
+    pub(crate) fn save_buffer_engine_state(
+        &mut self,
+        editor_id: InstanceId,
+        editor: &Gd<CodeEdit>,
+    ) {
         let line = editor.get_caret_line();
         let col = editor.get_caret_column();
         let text = editor.get_text().to_string();
         let line_index = crate::bridge::codec::LineIndex::new(&text);
         let offset = line_index.line_col_to_byte(&text, line, col);
         let engine_state = self.engine_mut().on_buffer_leave(offset);
-        self.host_state_mut().buffer(editor_id).set_engine_state(engine_state);
+        self.host_state_mut()
+            .buffer(editor_id)
+            .set_engine_state(engine_state);
     }
 
     /// Exit non-Normal mode by sending synthetic Escapes through the session
@@ -539,10 +570,15 @@ impl VimController {
         if let Some(ref mut session) = self.session {
             let engine_mode = session.engine().mode();
             let auto_pairs_active = session.engine().options().auto_pairs().is_some();
-            let scrolloff = crate::bridge::codec::usize_to_i32(session.engine().options().scrolloff());
+            let scrolloff =
+                crate::bridge::codec::usize_to_i32(session.engine().options().scrolloff());
             session.host_mut().refresh_from_editor();
-            session.host_mut().set_auto_brace_eligible(engine_mode.is_insert());
-            session.host_mut().set_engine_auto_pairs_active(auto_pairs_active);
+            session
+                .host_mut()
+                .set_auto_brace_eligible(engine_mode.is_insert());
+            session
+                .host_mut()
+                .set_engine_auto_pairs_active(auto_pairs_active);
             session.host_mut().set_scrolloff(scrolloff);
             session.host_mut().set_current_mode(engine_mode);
         }
@@ -573,8 +609,14 @@ impl VimController {
     /// Clear Godot-side visual artifacts after the engine has already exited
     /// visual mode via the pipeline. Defense-in-depth: ensures no stale
     /// selection highlights remain even if the pipeline exit was a no-op.
-    pub(crate) fn cleanup_visual_artifacts(&mut self, editor_id: InstanceId, editor: &mut Gd<CodeEdit>) {
-        self.host_state_mut().buffer(editor_id).clear_visual_selection();
+    pub(crate) fn cleanup_visual_artifacts(
+        &mut self,
+        editor_id: InstanceId,
+        editor: &mut Gd<CodeEdit>,
+    ) {
+        self.host_state_mut()
+            .buffer(editor_id)
+            .clear_visual_selection();
         editor.remove_secondary_carets();
         editor.deselect();
     }
@@ -641,21 +683,29 @@ impl VimController {
             match effect {
                 vim_core::effects::Effect::ShowMessage { text: msg } => {
                     if has_session {
-                        crate::effects::messages::handle_show_message(self.host_state_mut().globals_mut(), &msg);
+                        crate::effects::messages::handle_show_message(
+                            self.host_state_mut().globals_mut(),
+                            &msg,
+                        );
                     } else {
                         log::info!("reload_config (detached): {}", msg);
                     }
                 }
                 vim_core::effects::Effect::ShowError { error } => {
                     if has_session {
-                        crate::effects::messages::handle_show_error(self.host_state_mut().globals_mut(), &error);
+                        crate::effects::messages::handle_show_error(
+                            self.host_state_mut().globals_mut(),
+                            &error,
+                        );
                     } else {
                         log::warn!("reload_config (detached): {}", error);
                     }
                 }
                 vim_core::effects::Effect::ClearHighlights => {
                     if has_session {
-                        crate::effects::search::handle_clear_highlights(self.host_state_mut().globals_mut());
+                        crate::effects::search::handle_clear_highlights(
+                            self.host_state_mut().globals_mut(),
+                        );
                     }
                 }
                 other => {
@@ -702,10 +752,16 @@ impl VimController {
         editor.remove_secondary_carets();
         let editor_id = editor.instance_id();
         if let Some(ref mut session) = self.session {
-            session.host_mut().state_mut().buffer(editor_id).clear_visual_selection();
-            session.host_mut().state_mut().globals_mut().set_error(
-                "Recovered from internal error \u{2014} state reset to Normal mode",
-            );
+            session
+                .host_mut()
+                .state_mut()
+                .buffer(editor_id)
+                .clear_visual_selection();
+            session
+                .host_mut()
+                .state_mut()
+                .globals_mut()
+                .set_error("Recovered from internal error \u{2014} state reset to Normal mode");
         }
     }
 
@@ -732,7 +788,10 @@ impl VimController {
         head_col: i32,
         shape: vim_core::primitives::SelectionShape,
     ) -> bool {
-        let session = self.session.as_mut().expect("process_mouse_selection: requires active session");
+        let session = self
+            .session
+            .as_mut()
+            .expect("process_mouse_selection: requires active session");
 
         // Compute byte offsets from line/col using the host's document.
         let text = editor.get_text().to_string();
@@ -752,12 +811,16 @@ impl VimController {
         for action in &result.deferred_actions {
             match action {
                 vim_core::execution::host_api::DeferredAction::WindowNav(nav) => {
-                    let nav_action = process::convert_window_nav_action(*nav);
-                    let control: Gd<godot::classes::Control> = editor.clone().upcast();
-                    crate::navigation::handle_window_nav_action(&control, nav_action);
+                    if let Some(nav_action) = process::convert_window_nav_action(*nav) {
+                        let control: Gd<godot::classes::Control> = editor.clone().upcast();
+                        crate::navigation::handle_window_nav_action(&control, nav_action);
+                    }
                 }
                 _ => {
-                    log::debug!("process_mouse_selection: unhandled deferred action {:?}", action);
+                    log::warn!(
+                        "process_mouse_selection: unhandled deferred action {:?}",
+                        action
+                    );
                 }
             }
         }

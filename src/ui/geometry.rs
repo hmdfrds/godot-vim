@@ -16,7 +16,11 @@ use crate::types::{CharLineCol, PixelPos};
 /// uses `>=` instead of `>` in its end-boundary check. The fix: for col >= 1,
 /// the right edge (`position.x + size.x`) of the returned rect equals the
 /// true left edge of the requested column.
-pub(super) fn corrected_col_x(editor: &godot::classes::CodeEdit, line: i32, col: i32) -> Option<PixelPos> {
+pub(super) fn corrected_col_x(
+    editor: &godot::classes::CodeEdit,
+    line: i32,
+    col: i32,
+) -> Option<PixelPos> {
     let rect = editor.get_rect_at_line_column(line, col);
     // (-1,-1) = off-screen/not-laid-out sentinel.
     if rect.position.x == -1 && rect.position.y == -1 {

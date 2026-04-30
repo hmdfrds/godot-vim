@@ -28,7 +28,10 @@ fn scroll_no_negative() {
 #[test]
 fn adjust_viewport_scrolls_down() {
     let mut mock = MockTextEdit::new(
-        &(0..50).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n"),
+        &(0..50)
+            .map(|i| format!("line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n"),
     );
     mock.set_visible_line_count(10);
     mock.set_caret_line(30);
@@ -41,7 +44,10 @@ fn adjust_viewport_scrolls_down() {
 #[test]
 fn effect_center_cursor() {
     let mut mock = MockTextEdit::new(
-        &(0..50).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n"),
+        &(0..50)
+            .map(|i| format!("line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n"),
     );
     mock.set_visible_line_count(10);
     mock.set_caret_line(20);
@@ -52,7 +58,10 @@ fn effect_center_cursor() {
 #[test]
 fn effect_cursor_to_top() {
     let mut mock = MockTextEdit::new(
-        &(0..50).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n"),
+        &(0..50)
+            .map(|i| format!("line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n"),
     );
     mock.set_caret_line(20);
     crate::effects::scroll::handle_cursor_to_top(&mut mock);
@@ -72,7 +81,10 @@ fn effect_scroll_left_right() {
 #[test]
 fn effect_cursor_to_bottom() {
     let mut mock = MockTextEdit::new(
-        &(0..50).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n"),
+        &(0..50)
+            .map(|i| format!("line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n"),
     );
     mock.set_visible_line_count(10);
     mock.set_caret_line(20);
@@ -83,7 +95,10 @@ fn effect_cursor_to_bottom() {
 #[test]
 fn effect_center_cursor_precise() {
     let mut mock = MockTextEdit::new(
-        &(0..50).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n"),
+        &(0..50)
+            .map(|i| format!("line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n"),
     );
     mock.set_visible_line_count(10);
     mock.set_caret_line(20);

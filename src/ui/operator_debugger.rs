@@ -44,31 +44,39 @@ impl IControl for DebugRangeOverlay {
     }
 
     fn ready(&mut self) {
-        panic_guard("operator_debugger::ready", || {
-            let mut timer = Timer::new_alloc();
-            timer.set_one_shot(true);
-            timer.set_wait_time(CLEAR_DELAY_SECS);
-            let callable = self.base().callable("on_clear_timer");
-            timer.connect("timeout", &callable);
-            self.base_mut().add_child(&timer);
-            self.clear_timer = Some(timer);
-        }, ());
+        panic_guard(
+            "operator_debugger::ready",
+            || {
+                let mut timer = Timer::new_alloc();
+                timer.set_one_shot(true);
+                timer.set_wait_time(CLEAR_DELAY_SECS);
+                let callable = self.base().callable("on_clear_timer");
+                timer.connect("timeout", &callable);
+                self.base_mut().add_child(&timer);
+                self.clear_timer = Some(timer);
+            },
+            (),
+        );
     }
 
     fn draw(&mut self) {
-        panic_guard("operator_debugger::draw", || {
-            if self.highlights.is_empty() {
-                return;
-            }
-            // Semi-transparent blue -- distinct from search highlights (yellow)
-            // and inccommand previews (green) so overlapping debug sessions are
-            // visually unambiguous.
-            let color = Color::from_rgba(0.3, 0.5, 1.0, 0.25);
-            for i in 0..self.highlights.len() {
-                let rect = self.highlights[i].rect;
-                self.base_mut().draw_rect(rect, color);
-            }
-        }, ());
+        panic_guard(
+            "operator_debugger::draw",
+            || {
+                if self.highlights.is_empty() {
+                    return;
+                }
+                // Semi-transparent blue -- distinct from search highlights (yellow)
+                // and inccommand previews (green) so overlapping debug sessions are
+                // visually unambiguous.
+                let color = Color::from_rgba(0.3, 0.5, 1.0, 0.25);
+                for i in 0..self.highlights.len() {
+                    let rect = self.highlights[i].rect;
+                    self.base_mut().draw_rect(rect, color);
+                }
+            },
+            (),
+        );
     }
 }
 
@@ -102,7 +110,8 @@ impl DebugRangeOverlay {
     ) {
         self.highlights.clear();
 
-        let rects = super::geometry::compute_highlight_rects(editor, &start, &end, MAX_HIGHLIGHT_RECTS);
+        let rects =
+            super::geometry::compute_highlight_rects(editor, &start, &end, MAX_HIGHLIGHT_RECTS);
         self.highlights
             .extend(rects.into_iter().map(|rect| RangeHighlight { rect }));
 
@@ -121,4 +130,3 @@ impl DebugRangeOverlay {
         self.base_mut().queue_redraw();
     }
 }
-

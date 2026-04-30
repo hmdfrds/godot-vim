@@ -9,7 +9,11 @@ use std::borrow::Cow;
 use godot::prelude::*;
 use vim_core::effects::Effect;
 
-use super::{auto_brace, compound::{CompoundAction, LineNumber, WindowNavAction}, cursor, messages, mode, navigation, registers, scroll, search, text, undo};
+use super::{
+    auto_brace,
+    compound::{CompoundAction, LineNumber, WindowNavAction},
+    cursor, messages, mode, navigation, registers, scroll, search, text, undo,
+};
 use crate::bridge::codec::{usize_to_i32, DocumentView, LineIndex};
 use crate::bridge::port::{FoldCapable, IdeCapable, NavigationCapable, TextEditorPort};
 use crate::bridge::{AutoBraceSnapshot, SyntaxRegion};
@@ -109,7 +113,18 @@ pub(crate) fn dispatch(
     ctx: DispatchContext<'_>,
     text_ref: &str,
 ) -> Vec<CompoundAction> {
-    let DispatchContext { state, editor_id, undo_depth, auto_brace, auto_brace_snapshot, line_index_hint, scrolloff, highlight_yank_duration_ms, syntax_query, clipboard } = ctx;
+    let DispatchContext {
+        state,
+        editor_id,
+        undo_depth,
+        auto_brace,
+        auto_brace_snapshot,
+        line_index_hint,
+        scrolloff,
+        highlight_yank_duration_ms,
+        syntax_query,
+        clipboard,
+    } = ctx;
     let auto_brace_eligible = matches!(auto_brace, AutoBraceMode::Eligible);
     log::trace!("dispatch: {} effects", effects.len());
     let mut pass2 = Vec::with_capacity(effects.len());
@@ -125,7 +140,10 @@ pub(crate) fn dispatch(
 
     for effect in effects {
         match effect {
-            Effect::Insert { offset, text: content } => {
+            Effect::Insert {
+                offset,
+                text: content,
+            } => {
                 let doc = DocumentView::new(&text, &line_index);
                 // Auto-brace only fires for single printable characters (typing,
                 // not paste). Control chars are excluded because Godot's
@@ -184,7 +202,13 @@ pub(crate) fn dispatch(
                 // Cow still holds pre-delete text (handle_delete only read it).
                 let has_auto_brace = auto_brace_eligible && auto_brace_snapshot.enabled;
                 if has_auto_brace {
-                    auto_brace::handle_delete_with_auto_brace(editor, &doc, start, end, &auto_brace_snapshot);
+                    auto_brace::handle_delete_with_auto_brace(
+                        editor,
+                        &doc,
+                        start,
+                        end,
+                        &auto_brace_snapshot,
+                    );
                     text = Cow::Owned(editor.get_text());
                     line_index = LineIndex::new(&text);
                 } else {
@@ -193,7 +217,10 @@ pub(crate) fn dispatch(
                 }
                 text_mutated = true;
             }
-            Effect::Replace { range, text: content } => {
+            Effect::Replace {
+                range,
+                text: content,
+            } => {
                 let doc = DocumentView::new(&text, &line_index);
                 let start = range.start().get();
                 let end = range.end().get();
@@ -239,7 +266,8 @@ pub(crate) fn dispatch(
     if text_mutated {
         let editor_text = editor.get_text();
         debug_assert_eq!(
-            text.as_ref(), editor_text.as_str(),
+            text.as_ref(),
+            editor_text.as_str(),
             "text mirror out of sync with editor after pass 1"
         );
     }
@@ -254,15 +282,22 @@ pub(crate) fn dispatch(
 
     for effect in pass2 {
         match effect {
-            Effect::SetSelection { anchor, head, shape } => {
-                log::trace!("pass2: SetSelection anchor={} head={} shape={:?}", anchor.get(), head.get(), shape);
+            Effect::SetSelection {
+                anchor,
+                head,
+                shape,
+            } => {
+                log::trace!(
+                    "pass2: SetSelection anchor={} head={} shape={:?}",
+                    anchor.get(),
+                    head.get(),
+                    shape
+                );
                 cursor::handle_set_selection(editor, &doc, anchor.get(), head.get(), shape);
                 let head_pos = doc.line_index.byte_to_line_col(doc.text, head.get());
-                state.buffer(editor_id).update_visual_selection(
-                    anchor,
-                    head,
-                    head_pos,
-                );
+                state
+                    .buffer(editor_id)
+                    .update_visual_selection(anchor, head, head_pos);
                 pairing = pairing.on_set_selection();
             }
             Effect::ClearSelection => {
@@ -275,7 +310,16 @@ pub(crate) fn dispatch(
                 pairing = pairing.on_consume_cursor();
             }
             other => {
-                dispatch_pass2_effect(other, editor, state, &doc, &mut compound_actions, scrolloff, highlight_yank_duration_ms, clipboard);
+                dispatch_pass2_effect(
+                    other,
+                    editor,
+                    state,
+                    &doc,
+                    &mut compound_actions,
+                    scrolloff,
+                    highlight_yank_duration_ms,
+                    clipboard,
+                );
             }
         }
     }
@@ -363,25 +407,39 @@ pub(crate) fn dispatch_pass2_effect(
         // Actionable window effects are promoted to CompoundAction::WindowNav
         // so the controller can handle them with Godot scene tree access.
         Effect::WindowMoveLeft => {
-            compound_actions.push(CompoundAction::WindowNav { action: WindowNavAction::MoveLeft });
+            compound_actions.push(CompoundAction::WindowNav {
+                action: WindowNavAction::MoveLeft,
+            });
         }
         Effect::WindowMoveRight => {
-            compound_actions.push(CompoundAction::WindowNav { action: WindowNavAction::MoveRight });
+            compound_actions.push(CompoundAction::WindowNav {
+                action: WindowNavAction::MoveRight,
+            });
         }
         Effect::WindowMoveUp => {
-            compound_actions.push(CompoundAction::WindowNav { action: WindowNavAction::MoveUp });
+            compound_actions.push(CompoundAction::WindowNav {
+                action: WindowNavAction::MoveUp,
+            });
         }
         Effect::WindowMoveDown => {
-            compound_actions.push(CompoundAction::WindowNav { action: WindowNavAction::MoveDown });
+            compound_actions.push(CompoundAction::WindowNav {
+                action: WindowNavAction::MoveDown,
+            });
         }
         Effect::WindowNext => {
-            compound_actions.push(CompoundAction::WindowNav { action: WindowNavAction::CycleNext });
+            compound_actions.push(CompoundAction::WindowNav {
+                action: WindowNavAction::CycleNext,
+            });
         }
         Effect::WindowPrev => {
-            compound_actions.push(CompoundAction::WindowNav { action: WindowNavAction::CyclePrev });
+            compound_actions.push(CompoundAction::WindowNav {
+                action: WindowNavAction::CyclePrev,
+            });
         }
         Effect::WindowClose => {
-            compound_actions.push(CompoundAction::WindowNav { action: WindowNavAction::CloseTab });
+            compound_actions.push(CompoundAction::WindowNav {
+                action: WindowNavAction::CloseTab,
+            });
         }
         // No meaningful mapping in Godot's single-editor-per-tab model.
         Effect::WindowSplit
@@ -399,20 +457,22 @@ pub(crate) fn dispatch_pass2_effect(
         }
 
         // ── Message ─────────────────────────────────────────────────────
-        Effect::ShowMessage { .. }
-        | Effect::ShowError { .. }
-        | Effect::ClearMessage => {
+        Effect::ShowMessage { .. } | Effect::ShowError { .. } | Effect::ClearMessage => {
             dispatch_message_effect(effect, state);
         }
 
         // ── Register ────────────────────────────────────────────────────
-        Effect::SetRegister { .. }
-        | Effect::CopyToClipboard { .. } => {
+        Effect::SetRegister { .. } | Effect::CopyToClipboard { .. } => {
             dispatch_register_effect(effect, clipboard);
         }
 
         // ── Compound actions (require re-driving the engine) ────────────
-        Effect::NormCommand { start_line, end_line, keys, remap } => {
+        Effect::NormCommand {
+            start_line,
+            end_line,
+            keys,
+            remap,
+        } => {
             compound_actions.push(CompoundAction::NormCommand {
                 start_line: LineNumber::new(start_line.get()),
                 end_line: LineNumber::new(end_line.get()),
@@ -425,7 +485,9 @@ pub(crate) fn dispatch_pass2_effect(
                 "OperatorFilter reached effect dispatch — the engine should promote \
                  filters to HostRequest::FilterDocumentRange before they reach here"
             );
-            state.globals_mut().set_error("Internal error: filter command not processed — please report this bug");
+            state
+                .globals_mut()
+                .set_error("Internal error: filter command not processed — please report this bug");
         }
 
         // ── Engine-internal: enriched logging for diagnostically useful variants ──
@@ -463,7 +525,11 @@ pub(crate) fn dispatch_pass2_effect(
             log::trace!("[internal] {:?}", e.kind());
         }
         Effect::PlayMacro { register, count } => {
-            log::debug!("PlayMacro: register='{}' count={} (keys fed via drain_pending)", register.char(), count);
+            log::debug!(
+                "PlayMacro: register='{}' count={} (keys fed via drain_pending)",
+                register.char(),
+                count
+            );
         }
 
         // ── Other: LSP, host action, virtual text, undo tree, etc. ──────
@@ -475,15 +541,22 @@ pub(crate) fn dispatch_pass2_effect(
         }
         Effect::HostAction { name } => {
             log::debug!("HostAction: {}", name);
-            messages::handle_show_message(
-                state.globals_mut(),
-                &format!("HostAction: {}", name),
-            );
+            messages::handle_show_message(state.globals_mut(), &format!("HostAction: {}", name));
         }
-        Effect::SetVirtualText { namespace, line, col, ref text, position } => {
+        Effect::SetVirtualText {
+            namespace,
+            line,
+            col,
+            ref text,
+            position,
+        } => {
             log::trace!(
                 "SetVirtualText: ns={} line={} col={} text={} pos={:?}",
-                namespace, line.get(), col.get(), text, position,
+                namespace,
+                line.get(),
+                col.get(),
+                text,
+                position,
             );
         }
         Effect::ClearVirtualText { namespace } => {
@@ -493,15 +566,24 @@ pub(crate) fn dispatch_pass2_effect(
             let report = crate::state::undo_tree::format_undo_tree_snapshot(&snapshot);
             log::info!("UndoTreeSnapshot:\n{}", report);
         }
-        Effect::HighlightYank { range, duration_ms: _ } => {
+        Effect::HighlightYank {
+            range,
+            duration_ms: _,
+        } => {
             // Override the engine's duration with the user's setting.
             // 0 = disabled (skip the highlight entirely).
             if highlight_yank_duration_ms > 0 {
-                let start_pos = doc.line_index.byte_to_line_col(doc.text, range.start().get());
+                let start_pos = doc
+                    .line_index
+                    .byte_to_line_col(doc.text, range.start().get());
                 let end_pos = doc.line_index.byte_to_line_col(doc.text, range.end().get());
                 log::trace!(
                     "HighlightYank: ({},{})..({},{}) duration={}ms",
-                    start_pos.line, start_pos.col, end_pos.line, end_pos.col, highlight_yank_duration_ms,
+                    start_pos.line,
+                    start_pos.col,
+                    end_pos.line,
+                    end_pos.col,
+                    highlight_yank_duration_ms,
                 );
                 state.set_highlight_yank(HighlightYank::new(
                     start_pos,
@@ -512,19 +594,27 @@ pub(crate) fn dispatch_pass2_effect(
         }
         Effect::OpenCommandWindow { .. } => {
             log::warn!("q: / q/ command window not supported in CodeEdit");
-            state.globals_mut().set_error("E11: Command window not supported in CodeEdit");
+            state
+                .globals_mut()
+                .set_error("E11: Command window not supported in CodeEdit");
         }
         Effect::CallOperatorFunc { range, motion_type } => {
             log::warn!("operatorfunc (g@) not yet supported");
-            state.globals_mut().set_error("E774: operatorfunc (g@) not yet supported");
-            log::debug!("CallOperatorFunc: range={}..{} motion={:?}", range.start().get(), range.end().get(), motion_type);
+            state
+                .globals_mut()
+                .set_error("E774: operatorfunc (g@) not yet supported");
+            log::debug!(
+                "CallOperatorFunc: range={}..{} motion={:?}",
+                range.start().get(),
+                range.end().get(),
+                motion_type
+            );
         }
         // Produced by the compose middleware when Insert+Delete annihilate.
         Effect::Noop => {}
 
         // ── Engine-internal: exchange state (processed by effect_processor) ──
-        Effect::SetExchangeState { .. }
-        | Effect::ClearExchangeState => {
+        Effect::SetExchangeState { .. } | Effect::ClearExchangeState => {
             log::trace!("[internal] exchange state update");
         }
 
@@ -537,8 +627,7 @@ pub(crate) fn dispatch_pass2_effect(
         }
 
         // ── Engine-internal: syntax selection (VS Code / multi-cursor) ──
-        Effect::SyntaxSelectionPush { .. }
-        | Effect::SyntaxSelectionPop => {
+        Effect::SyntaxSelectionPush { .. } | Effect::SyntaxSelectionPop => {
             log::trace!("[internal] syntax selection (no-op in CodeEdit)");
         }
 
@@ -592,21 +681,26 @@ fn dispatch_mode_effect(effect: Effect, editor: &mut impl IdeCapable) {
         Effect::CommandLineEdit(edit) => {
             mode::handle_command_line_edit(edit);
         }
-        Effect::BeginInsert { entry_type, count, auto_indent_len, entry_offset } => {
+        Effect::BeginInsert {
+            entry_type,
+            count,
+            auto_indent_len,
+            entry_offset,
+        } => {
             mode::handle_begin_insert(entry_type, count, auto_indent_len, entry_offset);
         }
-        Effect::SetBlockInsert { lines_below, grapheme_col, cursor_return_offset } => {
+        Effect::SetBlockInsert {
+            lines_below,
+            grapheme_col,
+            cursor_return_offset,
+        } => {
             mode::handle_set_block_insert(lines_below, grapheme_col, cursor_return_offset);
         }
         other => log::error!("dispatch_mode_effect: unexpected effect {:?}", other),
     }
 }
 
-fn dispatch_search_effect(
-    effect: Effect,
-    state: &mut ShellState,
-    doc: &DocumentView,
-) {
+fn dispatch_search_effect(effect: Effect, state: &mut ShellState, doc: &DocumentView) {
     match effect {
         Effect::SetSearchPattern { .. } => {
             // Pattern stored engine-side (pulled via ui_snapshot). Shell only
@@ -622,20 +716,23 @@ fn dispatch_search_effect(
         }
         Effect::SubstitutePreview { ref matches } => {
             log::trace!("SubstitutePreview: {} match(es)", matches.len());
-            let positions: Vec<MatchRange> =
-                matches
-                    .iter()
-                    .take(MAX_SUBSTITUTE_PREVIEW_MATCHES)
-                    .map(|substitute_match| {
-                        let start_pos = doc.line_index.byte_to_line_col(doc.text, substitute_match.match_start().get());
-                        let end_pos = doc.line_index.byte_to_line_col(doc.text, substitute_match.match_end().get());
-                        MatchRange::with_replacement(
-                            start_pos,
-                            end_pos,
-                            compact_str::CompactString::from(substitute_match.replacement()),
-                        )
-                    })
-                    .collect();
+            let positions: Vec<MatchRange> = matches
+                .iter()
+                .take(MAX_SUBSTITUTE_PREVIEW_MATCHES)
+                .map(|substitute_match| {
+                    let start_pos = doc
+                        .line_index
+                        .byte_to_line_col(doc.text, substitute_match.match_start().get());
+                    let end_pos = doc
+                        .line_index
+                        .byte_to_line_col(doc.text, substitute_match.match_end().get());
+                    MatchRange::with_replacement(
+                        start_pos,
+                        end_pos,
+                        compact_str::CompactString::from(substitute_match.replacement()),
+                    )
+                })
+                .collect();
             state.set_substitute_preview(positions);
         }
         Effect::ClearSubstitutePreview => {
@@ -650,11 +747,7 @@ fn dispatch_search_effect(
     }
 }
 
-fn dispatch_scroll_effect(
-    effect: Effect,
-    editor: &mut impl TextEditorPort,
-    doc: &DocumentView,
-) {
+fn dispatch_scroll_effect(effect: Effect, editor: &mut impl TextEditorPort, doc: &DocumentView) {
     match effect {
         Effect::ScrollTo { offset } => {
             scroll::handle_scroll_to(editor, doc, offset.get());
@@ -718,7 +811,6 @@ fn dispatch_fold_effect(effect: Effect, editor: &mut impl FoldCapable) {
     }
 }
 
-
 fn dispatch_message_effect(effect: Effect, state: &mut ShellState) {
     match effect {
         Effect::ShowMessage { text: msg } => {
@@ -734,9 +826,16 @@ fn dispatch_message_effect(effect: Effect, state: &mut ShellState) {
     }
 }
 
-fn dispatch_register_effect(effect: Effect, clipboard: &mut dyn crate::bridge::clipboard::ClipboardPort) {
+fn dispatch_register_effect(
+    effect: Effect,
+    clipboard: &mut dyn crate::bridge::clipboard::ClipboardPort,
+) {
     match effect {
-        Effect::SetRegister { name, text: content, .. } => {
+        Effect::SetRegister {
+            name,
+            text: content,
+            ..
+        } => {
             registers::sync_register_to_clipboard(name, &content, clipboard);
         }
         Effect::CopyToClipboard { text: content, .. } => {
@@ -772,9 +871,7 @@ mod selection_pairing_tests {
 
     #[test]
     fn multiple_selections_tracked() {
-        let state = SelectionPairing::Idle
-            .on_set_selection()
-            .on_set_selection();
+        let state = SelectionPairing::Idle.on_set_selection().on_set_selection();
         assert_eq!(state, SelectionPairing::AwaitingCursor { count: 2 });
 
         let state = state.on_consume_cursor();
@@ -802,8 +899,8 @@ mod selection_pairing_tests {
     fn set_selection_cursor_clear_sequence() {
         // [SetSelection, SetCursor, ClearSelection]
         let state = SelectionPairing::Idle
-            .on_set_selection()   // -> AwaitingCursor { 1 }
-            .on_consume_cursor()  // SetCursor: -> Idle
+            .on_set_selection() // -> AwaitingCursor { 1 }
+            .on_consume_cursor() // SetCursor: -> Idle
             .on_consume_cursor(); // ClearSelection: -> Idle (no-op)
         assert_eq!(state, SelectionPairing::Idle);
     }
@@ -812,8 +909,8 @@ mod selection_pairing_tests {
     fn set_selection_clear_cursor_sequence() {
         // [SetSelection, ClearSelection, SetCursor]
         let state = SelectionPairing::Idle
-            .on_set_selection()   // -> AwaitingCursor { 1 }
-            .on_consume_cursor()  // ClearSelection: -> Idle
+            .on_set_selection() // -> AwaitingCursor { 1 }
+            .on_consume_cursor() // ClearSelection: -> Idle
             .on_consume_cursor(); // SetCursor: -> Idle (should NOT suppress)
         assert_eq!(state, SelectionPairing::Idle);
     }

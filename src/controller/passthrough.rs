@@ -69,11 +69,7 @@ mod tests {
     fn meta_keys_always_passthrough() {
         for c in 'a'..='z' {
             let key = KeyEvent::new(Key::Char(c), Modifiers::META);
-            assert!(
-                is_always_passthrough(key),
-                "Meta+{} should pass through",
-                c
-            );
+            assert!(is_always_passthrough(key), "Meta+{} should pass through", c);
         }
     }
 

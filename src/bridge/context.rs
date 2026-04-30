@@ -38,7 +38,10 @@ impl FoldProvider for OwnedGodotFoldProvider {
             Direction::Forward => self.editor.move_down_visible(line_i32),
             Direction::Backward => self.editor.move_up_visible(line_i32),
             _ => {
-                log::warn!("Unknown Direction variant {:?} in next_visible_line — treating as Forward", direction);
+                log::warn!(
+                    "Unknown Direction variant {:?} in next_visible_line — treating as Forward",
+                    direction
+                );
                 self.editor.move_down_visible(line_i32)
             }
         };
@@ -92,7 +95,10 @@ impl IndentProvider for OwnedGodotIndentProvider {
 
         let line_text = self.editor.get_line(line_i32).to_string();
 
-        let indent: CompactString = line_text.chars().take_while(|&c| c == ' ' || c == '\t').collect();
+        let indent: CompactString = line_text
+            .chars()
+            .take_while(|&c| c == ' ' || c == '\t')
+            .collect();
 
         let trimmed = line_text.trim_end();
         let last_char_col = codec::usize_to_i32(trimmed.chars().count().saturating_sub(1));
@@ -101,7 +107,12 @@ impl IndentProvider for OwnedGodotIndentProvider {
                 || trimmed.ends_with('{')
                 || trimmed.ends_with('(')
                 || trimmed.ends_with('['))
-            && self.editor.is_in_string_ex(line_i32).column(last_char_col).done() == -1;
+            && self
+                .editor
+                .is_in_string_ex(line_i32)
+                .column(last_char_col)
+                .done()
+                == -1;
 
         if should_indent {
             let use_spaces = self.editor.is_indent_using_spaces();

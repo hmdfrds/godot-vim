@@ -30,13 +30,12 @@ fn get_tabs(id: HostRequestId) -> Result<Gd<TabContainer>, HostResult> {
 /// root control if no CodeEdit is found (e.g., visual shader editors).
 fn defer_focus_to_new_tab(tabs: &Gd<TabContainer>) {
     if let Some(control) = tabs.get_current_tab_control() {
-        if let Some(edit) = find_descendant::<CodeEdit>(&control.clone().upcast(), MAX_DISCOVERY_DEPTH) {
-            edit.upcast::<Node>()
-                .call_deferred("grab_focus", &[]);
+        if let Some(edit) =
+            find_descendant::<CodeEdit>(&control.clone().upcast(), MAX_DISCOVERY_DEPTH)
+        {
+            edit.upcast::<Node>().call_deferred("grab_focus", &[]);
         } else {
-            control
-                .upcast::<Node>()
-                .call_deferred("grab_focus", &[]);
+            control.upcast::<Node>().call_deferred("grab_focus", &[]);
         }
     }
 }
@@ -100,7 +99,10 @@ pub(super) fn handle_goto_buffer(id: HostRequestId, index: usize) -> HostResult 
     }
 
     if index == 0 || index > count {
-        return host_failure(id, format!("E86: Buffer {} does not exist (1-{})", index, count));
+        return host_failure(
+            id,
+            format!("E86: Buffer {} does not exist (1-{})", index, count),
+        );
     }
 
     let target = crate::bridge::codec::usize_to_i32(index - 1);
@@ -133,10 +135,8 @@ pub(super) fn handle_jump_to_buffer(
     let count = tabs.get_tab_count();
     for i in 0..count {
         if let Some(control) = tabs.get_tab_control(i) {
-            if let Some(edit) = find_descendant::<CodeEdit>(
-                &control.upcast(),
-                MAX_DISCOVERY_DEPTH,
-            ) {
+            if let Some(edit) = find_descendant::<CodeEdit>(&control.upcast(), MAX_DISCOVERY_DEPTH)
+            {
                 if edit.instance_id() == instance_id {
                     tabs.set_current_tab(i);
                     // Convert the engine's byte offset to Godot's (line, column) pair.
@@ -165,9 +165,7 @@ fn is_tab_unsaved(tabs: &Gd<TabContainer>, tab_index: i32) -> bool {
     let Some(control) = tabs.get_tab_control(tab_index) else {
         return false;
     };
-    let Some(edit) =
-        find_descendant::<CodeEdit>(&control.upcast(), MAX_DISCOVERY_DEPTH)
-    else {
+    let Some(edit) = find_descendant::<CodeEdit>(&control.upcast(), MAX_DISCOVERY_DEPTH) else {
         return true;
     };
     // get_version()/get_saved_version() live on TextEdit in Godot's class
@@ -207,7 +205,13 @@ pub(super) fn handle_buffer_list(id: HostRequestId) -> HostResult {
         let title = tabs.get_tab_title(i).to_string();
         let activity = if i == current { "%a" } else { "  " };
         let modified = if is_tab_unsaved(&tabs, i) { "+" } else { " " };
-        lines.push(format!("  {: >2}{}{} \"{}\"", i + 1, activity, modified, title));
+        lines.push(format!(
+            "  {: >2}{}{} \"{}\"",
+            i + 1,
+            activity,
+            modified,
+            title
+        ));
     }
 
     HostResult::Success {

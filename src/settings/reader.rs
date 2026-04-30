@@ -6,7 +6,10 @@ use godot::prelude::*;
 
 use vim_core::keymap::KeyEvent;
 
-use super::{defaults, keys, CursorSettings, FileAccessScope, InccommandMode, LineNumberMode, ProjectVimrc, SettingsSnapshot, ShellExecution, StatusBarColors};
+use super::{
+    defaults, keys, CursorSettings, FileAccessScope, InccommandMode, LineNumberMode, ProjectVimrc,
+    SettingsSnapshot, ShellExecution, StatusBarColors,
+};
 
 /// Read all GodotVim settings from `EditorSettings` into a typed [`SettingsSnapshot`].
 ///
@@ -16,19 +19,35 @@ use super::{defaults, keys, CursorSettings, FileAccessScope, InccommandMode, Lin
 /// downgrade the plugin, leaving stale/missing keys behind.
 pub(crate) fn read_all(settings: &EditorSettings) -> SettingsSnapshot {
     SettingsSnapshot {
-        log_level: crate::logging::LogLevel::from_setting(
-            &read_enum_string(settings, keys::LOG_LEVEL, defaults::LOG_LEVEL,
-                defaults::LOG_LEVEL_OPTIONS),
-        ),
+        log_level: crate::logging::LogLevel::from_setting(&read_enum_string(
+            settings,
+            keys::LOG_LEVEL,
+            defaults::LOG_LEVEL,
+            defaults::LOG_LEVEL_OPTIONS,
+        )),
         scrolloff: read_int(settings, keys::SCROLLOFF, defaults::SCROLLOFF),
         textwidth: read_int(settings, keys::TEXTWIDTH, defaults::TEXTWIDTH),
-        clipboard_enabled: read_bool(settings, keys::CLIPBOARD_ENABLED, defaults::CLIPBOARD_ENABLED),
+        clipboard_enabled: read_bool(
+            settings,
+            keys::CLIPBOARD_ENABLED,
+            defaults::CLIPBOARD_ENABLED,
+        ),
         ignorecase: read_bool(settings, keys::IGNORECASE, defaults::IGNORECASE),
         smartcase: read_bool(settings, keys::SMARTCASE, defaults::SMARTCASE),
-        code_complete_enabled: read_bool(settings, keys::CODE_COMPLETE_ENABLED, defaults::CODE_COMPLETE_ENABLED),
+        code_complete_enabled: read_bool(
+            settings,
+            keys::CODE_COMPLETE_ENABLED,
+            defaults::CODE_COMPLETE_ENABLED,
+        ),
         line_number_mode: read_line_number_mode(settings),
         inccommand: read_inccommand(settings),
-        highlight_yank_duration: read_int(settings, keys::HIGHLIGHT_YANK_DURATION, defaults::HIGHLIGHT_YANK_DURATION).max(0).min(u32::MAX as i64) as u32,
+        highlight_yank_duration: read_int(
+            settings,
+            keys::HIGHLIGHT_YANK_DURATION,
+            defaults::HIGHLIGHT_YANK_DURATION,
+        )
+        .max(0)
+        .min(u32::MAX as i64) as u32,
         cursor: CursorSettings {
             normal: read_color(settings, keys::CURSOR_NORMAL, defaults::cursor_normal()),
             insert: read_color(settings, keys::CURSOR_INSERT, defaults::cursor_insert()),
@@ -37,18 +56,58 @@ pub(crate) fn read_all(settings: &EditorSettings) -> SettingsSnapshot {
             operator: read_color(settings, keys::CURSOR_OPERATOR, defaults::cursor_operator()),
             command: read_color(settings, keys::CURSOR_COMMAND, defaults::cursor_command()),
             enabled: read_bool(settings, keys::CURSOR_ENABLED, defaults::CURSOR_ENABLED),
-            lerp_speed: read_float(settings, keys::CURSOR_LERP_SPEED, defaults::CURSOR_LERP_SPEED),
-            underline_height: read_float(settings, keys::CURSOR_UNDERLINE_HEIGHT, defaults::CURSOR_UNDERLINE_HEIGHT),
+            lerp_speed: read_float(
+                settings,
+                keys::CURSOR_LERP_SPEED,
+                defaults::CURSOR_LERP_SPEED,
+            ),
+            underline_height: read_float(
+                settings,
+                keys::CURSOR_UNDERLINE_HEIGHT,
+                defaults::CURSOR_UNDERLINE_HEIGHT,
+            ),
         },
         status_bar: StatusBarColors {
-            normal_bg: read_color(settings, keys::STATUS_BAR_NORMAL_BG, defaults::status_bar_normal_bg()),
-            insert_bg: read_color(settings, keys::STATUS_BAR_INSERT_BG, defaults::status_bar_insert_bg()),
-            visual_bg: read_color(settings, keys::STATUS_BAR_VISUAL_BG, defaults::status_bar_visual_bg()),
-            replace_bg: read_color(settings, keys::STATUS_BAR_REPLACE_BG, defaults::status_bar_replace_bg()),
-            command_bg: read_color(settings, keys::STATUS_BAR_COMMAND_BG, defaults::status_bar_command_bg()),
-            recording_bg: read_color(settings, keys::STATUS_BAR_RECORDING_BG, defaults::status_bar_recording_bg()),
-            text_fg: read_color(settings, keys::STATUS_BAR_TEXT_FG, defaults::status_bar_text_fg()),
-            error_fg: read_color(settings, keys::STATUS_BAR_ERROR_FG, defaults::status_bar_error_fg()),
+            normal_bg: read_color(
+                settings,
+                keys::STATUS_BAR_NORMAL_BG,
+                defaults::status_bar_normal_bg(),
+            ),
+            insert_bg: read_color(
+                settings,
+                keys::STATUS_BAR_INSERT_BG,
+                defaults::status_bar_insert_bg(),
+            ),
+            visual_bg: read_color(
+                settings,
+                keys::STATUS_BAR_VISUAL_BG,
+                defaults::status_bar_visual_bg(),
+            ),
+            replace_bg: read_color(
+                settings,
+                keys::STATUS_BAR_REPLACE_BG,
+                defaults::status_bar_replace_bg(),
+            ),
+            command_bg: read_color(
+                settings,
+                keys::STATUS_BAR_COMMAND_BG,
+                defaults::status_bar_command_bg(),
+            ),
+            recording_bg: read_color(
+                settings,
+                keys::STATUS_BAR_RECORDING_BG,
+                defaults::status_bar_recording_bg(),
+            ),
+            text_fg: read_color(
+                settings,
+                keys::STATUS_BAR_TEXT_FG,
+                defaults::status_bar_text_fg(),
+            ),
+            error_fg: read_color(
+                settings,
+                keys::STATUS_BAR_ERROR_FG,
+                defaults::status_bar_error_fg(),
+            ),
         },
         timeoutlen: read_int(settings, keys::TIMEOUTLEN, defaults::TIMEOUTLEN),
         passthrough_keys: read_passthrough_keys(settings),
@@ -231,7 +290,9 @@ fn read_parsed_enum<T: Default>(
     parse(value.as_str()).unwrap_or_else(|| {
         log::warn!(
             "Setting '{}' has unrecognized value '{}', using default: {}",
-            key, value, default_str
+            key,
+            value,
+            default_str
         );
         T::default()
     })

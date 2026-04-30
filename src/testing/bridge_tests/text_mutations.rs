@@ -2,10 +2,10 @@
 //! mock itself is correct) and the bridge effect handlers (verifying byte-offset
 //! to line/col translation produces correct mutations).
 
+use super::macros::{apply_delete, apply_insert, apply_replace};
 use crate::bridge::port::TextEditorPort;
 use crate::testing::MockTextEdit;
 use crate::types::CharLineCol;
-use super::macros::{apply_insert, apply_delete, apply_replace};
 
 // ── Text storage (validates MockTextEdit's text model) ──────────────────
 

@@ -77,7 +77,11 @@ fn handle_cycle_focus(current: &Gd<Control>, action: WindowNavAction) {
             }
         }
         None => {
-            if is_next { 0 } else { candidates.len() - 1 }
+            if is_next {
+                0
+            } else {
+                candidates.len() - 1
+            }
         }
     };
 
@@ -119,10 +123,7 @@ fn find_cycle_candidates(root: &Gd<Control>) -> Vec<Gd<Control>> {
         let bc = b.get_global_rect().center();
         ac.y.partial_cmp(&bc.y)
             .unwrap_or(std::cmp::Ordering::Equal)
-            .then(
-                ac.x.partial_cmp(&bc.x)
-                    .unwrap_or(std::cmp::Ordering::Equal),
-            )
+            .then(ac.x.partial_cmp(&bc.x).unwrap_or(std::cmp::Ordering::Equal))
     });
 
     candidates

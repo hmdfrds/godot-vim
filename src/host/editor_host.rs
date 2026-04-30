@@ -51,8 +51,8 @@ mod godot_impl {
     use compact_str::CompactString;
     use godot::classes::file_access::ModeFlags;
     use godot::classes::{
-        CodeEdit, EditorInterface, FileAccess, InputEventShortcut, ResourceLoader,
-        ResourceSaver, Script, ScriptEditorBase,
+        CodeEdit, EditorInterface, FileAccess, InputEventShortcut, ResourceLoader, ResourceSaver,
+        Script, ScriptEditorBase,
     };
     use godot::prelude::*;
 
@@ -108,17 +108,15 @@ mod godot_impl {
         event.set_shortcut(&shortcut);
 
         // Push into the editor viewport's input pipeline at end-of-frame.
-        let Some(mut viewport) = editor_iface.get_base_control()
+        let Some(mut viewport) = editor_iface
+            .get_base_control()
             .and_then(|ctrl| ctrl.get_viewport())
         else {
             log::warn!("close_tab: no editor viewport available");
             return;
         };
 
-        viewport.call_deferred(
-            "push_input",
-            &[event.to_variant(), false.to_variant()],
-        );
+        viewport.call_deferred("push_input", &[event.to_variant(), false.to_variant()]);
     }
 
     fn emit_name_changed() {
@@ -133,11 +131,12 @@ mod godot_impl {
     const MAX_READ_FILE_SIZE: usize = 10 * 1024 * 1024;
 
     fn read_via_godot(path: &str) -> Result<String, HostError> {
-        let file = FileAccess::open(&GString::from(path), ModeFlags::READ)
-            .ok_or_else(|| HostError::CantOpenFile {
+        let file = FileAccess::open(&GString::from(path), ModeFlags::READ).ok_or_else(|| {
+            HostError::CantOpenFile {
                 path: CompactString::from(path),
                 detail: None,
-            })?;
+            }
+        })?;
         let length = usize::try_from(file.get_length()).unwrap_or(usize::MAX);
         if length > MAX_READ_FILE_SIZE {
             return Err(HostError::CantOpenFile {
@@ -191,8 +190,7 @@ mod godot_impl {
         }
 
         fn save_script(&mut self, explicit_path: Option<&str>) -> Result<String, HostError> {
-            let mut script =
-                current_script().ok_or(HostError::NoFileName)?;
+            let mut script = current_script().ok_or(HostError::NoFileName)?;
 
             let text = self.0.get_text();
             script.set_source_code(&text);
@@ -257,11 +255,10 @@ mod godot_impl {
                 read_via_godot(path)
             } else {
                 crate::host::file::check_fs_file_size(path)?;
-                std::fs::read_to_string(path)
-                    .map_err(|e| HostError::CantOpenFile {
-                        path: CompactString::from(path),
-                        detail: Some(CompactString::from(e.to_string())),
-                    })
+                std::fs::read_to_string(path).map_err(|e| HostError::CantOpenFile {
+                    path: CompactString::from(path),
+                    detail: Some(CompactString::from(e.to_string())),
+                })
             }
         }
 
@@ -277,9 +274,9 @@ pub(crate) use godot_impl::GodotEditorHost;
 
 #[cfg(test)]
 pub(super) mod mock {
-    use compact_str::CompactString;
     use super::EditorHost;
     use crate::host::error::HostError;
+    use compact_str::CompactString;
     use std::collections::HashMap;
 
     /// Lifecycle state of the mock buffer, replacing three booleans
@@ -384,12 +381,10 @@ pub(super) mod mock {
             }
             let path = match explicit_path {
                 Some(p) => p.to_string(),
-                None => {
-                    match &self.script_path {
-                        Some(sp) if !sp.is_empty() => sp.clone(),
-                        _ => return Err(HostError::NoFileName),
-                    }
-                }
+                None => match &self.script_path {
+                    Some(sp) if !sp.is_empty() => sp.clone(),
+                    _ => return Err(HostError::NoFileName),
+                },
             };
             self.buffer_state = MockBufferState::Saved;
             self.save_called = true;
@@ -412,11 +407,10 @@ pub(super) mod mock {
             // use actual temp files.
             if !path.starts_with("res://") && !path.starts_with("user://") {
                 crate::host::file::check_fs_file_size(path)?;
-                std::fs::read_to_string(path)
-                    .map_err(|e| HostError::CantOpenFile {
-                        path: CompactString::from(path),
-                        detail: Some(CompactString::from(e.to_string())),
-                    })
+                std::fs::read_to_string(path).map_err(|e| HostError::CantOpenFile {
+                    path: CompactString::from(path),
+                    detail: Some(CompactString::from(e.to_string())),
+                })
             } else {
                 Err(HostError::CantOpenFile {
                     path: CompactString::from(path),

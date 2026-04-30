@@ -47,9 +47,12 @@ impl PerfTracker {
         if metrics.total_us > self.budget_us {
             log::warn!(
                 "Frame budget exceeded: {} > {} | ctx={} eng={} fx={} ui={}",
-                metrics.total_us, self.budget_us,
-                metrics.context_build_us, metrics.engine_process_us,
-                metrics.effects_dispatch_us, metrics.ui_update_us,
+                metrics.total_us,
+                self.budget_us,
+                metrics.context_build_us,
+                metrics.engine_process_us,
+                metrics.effects_dispatch_us,
+                metrics.ui_update_us,
             );
         }
         self.frames[self.cursor] = metrics;
@@ -62,7 +65,12 @@ impl PerfTracker {
     #[must_use]
     pub(crate) fn percentiles(&self) -> (Microseconds, Microseconds, Microseconds, Microseconds) {
         if self.count == 0 {
-            return (Microseconds(0), Microseconds(0), Microseconds(0), Microseconds(0));
+            return (
+                Microseconds(0),
+                Microseconds(0),
+                Microseconds(0),
+                Microseconds(0),
+            );
         }
         let mut totals: Vec<Microseconds> = self.frames[..self.count]
             .iter()
@@ -70,7 +78,9 @@ impl PerfTracker {
             .collect();
         totals.sort_unstable();
         let p = |pct: f64| -> Microseconds {
-            let idx = ((pct / 100.0) * (totals.len() as f64 - 1.0)).ceil().max(0.0) as usize;
+            let idx = ((pct / 100.0) * (totals.len() as f64 - 1.0))
+                .ceil()
+                .max(0.0) as usize;
             totals[idx.min(totals.len() - 1)]
         };
         let &last = totals.last().unwrap_or(&Microseconds(0));
@@ -109,7 +119,10 @@ mod tests {
     #[test]
     fn single_frame() {
         let mut tracker = PerfTracker::new(100, us(2000));
-        tracker.record(FrameMetrics { total_us: us(500), ..Default::default() });
+        tracker.record(FrameMetrics {
+            total_us: us(500),
+            ..Default::default()
+        });
         let (p50, _, _, max) = tracker.percentiles();
         assert_eq!(p50, us(500));
         assert_eq!(max, us(500));
@@ -118,10 +131,22 @@ mod tests {
     #[test]
     fn ring_buffer_wraps() {
         let mut tracker = PerfTracker::new(3, us(2000));
-        tracker.record(FrameMetrics { total_us: us(100), ..Default::default() });
-        tracker.record(FrameMetrics { total_us: us(200), ..Default::default() });
-        tracker.record(FrameMetrics { total_us: us(300), ..Default::default() });
-        tracker.record(FrameMetrics { total_us: us(400), ..Default::default() });
+        tracker.record(FrameMetrics {
+            total_us: us(100),
+            ..Default::default()
+        });
+        tracker.record(FrameMetrics {
+            total_us: us(200),
+            ..Default::default()
+        });
+        tracker.record(FrameMetrics {
+            total_us: us(300),
+            ..Default::default()
+        });
+        tracker.record(FrameMetrics {
+            total_us: us(400),
+            ..Default::default()
+        });
         // Capacity 3, so oldest (100) was overwritten
         assert_eq!(tracker.count, 3);
         let (_, _, _, max) = tracker.percentiles();
@@ -131,7 +156,10 @@ mod tests {
     #[test]
     fn reset_clears() {
         let mut tracker = PerfTracker::new(100, us(2000));
-        tracker.record(FrameMetrics { total_us: us(500), ..Default::default() });
+        tracker.record(FrameMetrics {
+            total_us: us(500),
+            ..Default::default()
+        });
         tracker.reset();
         assert_eq!(tracker.percentiles(), (us(0), us(0), us(0), us(0)));
     }
@@ -139,7 +167,10 @@ mod tests {
     #[test]
     fn format_report_includes_stats() {
         let mut tracker = PerfTracker::new(100, us(2000));
-        tracker.record(FrameMetrics { total_us: us(500), ..Default::default() });
+        tracker.record(FrameMetrics {
+            total_us: us(500),
+            ..Default::default()
+        });
         let report = tracker.format_report();
         assert!(report.contains(":perf"));
         assert!(report.contains("500us"));

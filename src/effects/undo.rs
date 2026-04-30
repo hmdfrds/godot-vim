@@ -16,13 +16,19 @@ const MAX_UNDO_DEPTH: u32 = 64;
 pub(crate) struct UndoDepth(u32);
 
 impl UndoDepth {
-    pub(crate) const fn new() -> Self { Self(0) }
+    pub(crate) const fn new() -> Self {
+        Self(0)
+    }
 
     #[must_use]
-    pub(crate) fn is_zero(&self) -> bool { self.0 == 0 }
+    pub(crate) fn is_zero(&self) -> bool {
+        self.0 == 0
+    }
 
     #[must_use]
-    pub(crate) fn depth(&self) -> u32 { self.0 }
+    pub(crate) fn depth(&self) -> u32 {
+        self.0
+    }
 
     /// Drain all depth, returning the count of Godot-side `end_complex_operation`
     /// calls needed. Depths above `MAX_UNDO_DEPTH` were never sent to Godot.

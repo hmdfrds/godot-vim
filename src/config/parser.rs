@@ -327,13 +327,23 @@ nnoremap <Space>r :run<CR>
         let doc = parse_config(text);
 
         // Count user mappings (no preset_id) and preset mappings (has preset_id).
-        let user_mappings: Vec<_> = doc.lines.iter().filter(|l| matches!(l,
-            ConfigLine::Mapping(p) if p.preset_id.is_none()
-        )).collect();
-        let preset_mappings: Vec<_> = doc.lines.iter().filter_map(|l| match l {
-            ConfigLine::Mapping(p) if p.preset_id.is_some() => Some(p.enabled),
-            _ => None,
-        }).collect();
+        let user_mappings: Vec<_> = doc
+            .lines
+            .iter()
+            .filter(|l| {
+                matches!(l,
+                    ConfigLine::Mapping(p) if p.preset_id.is_none()
+                )
+            })
+            .collect();
+        let preset_mappings: Vec<_> = doc
+            .lines
+            .iter()
+            .filter_map(|l| match l {
+                ConfigLine::Mapping(p) if p.preset_id.is_some() => Some(p.enabled),
+                _ => None,
+            })
+            .collect();
 
         assert_eq!(user_mappings.len(), 2);
         assert_eq!(preset_mappings.len(), 2);
@@ -360,8 +370,8 @@ nnoremap <Space>r :run<CR>
 
     #[test]
     fn disabled_user_mapping_roundtrip() {
-        use super::super::writer;
         use super::super::types::ConfigDocument;
+        use super::super::writer;
 
         // Build a doc with a disabled user mapping.
         let doc = ConfigDocument {

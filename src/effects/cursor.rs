@@ -24,7 +24,12 @@ pub(crate) fn handle_set_cursor(
     scrolloff: i32,
 ) {
     let pos = doc.line_index.byte_to_line_col(doc.text, offset);
-    log::trace!("set_cursor: offset={} -> line={} col={}", offset, pos.line, pos.col);
+    log::trace!(
+        "set_cursor: offset={} -> line={} col={}",
+        offset,
+        pos.line,
+        pos.col
+    );
     editor.set_caret_line_unfold(pos.line, ViewportAdjust::Adjust);
     editor.set_caret_column(pos.col);
 
@@ -111,13 +116,19 @@ pub(crate) fn handle_set_selection(
     match shape {
         SelectionShape::Char => {
             if head >= anchor {
-                let head_line_len = usize_to_i32(doc.line_index.line_char_count(doc.text, i32_to_usize(head_line)));
+                let head_line_len = usize_to_i32(
+                    doc.line_index
+                        .line_char_count(doc.text, i32_to_usize(head_line)),
+                );
                 editor.select(
                     CharLineCol::new(anchor_line, anchor_col),
                     CharLineCol::new(head_line, (head_col + 1).min(head_line_len)),
                 );
             } else {
-                let anchor_line_len = usize_to_i32(doc.line_index.line_char_count(doc.text, i32_to_usize(anchor_line)));
+                let anchor_line_len = usize_to_i32(
+                    doc.line_index
+                        .line_char_count(doc.text, i32_to_usize(anchor_line)),
+                );
                 editor.select(
                     CharLineCol::new(anchor_line, (anchor_col + 1).min(anchor_line_len)),
                     CharLineCol::new(head_line, head_col),
@@ -129,18 +140,30 @@ pub(crate) fn handle_set_selection(
             // end of select(), so swap origin/caret to preserve direction.
             let top_line = anchor_line.min(head_line);
             let bot_line = anchor_line.max(head_line);
-            let bot_end_col = usize_to_i32(doc.line_index.line_char_count(doc.text, i32_to_usize(bot_line)));
+            let bot_end_col = usize_to_i32(
+                doc.line_index
+                    .line_char_count(doc.text, i32_to_usize(bot_line)),
+            );
             if head_line >= anchor_line {
-                editor.select(CharLineCol::new(top_line, 0), CharLineCol::new(bot_line, bot_end_col));
+                editor.select(
+                    CharLineCol::new(top_line, 0),
+                    CharLineCol::new(bot_line, bot_end_col),
+                );
             } else {
-                editor.select(CharLineCol::new(bot_line, bot_end_col), CharLineCol::new(top_line, 0));
+                editor.select(
+                    CharLineCol::new(bot_line, bot_end_col),
+                    CharLineCol::new(top_line, 0),
+                );
             }
         }
         SelectionShape::Block => {
             render_block_selection(editor, doc, anchor_line, anchor_col, head_line, head_col);
         }
         _ => {
-            log::warn!("Unknown SelectionShape variant {:?} — rendering as Block (best-effort)", shape);
+            log::warn!(
+                "Unknown SelectionShape variant {:?} — rendering as Block (best-effort)",
+                shape
+            );
             render_block_selection(editor, doc, anchor_line, anchor_col, head_line, head_col);
         }
     }
@@ -197,7 +220,10 @@ fn render_block_selection(
         (min_col, max_col + 1)
     };
 
-    let head_line_len = usize_to_i32(doc.line_index.line_char_count(doc.text, i32_to_usize(head_line)));
+    let head_line_len = usize_to_i32(
+        doc.line_index
+            .line_char_count(doc.text, i32_to_usize(head_line)),
+    );
     editor.select(
         CharLineCol::new(head_line, render_anchor.min(head_line_len)),
         CharLineCol::new(head_line, render_head.min(head_line_len)),
@@ -216,12 +242,18 @@ fn render_block_selection(
         let clamped_head = render_head.min(line_len);
         let caret_idx = editor.add_caret(line, clamped_head);
         if caret_idx >= 0 {
-            editor.select_for_caret(CharLineCol::new(line, clamped_anchor), CharLineCol::new(line, clamped_head), caret_idx);
+            editor.select_for_caret(
+                CharLineCol::new(line, clamped_anchor),
+                CharLineCol::new(line, clamped_head),
+                caret_idx,
+            );
             added_carets.push(caret_idx);
         } else {
             log::error!(
                 "set_selection: add_caret({}, {}) failed — rolling back {} secondary carets",
-                line, clamped_head, added_carets.len()
+                line,
+                clamped_head,
+                added_carets.len()
             );
             any_failed = true;
             break;

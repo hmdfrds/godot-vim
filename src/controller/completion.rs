@@ -37,10 +37,7 @@ pub(crate) fn try_handle_completion(
     let in_insert = mode.is_insert() || mode.is_replace();
 
     // Ctrl+Space → Ctrl+@ after bridge translation: force-trigger completion.
-    if in_insert
-        && key.modifiers().contains(Modifiers::CTRL)
-        && key.key() == Key::Char('@')
-    {
+    if in_insert && key.modifiers().contains(Modifiers::CTRL) && key.key() == Key::Char('@') {
         if !editor.is_code_completion_enabled() {
             return None;
         }
@@ -200,10 +197,5 @@ fn confirm_and_reconcile_completion(engine: &mut VimEngine, editor: &mut Gd<Code
         editor.get_caret_column(),
     );
 
-    super::reconcile::reconcile_external_text_change(
-        engine,
-        &before_text,
-        &after_text,
-        after_byte,
-    );
+    super::reconcile::reconcile_external_text_change(engine, &before_text, &after_text, after_byte);
 }

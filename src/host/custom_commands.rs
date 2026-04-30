@@ -78,7 +78,10 @@ fn grab_focus_on_dock(root: &Gd<Node>, id: HostRequestId) -> Option<HostResult> 
     });
 
     if let Some(child) = focusable {
-        child.clone().upcast::<Node>().call_deferred("grab_focus", &[]);
+        child
+            .clone()
+            .upcast::<Node>()
+            .call_deferred("grab_focus", &[]);
         Some(host_success(id))
     } else {
         Some(host_failure(id, "E5: No focusable control found in dock"))
@@ -149,9 +152,11 @@ fn handle_debug_command(
         "GodotNext" | "next" => debugger_action(id, "debug_next", None),
         "GodotStepIn" | "stepin" => debugger_action(id, "debug_step", None),
         // Godot's debugger has no step-out action; fall back to continue.
-        "GodotStepOut" | "stepout" => {
-            debugger_action(id, "debug_continue", Some("step-out not available, used continue"))
-        }
+        "GodotStepOut" | "stepout" => debugger_action(
+            id,
+            "debug_continue",
+            Some("step-out not available, used continue"),
+        ),
         "GodotPause" | "pause" => debugger_action(id, "debug_break", None),
         _ => None,
     }
@@ -173,7 +178,9 @@ fn handle_dock_command(id: HostRequestId, cmd: &str) -> Option<HostResult> {
             let editor_interface = EditorInterface::singleton();
             if let Some(base) = editor_interface.get_base_control() {
                 // COMPAT: Internal editor class, not public Godot API.
-                if let Some(dock) = find_node_by_class(&base.clone().upcast(), godot_calls::CLASS_SCENE_TREE_DOCK) {
+                if let Some(dock) =
+                    find_node_by_class(&base.clone().upcast(), godot_calls::CLASS_SCENE_TREE_DOCK)
+                {
                     make_dock_tab_visible(&dock);
                     grab_focus_on_dock(&dock, id)
                 } else {
@@ -302,7 +309,11 @@ fn handle_save_command(
         "save" => {
             let mut host = super::GodotEditorHost(editor);
             Some(super::file::handle_write_file(
-                id, &mut host, None, ForceOverride::Normal, crate::settings::FileAccessScope::Unrestricted,
+                id,
+                &mut host,
+                None,
+                ForceOverride::Normal,
+                crate::settings::FileAccessScope::Unrestricted,
             ))
         }
         "saveall" => {
@@ -316,7 +327,10 @@ fn handle_save_command(
             if err == godot::global::Error::OK {
                 Some(host_success(id))
             } else {
-                Some(host_failure(id, format!("E514: Failed to save scene: {err:?}")))
+                Some(host_failure(
+                    id,
+                    format!("E514: Failed to save scene: {err:?}"),
+                ))
             }
         }
         _ => None,
@@ -327,14 +341,32 @@ fn handle_save_command(
 /// `:ListActions` filtering and tab-completion.
 pub(super) const fn list_all_commands() -> &'static [&'static str] {
     &[
-        "run", "play", "runcurrent", "playcurrent", "stop",
-        "zen", "unzen", "save", "saveall", "savescene",
-        "GodotBreakpoint", "GodotContinue", "cont",
-        "GodotNext", "next",
-        "GodotStepIn", "stepin",
-        "GodotStepOut", "stepout",
-        "GodotPause", "pause",
-        "Scene", "FileSystem", "Inspector", "Output", "Script",
+        "run",
+        "play",
+        "runcurrent",
+        "playcurrent",
+        "stop",
+        "zen",
+        "unzen",
+        "save",
+        "saveall",
+        "savescene",
+        "GodotBreakpoint",
+        "GodotContinue",
+        "cont",
+        "GodotNext",
+        "next",
+        "GodotStepIn",
+        "stepin",
+        "GodotStepOut",
+        "stepout",
+        "GodotPause",
+        "pause",
+        "Scene",
+        "FileSystem",
+        "Inspector",
+        "Output",
+        "Script",
     ]
 }
 

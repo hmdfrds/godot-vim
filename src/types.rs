@@ -32,7 +32,11 @@ impl ForceOverride {
 
 impl From<bool> for ForceOverride {
     fn from(force: bool) -> Self {
-        if force { Self::Force } else { Self::Normal }
+        if force {
+            Self::Force
+        } else {
+            Self::Normal
+        }
     }
 }
 
@@ -121,7 +125,11 @@ impl MatchRange {
     #[must_use]
     #[allow(dead_code)] // Used by vimdebug range annotation; currently disabled in new pipeline.
     pub(crate) const fn new(start: CharLineCol, end: CharLineCol) -> Self {
-        Self { start, end, replacement: None }
+        Self {
+            start,
+            end,
+            replacement: None,
+        }
     }
 
     #[must_use]
@@ -130,7 +138,11 @@ impl MatchRange {
         end: CharLineCol,
         replacement: CompactString,
     ) -> Self {
-        Self { start, end, replacement: Some(replacement) }
+        Self {
+            start,
+            end,
+            replacement: Some(replacement),
+        }
     }
 }
 
@@ -151,7 +163,11 @@ pub(crate) struct HighlightYank {
 impl HighlightYank {
     #[must_use]
     pub(crate) const fn new(start: CharLineCol, end: CharLineCol, duration_ms: u32) -> Self {
-        Self { start, end, duration_ms }
+        Self {
+            start,
+            end,
+            duration_ms,
+        }
     }
 }
 
@@ -174,7 +190,11 @@ pub(crate) enum RemapPolicy {
 
 impl From<bool> for RemapPolicy {
     fn from(remap: bool) -> Self {
-        if remap { Self::Remap } else { Self::NoRemap }
+        if remap {
+            Self::Remap
+        } else {
+            Self::NoRemap
+        }
     }
 }
 
@@ -270,7 +290,9 @@ impl VimdebugSnapshot {
     pub(crate) fn provenance(&self) -> Option<&str> {
         match self {
             Self::Inactive => None,
-            Self::Watch { provenance, .. } | Self::Step { provenance, .. } => Some(provenance.as_str()),
+            Self::Watch { provenance, .. } | Self::Step { provenance, .. } => {
+                Some(provenance.as_str())
+            }
         }
     }
 

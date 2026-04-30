@@ -52,18 +52,22 @@ impl IControl for InccommandOverlay {
     }
 
     fn draw(&mut self) {
-        panic_guard("inccommand::draw", || {
-            if self.highlights.is_empty() {
-                return;
-            }
-            // Yellow at 30% opacity -- matches Vim's inccommand highlight convention.
-            let color = Color::from_rgba(1.0, 1.0, 0.0, 0.3);
-            // Index loop avoids iterator borrow conflict with base_mut().
-            for i in 0..self.highlights.len() {
-                let rect = self.highlights[i].rect;
-                self.base_mut().draw_rect(rect, color);
-            }
-        }, ());
+        panic_guard(
+            "inccommand::draw",
+            || {
+                if self.highlights.is_empty() {
+                    return;
+                }
+                // Yellow at 30% opacity -- matches Vim's inccommand highlight convention.
+                let color = Color::from_rgba(1.0, 1.0, 0.0, 0.3);
+                // Index loop avoids iterator borrow conflict with base_mut().
+                for i in 0..self.highlights.len() {
+                    let rect = self.highlights[i].rect;
+                    self.base_mut().draw_rect(rect, color);
+                }
+            },
+            (),
+        );
     }
 }
 
@@ -72,13 +76,17 @@ impl InccommandOverlay {
     /// Exposed to GDScript for scene teardown; Rust code uses `clear_highlights`.
     #[func]
     pub fn clear(&mut self) {
-        panic_guard("inccommand::clear", || {
-            if self.highlights.is_empty() {
-                return;
-            }
-            self.highlights.clear();
-            self.base_mut().queue_redraw();
-        }, ());
+        panic_guard(
+            "inccommand::clear",
+            || {
+                if self.highlights.is_empty() {
+                    return;
+                }
+                self.highlights.clear();
+                self.base_mut().queue_redraw();
+            },
+            (),
+        );
     }
 }
 
@@ -126,8 +134,10 @@ impl InccommandOverlay {
 
         for m in self.last_positions.iter().take(MAX_HIGHLIGHTS) {
             let remaining = MAX_HIGHLIGHTS - self.highlights.len();
-            let rects = super::geometry::compute_highlight_rects(editor, &m.start, &m.end, remaining);
-            self.highlights.extend(rects.into_iter().map(|rect| MatchHighlight { rect }));
+            let rects =
+                super::geometry::compute_highlight_rects(editor, &m.start, &m.end, remaining);
+            self.highlights
+                .extend(rects.into_iter().map(|rect| MatchHighlight { rect }));
             if self.highlights.len() >= MAX_HIGHLIGHTS {
                 break;
             }
@@ -136,4 +146,3 @@ impl InccommandOverlay {
         self.base_mut().queue_redraw();
     }
 }
-

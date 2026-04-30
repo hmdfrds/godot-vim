@@ -7,8 +7,8 @@ use godot::prelude::*;
 
 use crate::bridge::code_edit_ext::CodeEditExt;
 
-use super::GodotVimCore;
 use super::signals::{connect_deferred, connect_immediate, safe_disconnect};
+use super::GodotVimCore;
 
 const SIG_GUI_INPUT: &str = "gui_input";
 const SIG_CARET_CHANGED: &str = "caret_changed";
@@ -32,7 +32,10 @@ impl GodotVimCore {
         // either attached or detached state — no-ops when detached.
         if let Some(controller) = &mut self.controller {
             if controller.is_attached() {
-                log::trace!("attach: sweeping stale buffers before attaching #{}", new_id.to_i64());
+                log::trace!(
+                    "attach: sweeping stale buffers before attaching #{}",
+                    new_id.to_i64()
+                );
                 controller.sweep_stale_buffers();
             }
         }
@@ -304,7 +307,9 @@ fn sync_commentstring_from_editor(
     let delimiters = editor.get_comment_delimiters();
     let mut best: Option<String> = None;
     for i in 0..delimiters.len() {
-        let Some(gstr) = delimiters.get(i) else { continue };
+        let Some(gstr) = delimiters.get(i) else {
+            continue;
+        };
         let s = gstr.to_string();
         // Block comments contain a space separator (e.g. "/* */") -- skip.
         if s.contains(' ') {
@@ -316,7 +321,11 @@ fn sync_commentstring_from_editor(
     }
     if let Some(delim) = best {
         let cs = format!("{delim} %s");
-        log::debug!("sync_commentstring: '{}' for editor #{}", cs, editor.instance_id().to_i64());
+        log::debug!(
+            "sync_commentstring: '{}' for editor #{}",
+            cs,
+            editor.instance_id().to_i64()
+        );
         controller.set_commentstring(&cs);
     } else {
         log::trace!("sync_commentstring: no line comment delimiter found, keeping default");
@@ -339,6 +348,9 @@ pub(super) fn sync_indent_from_editor(
 
     log::debug!(
         "sync_indent: expandtab={} shiftwidth={} tabstop={} for editor #{}",
-        use_spaces, indent_size, tab_size, editor.instance_id().to_i64(),
+        use_spaces,
+        indent_size,
+        tab_size,
+        editor.instance_id().to_i64(),
     );
 }

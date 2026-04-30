@@ -28,10 +28,7 @@ use crate::controller::VimController;
 use crate::safety::{install_panic_hook, panic_guard};
 
 use floating::{disconnect_viewport_signals, TrackedWindow};
-use signals::{
-    SIG_CONFIG_SAVED,
-    SIG_TREE_EXITED, SIG_WINDOW_VISIBILITY_CHANGED,
-};
+use signals::{SIG_CONFIG_SAVED, SIG_TREE_EXITED, SIG_WINDOW_VISIBILITY_CHANGED};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum TooltipPhase {
@@ -136,7 +133,11 @@ impl INode for GodotVimCore {
         }
         self.cancel_pending_tooltip();
         log::info!("GodotVim shutting down");
-        panic_guard("exit_tree:floating", || self.teardown_floating_window_tracking(), ());
+        panic_guard(
+            "exit_tree:floating",
+            || self.teardown_floating_window_tracking(),
+            (),
+        );
         panic_guard("exit_tree:detach", || self.detach(), ());
         panic_guard("exit_tree:signals", || self.disconnect_editor_signals(), ());
         panic_guard("exit_tree:settings", || self.teardown_settings(), ());
@@ -166,7 +167,9 @@ impl INode for GodotVimCore {
 impl GodotVimCore {
     #[func]
     fn on_script_changed(&mut self, _script: Variant) {
-        if self.controller.is_none() { return; }
+        if self.controller.is_none() {
+            return;
+        }
         panic_guard(
             "on_script_changed",
             || {
@@ -174,8 +177,7 @@ impl GodotVimCore {
                     self.base_mut()
                         .call_deferred("perform_attach", &[code_edit.to_variant()]);
                 } else {
-                    self.base_mut()
-                        .call_deferred("perform_detach", &[]);
+                    self.base_mut().call_deferred("perform_detach", &[]);
                 }
             },
             (),
@@ -184,13 +186,13 @@ impl GodotVimCore {
 
     #[func]
     fn on_focus_changed(&mut self, focused_node: Gd<Control>) {
-        if self.controller.is_none() { return; }
+        if self.controller.is_none() {
+            return;
+        }
         panic_guard(
             "on_focus_changed",
             || {
-                if let Some(code_edit) =
-                    discovery::find_code_edit_from_control(&focused_node)
-                {
+                if let Some(code_edit) = discovery::find_code_edit_from_control(&focused_node) {
                     self.base_mut()
                         .call_deferred("perform_attach", &[code_edit.to_variant()]);
                 }
@@ -201,7 +203,9 @@ impl GodotVimCore {
 
     #[func]
     fn on_window_visibility_changed(&mut self, visible: bool) {
-        if self.controller.is_none() { return; }
+        if self.controller.is_none() {
+            return;
+        }
         panic_guard(
             "on_window_visibility_changed",
             || {
@@ -222,7 +226,9 @@ impl GodotVimCore {
 
     #[func]
     fn on_child_entered_tree(&mut self, node: Gd<Node>) {
-        if self.controller.is_none() { return; }
+        if self.controller.is_none() {
+            return;
+        }
         panic_guard(
             "on_child_entered_tree",
             || {
@@ -235,15 +241,27 @@ impl GodotVimCore {
                     let wrapper_id = node.instance_id();
                     log::debug!(
                         "on_child_entered_tree: detected WindowWrapper (class={}) id=#{}",
-                        node_class, wrapper_id.to_i64()
+                        node_class,
+                        wrapper_id.to_i64()
                     );
-                    if self.tracked_windows.iter().any(|tw| tw.wrapper_id == wrapper_id) {
-                        log::debug!("on_child_entered_tree: already tracked #{}, skipping", wrapper_id.to_i64());
+                    if self
+                        .tracked_windows
+                        .iter()
+                        .any(|tw| tw.wrapper_id == wrapper_id)
+                    {
+                        log::debug!(
+                            "on_child_entered_tree: already tracked #{}, skipping",
+                            wrapper_id.to_i64()
+                        );
                         return;
                     }
                     let callables = self.floating_callables();
                     let mut n = node;
-                    signals::connect_immediate(&mut n, SIG_WINDOW_VISIBILITY_CHANGED, &callables.visibility_changed);
+                    signals::connect_immediate(
+                        &mut n,
+                        SIG_WINDOW_VISIBILITY_CHANGED,
+                        &callables.visibility_changed,
+                    );
                     signals::connect_immediate(&mut n, SIG_TREE_EXITED, &callables.tree_exited);
                     log::debug!("on_child_entered_tree: connected window_visibility_changed + tree_exited on #{}", wrapper_id.to_i64());
                     self.tracked_windows.push(TrackedWindow {
@@ -258,12 +276,13 @@ impl GodotVimCore {
 
     #[func]
     fn on_wrapper_tree_exited(&mut self) {
-        if self.controller.is_none() { return; }
+        if self.controller.is_none() {
+            return;
+        }
         panic_guard(
             "on_wrapper_tree_exited",
             || {
-                self.base_mut()
-                    .call_deferred("evict_stale_wrappers", &[]);
+                self.base_mut().call_deferred("evict_stale_wrappers", &[]);
             },
             (),
         );
@@ -271,7 +290,9 @@ impl GodotVimCore {
 
     #[func]
     fn evict_stale_wrappers(&mut self) {
-        if self.controller.is_none() { return; }
+        if self.controller.is_none() {
+            return;
+        }
         panic_guard(
             "evict_stale_wrappers",
             || {
@@ -279,9 +300,7 @@ impl GodotVimCore {
 
                 let before = self.tracked_windows.len();
                 self.tracked_windows.retain(|tw| {
-                    let Ok(wrapper) =
-                        Gd::<Node>::try_from_instance_id(tw.wrapper_id)
-                    else {
+                    let Ok(wrapper) = Gd::<Node>::try_from_instance_id(tw.wrapper_id) else {
                         // Wrapper freed — disconnect viewport signals if any.
                         if let Some(window_id) = tw.window_id {
                             disconnect_viewport_signals(window_id, &callables);
@@ -303,11 +322,7 @@ impl GodotVimCore {
                             SIG_WINDOW_VISIBILITY_CHANGED,
                             &callables.visibility_changed,
                         );
-                        signals::safe_disconnect(
-                            &mut w,
-                            SIG_TREE_EXITED,
-                            &callables.tree_exited,
-                        );
+                        signals::safe_disconnect(&mut w, SIG_TREE_EXITED, &callables.tree_exited);
                         if let Some(window_id) = tw.window_id {
                             disconnect_viewport_signals(window_id, &callables);
                         }
@@ -336,7 +351,9 @@ impl GodotVimCore {
 
     #[func]
     fn on_floating_window_focused(&mut self) {
-        if self.controller.is_none() { return; }
+        if self.controller.is_none() {
+            return;
+        }
         panic_guard(
             "on_floating_window_focused",
             || {
@@ -381,9 +398,12 @@ impl GodotVimCore {
                         let focus_class = focus_owner.get_class().to_string();
                         log::trace!(
                             "on_floating_window_focused: window #{} focus_owner class={}",
-                            window_id.to_i64(), focus_class
+                            window_id.to_i64(),
+                            focus_class
                         );
-                        if let Some(code_edit) = crate::plugin::discovery::find_code_edit_from_control(&focus_owner) {
+                        if let Some(code_edit) =
+                            crate::plugin::discovery::find_code_edit_from_control(&focus_owner)
+                        {
                             log::debug!(
                                 "on_floating_window_focused: found CodeEdit #{} in floating window #{}, attaching",
                                 code_edit.instance_id().to_i64(), window_id.to_i64()
@@ -409,7 +429,9 @@ impl GodotVimCore {
     /// signal handlers to avoid borrowing conflicts with `&mut self`.
     #[func]
     fn perform_attach(&mut self, node: Variant) {
-        if self.controller.is_none() { return; }
+        if self.controller.is_none() {
+            return;
+        }
         let ok = panic_guard(
             "perform_attach",
             || {
@@ -453,7 +475,9 @@ impl GodotVimCore {
     /// or switched to a non-CodeEdit editor view such as the 2D/3D viewport).
     #[func]
     fn perform_detach(&mut self) {
-        if self.controller.is_none() { return; }
+        if self.controller.is_none() {
+            return;
+        }
         let ok = panic_guard(
             "perform_detach",
             || {
@@ -498,8 +522,17 @@ impl GodotVimCore {
     #[func]
     #[allow(clippy::needless_pass_by_value)] // gdext requires Gd<T> by value
     fn handle_gui_input(&mut self, event: Gd<InputEvent>) {
-        if self.controller.is_none() { return; }
-        let ok = panic_guard("handle_gui_input", || { self.handle_gui_input_impl(event); true }, false);
+        if self.controller.is_none() {
+            return;
+        }
+        let ok = panic_guard(
+            "handle_gui_input",
+            || {
+                self.handle_gui_input_impl(event);
+                true
+            },
+            false,
+        );
         if !ok {
             self.recover_controller_from_panic();
         }
@@ -507,8 +540,17 @@ impl GodotVimCore {
 
     #[func]
     fn on_mapping_timeout(&mut self) {
-        if self.controller.is_none() { return; }
-        let ok = panic_guard("on_mapping_timeout", || { self.on_mapping_timeout_impl(); true }, false);
+        if self.controller.is_none() {
+            return;
+        }
+        let ok = panic_guard(
+            "on_mapping_timeout",
+            || {
+                self.on_mapping_timeout_impl();
+                true
+            },
+            false,
+        );
         if !ok {
             self.recover_controller_from_panic();
         }
@@ -516,8 +558,17 @@ impl GodotVimCore {
 
     #[func]
     fn on_caret_changed(&mut self) {
-        if self.controller.is_none() { return; }
-        let ok = panic_guard("on_caret_changed", || { self.on_caret_changed_impl(); true }, false);
+        if self.controller.is_none() {
+            return;
+        }
+        let ok = panic_guard(
+            "on_caret_changed",
+            || {
+                self.on_caret_changed_impl();
+                true
+            },
+            false,
+        );
         if !ok {
             self.recover_controller_from_panic();
         }
@@ -527,7 +578,9 @@ impl GodotVimCore {
     /// that bypass the Vim keystroke pipeline's inline cache invalidation.
     #[func]
     fn on_text_changed(&mut self) {
-        if self.controller.is_none() { return; }
+        if self.controller.is_none() {
+            return;
+        }
         let is_external = !self.processing_key;
         panic_guard(
             "on_text_changed",
@@ -549,20 +602,37 @@ impl GodotVimCore {
 
     #[func]
     fn on_scrollbar_changed(&mut self, _value: f64) {
-        if self.controller.is_none() { return; }
-        panic_guard("on_scrollbar_changed", || self.update_cursor_if_attached(), ());
+        if self.controller.is_none() {
+            return;
+        }
+        panic_guard(
+            "on_scrollbar_changed",
+            || self.update_cursor_if_attached(),
+            (),
+        );
     }
 
     #[func]
     fn on_editor_draw(&mut self) {
-        if self.controller.is_none() { return; }
+        if self.controller.is_none() {
+            return;
+        }
         panic_guard("on_editor_draw", || self.update_cursor_if_attached(), ());
     }
 
     #[func]
     fn on_config_saved(&mut self) {
-        if self.controller.is_none() { return; }
-        let ok = panic_guard("on_config_saved", || { self.source_config_from_disk("on_config_saved"); true }, false);
+        if self.controller.is_none() {
+            return;
+        }
+        let ok = panic_guard(
+            "on_config_saved",
+            || {
+                self.source_config_from_disk("on_config_saved");
+                true
+            },
+            false,
+        );
         if !ok {
             self.recover_controller_from_panic();
         }
@@ -573,12 +643,13 @@ impl GodotVimCore {
     /// to defaults for missing or wrong-type values.
     #[func]
     fn on_settings_changed(&mut self) {
-        if self.controller.is_none() { return; }
+        if self.controller.is_none() {
+            return;
+        }
         let ok = panic_guard(
             "on_settings_changed",
             || {
-                let Some(editor_settings) =
-                    EditorInterface::singleton().get_editor_settings()
+                let Some(editor_settings) = EditorInterface::singleton().get_editor_settings()
                 else {
                     return true;
                 };
@@ -630,12 +701,10 @@ impl GodotVimCore {
                 let resolved = self.resolve_config_path();
 
                 if self.mapping_dialog.is_none() {
-                    let mut dialog =
-                        crate::ui::mapping_dialog::MappingDialog::new_alloc();
+                    let mut dialog = crate::ui::mapping_dialog::MappingDialog::new_alloc();
                     let callable = self.base().callable("on_config_saved");
                     signals::connect_immediate(&mut dialog, SIG_CONFIG_SAVED, &callable);
-                    self.base_mut()
-                        .add_child(&dialog.clone().upcast::<Node>());
+                    self.base_mut().add_child(&dialog.clone().upcast::<Node>());
                     self.mapping_dialog = Some(dialog);
                 }
 
@@ -647,9 +716,7 @@ impl GodotVimCore {
             PendingUiAction::SourceConfigFile => {
                 if !self.source_config_from_disk("pending_ui_action") {
                     let path = self.resolve_config_path().path;
-                    log::warn!(
-                        "pending_ui_action: SourceConfigFile — file not found at '{path}'",
-                    );
+                    log::warn!("pending_ui_action: SourceConfigFile — file not found at '{path}'",);
                 }
             }
             other => {
@@ -774,8 +841,12 @@ impl GodotVimCore {
                 let pending = self.pending_tooltip.take().unwrap();
                 self.base_mut().set_process(false);
 
-                let Some(editor) = &self.attached_editor else { return; };
-                if !editor.is_instance_valid() { return; }
+                let Some(editor) = &self.attached_editor else {
+                    return;
+                };
+                if !editor.is_instance_valid() {
+                    return;
+                }
                 let mut ed = editor.clone();
                 ed.emit_signal(
                     "symbol_hovered",
@@ -787,15 +858,21 @@ impl GodotVimCore {
                 );
                 log::debug!(
                     "poll_pending_tooltip: emitted symbol_hovered for '{}' at {}:{}",
-                    pending.symbol, pending.line, pending.col
+                    pending.symbol,
+                    pending.line,
+                    pending.col
                 );
             }
         }
     }
 
     fn update_cursor_if_attached(&mut self) {
-        let Some(editor) = &self.attached_editor else { return; };
-        if !editor.is_instance_valid() { return; }
+        let Some(editor) = &self.attached_editor else {
+            return;
+        };
+        if !editor.is_instance_valid() {
+            return;
+        }
         self.ui.update_cursor_position(editor);
         // Recompute inccommand pixel rects from stored logical positions.
         // Scroll and resize change the viewport, making cached pixel
@@ -823,7 +900,11 @@ impl GodotVimCore {
             .settings
             .as_ref()
             .map_or(crate::settings::ProjectVimrc::Sandbox, |s| s.project_vimrc);
-        let text = crate::config::sandbox::apply_vimrc_policy(&text, resolved.is_project_level, project_vimrc);
+        let text = crate::config::sandbox::apply_vimrc_policy(
+            &text,
+            resolved.is_project_level,
+            project_vimrc,
+        );
         if let Some(text) = text {
             if let Some(controller) = &mut self.controller {
                 controller.reload_config(&text);

@@ -10,16 +10,14 @@ use godot::classes::CodeEdit;
 use godot::prelude::*;
 use vim_core::document::{Document, Providers};
 use vim_core::effects::Effect;
-use vim_core::execution::{
-    HostCapabilitySet, HostRequest, HostResult, ViewportInfo, VimHost,
-};
+use vim_core::execution::{HostCapabilitySet, HostRequest, HostResult, ViewportInfo, VimHost};
 use vim_core::primitives::{Mode, Offset, Position, SelectionRange, VisualType};
 
 use super::clipboard::GodotClipboard;
+use super::code_edit_ext::CodeEditExt;
 use super::codec::{self, LineIndex};
 use super::context::{OwnedGodotFoldProvider, OwnedGodotIndentProvider};
 use super::port_impl::{AutoBraceSnapshot, SyntaxRegion};
-use super::code_edit_ext::CodeEditExt;
 use crate::effects::dispatch::{AutoBraceMode, DispatchContext};
 use crate::effects::UndoDepth;
 use crate::host::SecurityPolicy;
@@ -108,7 +106,9 @@ impl Document for GodotHost {
     }
 
     fn offset_to_pos(&self, offset: Offset) -> Option<Position> {
-        let lc = self.line_index.offset_to_line_col(&self.text_cache, offset.get())?;
+        let lc = self
+            .line_index
+            .offset_to_line_col(&self.text_cache, offset.get())?;
         Some(Position::from_raw(
             codec::i32_to_usize(lc.line),
             codec::i32_to_usize(lc.col),
@@ -143,7 +143,8 @@ impl VimHost for GodotHost {
     }
 
     fn selection(&self) -> Option<SelectionRange> {
-        self.visual_selection.map(|vs| SelectionRange::new(vs.anchor, vs.head))
+        self.visual_selection
+            .map(|vs| SelectionRange::new(vs.anchor, vs.head))
     }
 
     fn providers(&self) -> Providers<'_> {
@@ -255,7 +256,8 @@ impl VimHost for GodotHost {
         // Sync visual selection from ShellState buffer to host field.
         // VimSession::build_context calls host.selection() on every keystroke
         // and drain iteration — this must reflect the live selection state.
-        *visual_selection = state.buffer_ref(editor_id)
+        *visual_selection = state
+            .buffer_ref(editor_id)
             .and_then(|b| b.visual().cloned());
     }
 
@@ -280,9 +282,7 @@ impl GodotHost {
         if self.host_request_depth > MAX_HOST_REQUEST_DEPTH {
             return HostResult::Failure {
                 id: request.id(),
-                error: compact_str::CompactString::from(
-                    "host request depth limit exceeded",
-                ),
+                error: compact_str::CompactString::from("host request depth limit exceeded"),
             };
         }
 
@@ -309,8 +309,7 @@ impl GodotHost {
                     };
                 }
                 "undotree" => {
-                    self.pending_ui_actions
-                        .push(PendingUiAction::ShowUndoTree);
+                    self.pending_ui_actions.push(PendingUiAction::ShowUndoTree);
                     return HostResult::Success {
                         id: request.id(),
                         message: None,
@@ -380,11 +379,8 @@ impl GodotHost {
     pub(crate) fn new(editor: Gd<CodeEdit>) -> Self {
         let text = editor.get_text().to_string();
         let line_index = LineIndex::new(&text);
-        let cursor_offset = line_index.line_col_to_byte(
-            &text,
-            editor.get_caret_line(),
-            editor.get_caret_column(),
-        );
+        let cursor_offset =
+            line_index.line_col_to_byte(&text, editor.get_caret_line(), editor.get_caret_column());
         let editor_id = editor.instance_id();
         Self {
             fold_provider: OwnedGodotFoldProvider::new(editor.clone()),
@@ -447,7 +443,6 @@ impl GodotHost {
     }
 
     /// Force a full text cache rebuild from the editor.
-    #[allow(dead_code)]
     pub(crate) fn invalidate_cache(&mut self) {
         self.text_cache = self.editor.get_text().to_string();
         self.line_index = LineIndex::new(&self.text_cache);
@@ -498,7 +493,9 @@ impl GodotHost {
             if depth > 1 {
                 log::error!(
                     "Abnormal undo depth {} in {} mode (expected 1) editor=#{} -- engine bug?",
-                    depth, mode, self.editor.instance_id().to_i64(),
+                    depth,
+                    mode,
+                    self.editor.instance_id().to_i64(),
                 );
             }
             return;
@@ -523,58 +520,18 @@ impl GodotHost {
     }
 
     // ── Field accessors ─────────────────────────────────────────────────
-    //
-    // These form GodotHost's public API. Some are currently unused because
-    // the old ProcessContext pipeline was removed; they remain for the
-    // controller/testing code that may need them.
-
-    #[allow(dead_code)]
-    pub(crate) fn editor(&self) -> &Gd<CodeEdit> {
-        &self.editor
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn editor_mut(&mut self) -> &mut Gd<CodeEdit> {
-        &mut self.editor
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn state(&self) -> &ShellState {
-        &self.state
-    }
 
     pub(crate) fn state_mut(&mut self) -> &mut ShellState {
         &mut self.state
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn undo_depth(&self) -> &UndoDepth {
-        &self.undo_depth
     }
 
     pub(crate) fn undo_depth_mut(&mut self) -> &mut UndoDepth {
         &mut self.undo_depth
     }
 
-    #[allow(dead_code)]
-    pub(crate) fn line_index(&self) -> &LineIndex {
-        &self.line_index
-    }
-
-    #[allow(dead_code)]
-    pub(crate) fn security_policy(&self) -> &SecurityPolicy {
-        &self.security_policy
-    }
-
     pub(crate) fn highlight_yank_duration_ms(&self) -> u32 {
         self.highlight_yank_duration_ms
     }
-
-    #[allow(dead_code)]
-    pub(crate) fn clipboard(&mut self) -> &mut GodotClipboard {
-        &mut self.clipboard
-    }
-
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -631,6 +588,7 @@ fn mode_to_vim_string(mode: Mode) -> &'static str {
         Mode::Replace => "R",
         Mode::VirtualReplace => "Rv",
         Mode::CommandLine => "c",
+        Mode::OperatorPending(_) => "no",
         _ => {
             log::warn!(
                 "mode_to_vim_string: unknown Mode variant {} — defaulting to Normal",

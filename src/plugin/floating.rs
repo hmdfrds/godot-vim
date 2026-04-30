@@ -8,12 +8,11 @@
 use godot::classes::EditorInterface;
 use godot::prelude::*;
 
-use super::GodotVimCore;
 use super::signals::{
-    connect_deferred, connect_immediate, safe_disconnect,
-    SIG_CHILD_ENTERED_TREE, SIG_FOCUS_ENTERED, SIG_GUI_FOCUS_CHANGED,
-    SIG_TREE_EXITED, SIG_WINDOW_VISIBILITY_CHANGED,
+    connect_deferred, connect_immediate, safe_disconnect, SIG_CHILD_ENTERED_TREE,
+    SIG_FOCUS_ENTERED, SIG_GUI_FOCUS_CHANGED, SIG_TREE_EXITED, SIG_WINDOW_VISIBILITY_CHANGED,
 };
+use super::GodotVimCore;
 
 /// Tracks a floating WindowWrapper and its associated Window viewport.
 pub(super) struct TrackedWindow {
@@ -79,7 +78,8 @@ impl GodotVimCore {
 
             log::trace!(
                 "connect_floating_viewport: wrapper #{} has {} children",
-                tw.wrapper_id.to_i64(), wrapper.get_child_count()
+                tw.wrapper_id.to_i64(),
+                wrapper.get_child_count()
             );
 
             let mut found_window = false;
@@ -89,7 +89,8 @@ impl GodotVimCore {
                     // Only connect to visible (floating) windows. Docked wrappers
                     // keep a hidden Window child — connecting to it would violate
                     // the window_id invariant (Some = floating, None = docked).
-                    let Ok(window_check) = child.clone().try_cast::<godot::classes::Window>() else {
+                    let Ok(window_check) = child.clone().try_cast::<godot::classes::Window>()
+                    else {
                         continue;
                     };
                     if !window_check.is_visible() {
@@ -111,7 +112,8 @@ impl GodotVimCore {
                     // Window inherits Viewport -- gui_focus_changed detects
                     // focus changes between controls within the floating window.
                     let mut node = child;
-                    let was_disconnected = !node.is_connected(SIG_GUI_FOCUS_CHANGED, &callables.focus_changed);
+                    let was_disconnected =
+                        !node.is_connected(SIG_GUI_FOCUS_CHANGED, &callables.focus_changed);
                     connect_deferred(&mut node, SIG_GUI_FOCUS_CHANGED, &callables.focus_changed);
                     if was_disconnected {
                         log::debug!(
@@ -124,7 +126,8 @@ impl GodotVimCore {
                     // into the floating window from the main window, because the
                     // CodeEdit never lost key_focus within that viewport.
                     // focus_entered fires on every OS-level window focus event.
-                    let was_disconnected = !node.is_connected(SIG_FOCUS_ENTERED, &callables.focus_entered);
+                    let was_disconnected =
+                        !node.is_connected(SIG_FOCUS_ENTERED, &callables.focus_entered);
                     connect_immediate(&mut node, SIG_FOCUS_ENTERED, &callables.focus_entered);
                     if was_disconnected {
                         log::debug!(
@@ -154,7 +157,9 @@ impl GodotVimCore {
     pub(super) fn disconnect_floating_viewport(&mut self) {
         let callables = self.floating_callables();
         for tw in &mut self.tracked_windows {
-            let Some(window_id) = tw.window_id else { continue };
+            let Some(window_id) = tw.window_id else {
+                continue;
+            };
 
             // The Window node is a permanent child of the wrapper -- it is
             // hidden (not removed) when unfloated. Must check visibility,
@@ -163,14 +168,17 @@ impl GodotVimCore {
                 .ok()
                 .is_some_and(|window| {
                     window.is_class("Window")
-                        && window.clone().try_cast::<godot::classes::Window>()
+                        && window
+                            .clone()
+                            .try_cast::<godot::classes::Window>()
                             .is_ok_and(|w| w.is_visible())
                 });
 
             if wrapper_still_visible {
                 log::trace!(
                     "disconnect_floating_viewport: wrapper #{} still has Window #{}, skipping",
-                    tw.wrapper_id.to_i64(), window_id.to_i64()
+                    tw.wrapper_id.to_i64(),
+                    window_id.to_i64()
                 );
                 continue;
             }
@@ -178,7 +186,8 @@ impl GodotVimCore {
             tw.window_id = None;
             log::debug!(
                 "disconnect_floating_viewport: disconnecting Window #{} from wrapper #{}",
-                window_id.to_i64(), tw.wrapper_id.to_i64()
+                window_id.to_i64(),
+                tw.wrapper_id.to_i64()
             );
             disconnect_viewport_signals(window_id, &callables);
         }
@@ -227,9 +236,11 @@ impl GodotVimCore {
         log::trace!(
             "scan_floating_windows: scanning {} root(s): [{}]",
             scan_roots.len(),
-            scan_roots.iter().map(|(n, label)| {
-                format!("{}({})", label, n.get_class())
-            }).collect::<Vec<_>>().join(", ")
+            scan_roots
+                .iter()
+                .map(|(n, label)| { format!("{}({})", label, n.get_class()) })
+                .collect::<Vec<_>>()
+                .join(", ")
         );
 
         let callables = self.floating_callables();
@@ -249,21 +260,33 @@ impl GodotVimCore {
 
                 let wrapper_id = child.instance_id();
 
-                if self.tracked_windows.iter().any(|tw| tw.wrapper_id == wrapper_id) {
+                if self
+                    .tracked_windows
+                    .iter()
+                    .any(|tw| tw.wrapper_id == wrapper_id)
+                {
                     log::trace!(
                         "scan_floating_windows: [{}] already tracking #{} (class={})",
-                        label, wrapper_id.to_i64(), child_class
+                        label,
+                        wrapper_id.to_i64(),
+                        child_class
                     );
                     continue;
                 }
 
                 let mut node = child;
-                connect_immediate(&mut node, SIG_WINDOW_VISIBILITY_CHANGED, &callables.visibility_changed);
+                connect_immediate(
+                    &mut node,
+                    SIG_WINDOW_VISIBILITY_CHANGED,
+                    &callables.visibility_changed,
+                );
                 connect_immediate(&mut node, SIG_TREE_EXITED, &callables.tree_exited);
 
                 log::debug!(
                     "scan_floating_windows: [{}] tracking new WindowWrapper #{} (class={})",
-                    label, wrapper_id.to_i64(), child_class
+                    label,
+                    wrapper_id.to_i64(),
+                    child_class
                 );
 
                 self.tracked_windows.push(TrackedWindow {
@@ -275,13 +298,16 @@ impl GodotVimCore {
 
             log::trace!(
                 "scan_floating_windows: [{}] {} children total, {} WindowWrappers found",
-                label, child_count, wrappers_in_parent
+                label,
+                child_count,
+                wrappers_in_parent
             );
         }
 
         log::trace!(
             "scan_floating_windows: done -- {} newly tracked, {} total",
-            newly_tracked, self.tracked_windows.len()
+            newly_tracked,
+            self.tracked_windows.len()
         );
     }
 
@@ -301,7 +327,8 @@ impl GodotVimCore {
                     parent_class,
                     parent.instance_id().to_i64()
                 );
-                let was_disconnected = !parent.is_connected(SIG_CHILD_ENTERED_TREE, &child_callable);
+                let was_disconnected =
+                    !parent.is_connected(SIG_CHILD_ENTERED_TREE, &child_callable);
                 connect_immediate(&mut parent, SIG_CHILD_ENTERED_TREE, &child_callable);
                 if was_disconnected {
                     log::trace!(
@@ -341,7 +368,8 @@ impl GodotVimCore {
                 ms_class,
                 main_screen.instance_id().to_i64()
             );
-            let was_disconnected = !main_screen.is_connected(SIG_CHILD_ENTERED_TREE, &child_callable);
+            let was_disconnected =
+                !main_screen.is_connected(SIG_CHILD_ENTERED_TREE, &child_callable);
             connect_immediate(&mut main_screen, SIG_CHILD_ENTERED_TREE, &child_callable);
             if was_disconnected {
                 log::trace!(
@@ -389,10 +417,13 @@ impl GodotVimCore {
 
         let callables = self.floating_callables();
         for tw in &self.tracked_windows {
-            if let Ok(mut wrapper) =
-                Gd::<godot::classes::Node>::try_from_instance_id(tw.wrapper_id)
+            if let Ok(mut wrapper) = Gd::<godot::classes::Node>::try_from_instance_id(tw.wrapper_id)
             {
-                safe_disconnect(&mut wrapper, SIG_WINDOW_VISIBILITY_CHANGED, &callables.visibility_changed);
+                safe_disconnect(
+                    &mut wrapper,
+                    SIG_WINDOW_VISIBILITY_CHANGED,
+                    &callables.visibility_changed,
+                );
                 safe_disconnect(&mut wrapper, SIG_TREE_EXITED, &callables.tree_exited);
             }
         }

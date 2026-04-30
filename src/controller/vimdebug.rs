@@ -58,7 +58,7 @@ impl VimdebugState {
             // Exhaustive destructure: adding a new field to VimdebugState
             // causes a compile error here until it is handled.
             let Self {
-                mode: _,          // just set above
+                mode: _, // just set above
                 provenance,
                 effects,
                 range,
@@ -116,7 +116,10 @@ impl VimdebugState {
     pub(crate) fn load_step_effects(&mut self, descriptions: Vec<CompactString>) {
         self.step_pending = descriptions
             .into_iter()
-            .map(|d| StepEffect { description: d, applied: false })
+            .map(|d| StepEffect {
+                description: d,
+                applied: false,
+            })
             .collect();
         self.step_index = 0;
     }
@@ -182,7 +185,9 @@ impl VimdebugState {
         let display_idx = if current < total { current + 1 } else { total };
         Some(compact_str::format_compact!(
             "[{}/{}] {} | n:next p:prev c:all q:quit",
-            display_idx, total, desc
+            display_idx,
+            total,
+            desc
         ))
     }
 }

@@ -157,7 +157,9 @@ pub(super) fn handle_delete_with_auto_brace(
 
     // Use the pre-delete text to check whether the deleted range was an opening
     // brace with a matching close brace immediately adjacent.
-    let original_line_str = doc.line_index.line_text_at(doc.text, i32_to_usize(del_line));
+    let original_line_str = doc
+        .line_index
+        .line_text_at(doc.text, i32_to_usize(del_line));
 
     let end_char_col = i32_to_usize(end_col);
 
@@ -182,9 +184,16 @@ pub(super) fn handle_delete_with_auto_brace(
             if caret_char_col + close_char_len <= post_char_len
                 && chars_match_at(&post_delete_line, caret_char_col, close_key)
             {
-                log::trace!("auto_brace_delete: removed matching close brace at line={} col={}", start_line, start_col);
+                log::trace!(
+                    "auto_brace_delete: removed matching close brace at line={} col={}",
+                    start_line,
+                    start_col
+                );
                 let close_end_col = start_col + usize_to_i32(close_char_len);
-                editor.select(CharLineCol::new(start_line, start_col), CharLineCol::new(start_line, close_end_col));
+                editor.select(
+                    CharLineCol::new(start_line, start_col),
+                    CharLineCol::new(start_line, close_end_col),
+                );
                 editor.delete_selection();
             }
         }

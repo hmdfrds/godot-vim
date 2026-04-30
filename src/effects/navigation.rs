@@ -46,7 +46,11 @@ fn extract_word_at_col(line_text: &str, col: usize) -> Option<&str> {
     }
 
     let word = &line_text[start..end];
-    if word.is_empty() { None } else { Some(word) }
+    if word.is_empty() {
+        None
+    } else {
+        Some(word)
+    }
 }
 
 /// Extract the word under the cursor and pass it to `action`.
@@ -61,7 +65,13 @@ fn with_word_under_cursor(
 
     if let Some(word) = extract_word_at_col(&line_text, i32_to_usize(col)) {
         action(editor, word, line, col);
-        log::debug!("{}: signal emitted for '{}' at {}:{}", label, word, line, col);
+        log::debug!(
+            "{}: signal emitted for '{}' at {}:{}",
+            label,
+            word,
+            line,
+            col
+        );
     } else {
         log::debug!("{}: no symbol under cursor at {}:{}", label, line, col);
     }

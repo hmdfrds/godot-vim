@@ -163,7 +163,6 @@ pub(crate) struct SettingsSnapshot {
     pub(crate) highlight_yank_duration: u32,
 
     // ── 1-byte aligned (bool + small enums) ─────────────────────────────
-
     pub(crate) clipboard_enabled: bool,
     pub(crate) ignorecase: bool,
     pub(crate) smartcase: bool,
@@ -191,7 +190,13 @@ impl SettingsSnapshot {
         use super::defaults;
         opts.set_scrolloff(usize::try_from(self.scrolloff.max(0)).unwrap_or(0));
         opts.set_textwidth(usize::try_from(self.textwidth.max(0)).unwrap_or(0));
-        opts.set_timeoutlen_ms(u32::try_from(self.timeoutlen.clamp(defaults::TIMEOUTLEN_MIN, defaults::TIMEOUTLEN_MAX)).unwrap_or(u32::MAX));
+        opts.set_timeoutlen_ms(
+            u32::try_from(
+                self.timeoutlen
+                    .clamp(defaults::TIMEOUTLEN_MIN, defaults::TIMEOUTLEN_MAX),
+            )
+            .unwrap_or(u32::MAX),
+        );
         if self.clipboard_enabled {
             opts.set_clipboard("unnamedplus");
         } else {
@@ -216,11 +221,7 @@ mod tests {
 
     /// Build a snapshot with parametrized numeric fields; everything else
     /// uses hardcoded defaults to isolate what each test is verifying.
-    fn make_snapshot(
-        scrolloff: i64,
-        textwidth: i64,
-        timeoutlen: i64,
-    ) -> SettingsSnapshot {
+    fn make_snapshot(scrolloff: i64, textwidth: i64, timeoutlen: i64) -> SettingsSnapshot {
         SettingsSnapshot {
             log_level: crate::logging::LogLevel::Info,
             scrolloff,

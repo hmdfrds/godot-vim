@@ -93,19 +93,29 @@ impl TreeExt for Gd<Tree> {
 /// prevents stack overflow on unexpectedly deep nesting.
 const MAX_NAV_DEPTH: u32 = 3;
 
-pub(super) fn handle_navigation(control: &Gd<Control>, direction: NavDirection, depth: u32) -> bool {
+pub(super) fn handle_navigation(
+    control: &Gd<Control>,
+    direction: NavDirection,
+    depth: u32,
+) -> bool {
     if depth >= MAX_NAV_DEPTH {
         return false;
     }
 
     if control.is_class("Tree") {
-        let Ok(tree) = control.clone().try_cast::<Tree>() else { return false; };
+        let Ok(tree) = control.clone().try_cast::<Tree>() else {
+            return false;
+        };
         handle_tree_nav(tree, direction)
     } else if control.is_class("ItemList") {
-        let Ok(list) = control.clone().try_cast::<ItemList>() else { return false; };
+        let Ok(list) = control.clone().try_cast::<ItemList>() else {
+            return false;
+        };
         handle_item_list_nav(list, direction)
     } else if control.is_class("RichTextLabel") {
-        let Ok(label) = control.clone().try_cast::<RichTextLabel>() else { return false; };
+        let Ok(label) = control.clone().try_cast::<RichTextLabel>() else {
+            return false;
+        };
         handle_richtextlabel_nav(label, direction)
     } else if let Some(target) = find_best_nav_target(control, 0) {
         handle_navigation(&target, direction, depth + 1)
@@ -116,7 +126,9 @@ pub(super) fn handle_navigation(control: &Gd<Control>, direction: NavDirection, 
 
 pub(super) fn handle_hierarchy(control: &Gd<Control>, action: HierarchyAction) -> bool {
     if control.is_class("Tree") {
-        let Ok(tree) = control.clone().try_cast::<Tree>() else { return false; };
+        let Ok(tree) = control.clone().try_cast::<Tree>() else {
+            return false;
+        };
         handle_tree_hierarchy(tree, action)
     } else {
         false

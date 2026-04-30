@@ -27,7 +27,11 @@ pub(crate) fn resolve(setting_override: &str) -> ResolvedConfig {
             path: setting_override.to_string(),
             is_project_level: false,
         };
-        log::debug!("config::resolve: path='{}' is_project={}", resolved.path, resolved.is_project_level);
+        log::debug!(
+            "config::resolve: path='{}' is_project={}",
+            resolved.path,
+            resolved.is_project_level
+        );
         return resolved;
     }
 
@@ -36,7 +40,11 @@ pub(crate) fn resolve(setting_override: &str) -> ResolvedConfig {
             path: PROJECT_PATH.to_string(),
             is_project_level: true,
         };
-        log::debug!("config::resolve: path='{}' is_project={}", resolved.path, resolved.is_project_level);
+        log::debug!(
+            "config::resolve: path='{}' is_project={}",
+            resolved.path,
+            resolved.is_project_level
+        );
         return resolved;
     }
 
@@ -44,6 +52,10 @@ pub(crate) fn resolve(setting_override: &str) -> ResolvedConfig {
         path: USER_PATH.to_string(),
         is_project_level: false,
     };
-    log::debug!("config::resolve: path='{}' is_project={}", resolved.path, resolved.is_project_level);
+    log::debug!(
+        "config::resolve: path='{}' is_project={}",
+        resolved.path,
+        resolved.is_project_level
+    );
     resolved
 }

@@ -36,7 +36,11 @@ pub(crate) fn register_all(settings: &mut EditorSettings) {
     // CodeEdit on each editor attach (see plugin/attach.rs).
     register_int_range(settings, keys::SCROLLOFF, defaults::SCROLLOFF, 0, 20);
     register_int_range(settings, keys::TEXTWIDTH, defaults::TEXTWIDTH, 0, 200);
-    register_bool(settings, keys::CLIPBOARD_ENABLED, defaults::CLIPBOARD_ENABLED);
+    register_bool(
+        settings,
+        keys::CLIPBOARD_ENABLED,
+        defaults::CLIPBOARD_ENABLED,
+    );
     register_bool(settings, keys::IGNORECASE, defaults::IGNORECASE);
     register_bool(settings, keys::SMARTCASE, defaults::SMARTCASE);
     register_enum(
@@ -69,11 +73,31 @@ pub(crate) fn register_all(settings: &mut EditorSettings) {
 
     // ── Cursor behavior ─────────────────────────────────────────────────────
     register_bool(settings, keys::CURSOR_ENABLED, defaults::CURSOR_ENABLED);
-    register_float_range(settings, keys::CURSOR_LERP_SPEED, defaults::CURSOR_LERP_SPEED, 1.0, 100.0, 0.1);
-    register_float_range(settings, keys::CURSOR_UNDERLINE_HEIGHT, defaults::CURSOR_UNDERLINE_HEIGHT, 1.0, 10.0, 0.5);
+    register_float_range(
+        settings,
+        keys::CURSOR_LERP_SPEED,
+        defaults::CURSOR_LERP_SPEED,
+        1.0,
+        100.0,
+        0.1,
+    );
+    register_float_range(
+        settings,
+        keys::CURSOR_UNDERLINE_HEIGHT,
+        defaults::CURSOR_UNDERLINE_HEIGHT,
+        1.0,
+        10.0,
+        0.5,
+    );
 
     // ── Key mapping ─────────────────────────────────────────────────────
-    register_int_range(settings, keys::TIMEOUTLEN, defaults::TIMEOUTLEN, defaults::TIMEOUTLEN_MIN, defaults::TIMEOUTLEN_MAX);
+    register_int_range(
+        settings,
+        keys::TIMEOUTLEN,
+        defaults::TIMEOUTLEN,
+        defaults::TIMEOUTLEN_MIN,
+        defaults::TIMEOUTLEN_MAX,
+    );
     register_string(settings, keys::CONFIG_FILE_PATH, defaults::CONFIG_FILE_PATH);
 
     // ── Input ─────────────────────────────────────────────────────────────
@@ -100,14 +124,46 @@ pub(crate) fn register_all(settings: &mut EditorSettings) {
     );
 
     // ── Status bar colors ─────────────────────────────────────────────────
-    register_color(settings, keys::STATUS_BAR_NORMAL_BG, defaults::status_bar_normal_bg());
-    register_color(settings, keys::STATUS_BAR_INSERT_BG, defaults::status_bar_insert_bg());
-    register_color(settings, keys::STATUS_BAR_VISUAL_BG, defaults::status_bar_visual_bg());
-    register_color(settings, keys::STATUS_BAR_REPLACE_BG, defaults::status_bar_replace_bg());
-    register_color(settings, keys::STATUS_BAR_COMMAND_BG, defaults::status_bar_command_bg());
-    register_color(settings, keys::STATUS_BAR_RECORDING_BG, defaults::status_bar_recording_bg());
-    register_color(settings, keys::STATUS_BAR_TEXT_FG, defaults::status_bar_text_fg());
-    register_color(settings, keys::STATUS_BAR_ERROR_FG, defaults::status_bar_error_fg());
+    register_color(
+        settings,
+        keys::STATUS_BAR_NORMAL_BG,
+        defaults::status_bar_normal_bg(),
+    );
+    register_color(
+        settings,
+        keys::STATUS_BAR_INSERT_BG,
+        defaults::status_bar_insert_bg(),
+    );
+    register_color(
+        settings,
+        keys::STATUS_BAR_VISUAL_BG,
+        defaults::status_bar_visual_bg(),
+    );
+    register_color(
+        settings,
+        keys::STATUS_BAR_REPLACE_BG,
+        defaults::status_bar_replace_bg(),
+    );
+    register_color(
+        settings,
+        keys::STATUS_BAR_COMMAND_BG,
+        defaults::status_bar_command_bg(),
+    );
+    register_color(
+        settings,
+        keys::STATUS_BAR_RECORDING_BG,
+        defaults::status_bar_recording_bg(),
+    );
+    register_color(
+        settings,
+        keys::STATUS_BAR_TEXT_FG,
+        defaults::status_bar_text_fg(),
+    );
+    register_color(
+        settings,
+        keys::STATUS_BAR_ERROR_FG,
+        defaults::status_bar_error_fg(),
+    );
 
     log::debug!("settings: registered all EditorSettings keys");
 }
@@ -191,13 +247,7 @@ fn register_string(settings: &mut EditorSettings, key: &str, default: &str) {
         settings.set_setting(key, &default.to_variant());
     }
     settings.set_initial_value(key, &default.to_variant(), false);
-    add_property_info(
-        settings,
-        key,
-        VariantType::STRING,
-        PropertyHint::NONE,
-        "",
-    );
+    add_property_info(settings, key, VariantType::STRING, PropertyHint::NONE, "");
 }
 
 fn register_color(settings: &mut EditorSettings, key: &str, default: Color) {

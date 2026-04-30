@@ -23,16 +23,16 @@
 //! │       └── HBox: [Label(config path) | Label("Timeout:") | SpinBox(ms) | Button(Close)]
 //! ```
 
+use godot::builtin::PackedInt64Array;
 use godot::classes::tree::SelectMode;
 use godot::classes::{
     Button, Control, HBoxContainer, HSeparator, IWindow, Label, LineEdit, MarginContainer,
     OptionButton, SpinBox, TabContainer, Tree, VBoxContainer, Window,
 };
 use godot::prelude::*;
-use godot::builtin::PackedInt64Array;
 
 use crate::config::mapping_service::{
-    MappingGroupId, MappingService, PresetId, UserMappingRow, row_passes_mode_filter,
+    row_passes_mode_filter, MappingGroupId, MappingService, PresetId, UserMappingRow,
 };
 use crate::config::types::ModeSet;
 use crate::config::writer;
@@ -106,19 +106,23 @@ impl IWindow for MappingDialog {
     }
 
     fn ready(&mut self) {
-        panic_guard("mapping_dialog::ready", || {
-            self.base_mut().set_title(&GString::from("GodotVim Mappings"));
-            self.base_mut().set_size(Vector2i::new(700, 500));
-            self.base_mut().set_min_size(Vector2i::new(500, 350));
+        panic_guard(
+            "mapping_dialog::ready",
+            || {
+                self.base_mut()
+                    .set_title(&GString::from("GodotVim Mappings"));
+                self.base_mut().set_size(Vector2i::new(700, 500));
+                self.base_mut().set_min_size(Vector2i::new(500, 350));
 
-            // Hide on close rather than freeing — the dialog is reused across
-            // multiple `:mappings` invocations to preserve tree state.
-            let callable = self.base().callable("on_close_requested");
-            self.base_mut()
-                .connect("close_requested", &callable);
+                // Hide on close rather than freeing — the dialog is reused across
+                // multiple `:mappings` invocations to preserve tree state.
+                let callable = self.base().callable("on_close_requested");
+                self.base_mut().connect("close_requested", &callable);
 
-            self.build_ui();
-        }, ());
+                self.build_ui();
+            },
+            (),
+        );
     }
 }
 
@@ -134,12 +138,20 @@ impl MappingDialog {
     /// modifications (clear/rebuild) during an `item_edited` callback.
     #[func]
     fn deferred_save_and_reload(&mut self) {
-        panic_guard("mapping_dialog::deferred_save_and_reload", || self.save_and_reload(), ());
+        panic_guard(
+            "mapping_dialog::deferred_save_and_reload",
+            || self.save_and_reload(),
+            (),
+        );
     }
 
     #[func]
     fn on_close_requested(&mut self) {
-        panic_guard("mapping_dialog::on_close_requested", || self.base_mut().hide(), ());
+        panic_guard(
+            "mapping_dialog::on_close_requested",
+            || self.base_mut().hide(),
+            (),
+        );
     }
 
     #[func]
@@ -192,7 +204,9 @@ impl MappingDialog {
             "mapping_dialog::on_delete_pressed",
             || {
                 let Some(tree) = &self.user_tree else { return };
-                let Some(selected) = tree.get_selected() else { return };
+                let Some(selected) = tree.get_selected() else {
+                    return;
+                };
 
                 let doc_indices = Self::read_doc_indices(&selected);
                 if doc_indices.is_empty() {
@@ -211,7 +225,11 @@ impl MappingDialog {
 
     #[func]
     fn on_reload_pressed(&mut self) {
-        panic_guard("mapping_dialog::on_reload_pressed", || self.reload_from_file(), ());
+        panic_guard(
+            "mapping_dialog::on_reload_pressed",
+            || self.reload_from_file(),
+            (),
+        );
     }
 
     #[func]
@@ -220,7 +238,9 @@ impl MappingDialog {
             "mapping_dialog::on_user_tree_item_edited",
             || {
                 let Some(tree) = &self.user_tree else { return };
-                let Some(item) = tree.get_edited() else { return };
+                let Some(item) = tree.get_edited() else {
+                    return;
+                };
                 let col = tree.get_edited_column();
 
                 let doc_indices = Self::read_doc_indices(&item);
@@ -242,11 +262,21 @@ impl MappingDialog {
                     }
                     COL_N | COL_I | COL_V | COL_O | COL_C => {
                         let mut modes = ModeSet::empty();
-                        if item.is_checked(COL_N) { modes |= ModeSet::NORMAL; }
-                        if item.is_checked(COL_I) { modes |= ModeSet::INSERT; }
-                        if item.is_checked(COL_V) { modes |= ModeSet::VISUAL; }
-                        if item.is_checked(COL_O) { modes |= ModeSet::OPERATOR; }
-                        if item.is_checked(COL_C) { modes |= ModeSet::COMMAND; }
+                        if item.is_checked(COL_N) {
+                            modes |= ModeSet::NORMAL;
+                        }
+                        if item.is_checked(COL_I) {
+                            modes |= ModeSet::INSERT;
+                        }
+                        if item.is_checked(COL_V) {
+                            modes |= ModeSet::VISUAL;
+                        }
+                        if item.is_checked(COL_O) {
+                            modes |= ModeSet::OPERATOR;
+                        }
+                        if item.is_checked(COL_C) {
+                            modes |= ModeSet::COMMAND;
+                        }
                         svc.update_modes(&id, modes);
                     }
                     _ => return,
@@ -263,8 +293,12 @@ impl MappingDialog {
         panic_guard(
             "mapping_dialog::on_preset_tree_item_edited",
             || {
-                let Some(tree) = &self.preset_tree else { return };
-                let Some(item) = tree.get_edited() else { return };
+                let Some(tree) = &self.preset_tree else {
+                    return;
+                };
+                let Some(item) = tree.get_edited() else {
+                    return;
+                };
                 let col = tree.get_edited_column();
 
                 if col != PCOL_ENABLED {
@@ -272,7 +306,9 @@ impl MappingDialog {
                 }
 
                 let metadata = item.get_metadata(0);
-                let Ok(doc_idx) = metadata.try_to::<i64>() else { return };
+                let Ok(doc_idx) = metadata.try_to::<i64>() else {
+                    return;
+                };
                 if doc_idx < 0 {
                     return;
                 }
@@ -291,17 +327,29 @@ impl MappingDialog {
 
     #[func]
     fn on_close_button_pressed(&mut self) {
-        panic_guard("mapping_dialog::on_close_button_pressed", || self.base_mut().hide(), ());
+        panic_guard(
+            "mapping_dialog::on_close_button_pressed",
+            || self.base_mut().hide(),
+            (),
+        );
     }
 
     #[func]
     fn on_mode_filter_changed(&mut self, _index: i32) {
-        panic_guard("mapping_dialog::on_mode_filter_changed", || self.refresh_user_tree(), ());
+        panic_guard(
+            "mapping_dialog::on_mode_filter_changed",
+            || self.refresh_user_tree(),
+            (),
+        );
     }
 
     #[func]
     fn on_search_changed(&mut self, _text: GString) {
-        panic_guard("mapping_dialog::on_search_changed", || self.refresh_user_tree(), ());
+        panic_guard(
+            "mapping_dialog::on_search_changed",
+            || self.refresh_user_tree(),
+            (),
+        );
     }
 
     #[func]
@@ -579,9 +627,15 @@ impl MappingDialog {
     fn read_doc_indices(item: &Gd<godot::classes::TreeItem>) -> Vec<usize> {
         let metadata = item.get_metadata(0);
         if let Ok(arr) = metadata.try_to::<PackedInt64Array>() {
-            (0..arr.len()).map(|i| usize::try_from(arr[i].max(0)).unwrap_or(0)).collect()
+            (0..arr.len())
+                .map(|i| usize::try_from(arr[i].max(0)).unwrap_or(0))
+                .collect()
         } else if let Ok(single) = metadata.try_to::<i64>() {
-            if single >= 0 { vec![single as usize] } else { Vec::new() }
+            if single >= 0 {
+                vec![single as usize]
+            } else {
+                Vec::new()
+            }
         } else {
             Vec::new()
         }
@@ -602,7 +656,8 @@ impl MappingDialog {
     /// Deferred save -- required from `item_edited` callbacks because Godot's
     /// Tree forbids structural modifications during signal dispatch.
     fn schedule_save_and_reload(&mut self) {
-        self.base_mut().call_deferred("deferred_save_and_reload", &[]);
+        self.base_mut()
+            .call_deferred("deferred_save_and_reload", &[]);
     }
 
     /// Persist to disk, refresh both trees, and emit `config_saved` so the
@@ -626,8 +681,12 @@ impl MappingDialog {
     /// Sync the SpinBox from the service's timeout value. Signals are blocked
     /// to prevent a feedback loop (set_value would trigger on_timeout_changed).
     fn update_timeout_spinbox(&mut self, svc: &MappingService) {
-        let Some(spinbox) = &mut self.timeout_spinbox else { return };
-        let ms = svc.timeoutlen().unwrap_or(u32::try_from(crate::settings::defaults::TIMEOUTLEN).unwrap_or(1000));
+        let Some(spinbox) = &mut self.timeout_spinbox else {
+            return;
+        };
+        let ms = svc
+            .timeoutlen()
+            .unwrap_or(u32::try_from(crate::settings::defaults::TIMEOUTLEN).unwrap_or(1000));
 
         spinbox.set_block_signals(true);
         spinbox.set_value(ms as f64);
@@ -647,19 +706,20 @@ impl MappingDialog {
     /// (same LHS + RHS + Kind = one visual row with merged mode checkboxes);
     /// we only apply the mode/search filter here.
     fn refresh_user_tree(&mut self) {
-        let Some(tree) = &mut self.user_tree else { return };
+        let Some(tree) = &mut self.user_tree else {
+            return;
+        };
         tree.clear();
-        let Some(mut root) = tree.create_item() else { return };
+        let Some(mut root) = tree.create_item() else {
+            return;
+        };
         let Some(svc) = &self.service else { return };
 
         let search_text = self
             .search_input
             .as_ref()
             .map_or(String::new(), |s| s.get_text().to_string());
-        let mode_filter_idx = self
-            .mode_filter
-            .as_ref()
-            .map_or(0, |f| f.get_selected());
+        let mode_filter_idx = self.mode_filter.as_ref().map_or(0, |f| f.get_selected());
 
         let rows = svc.user_mappings(&search_text);
 
@@ -679,7 +739,12 @@ impl MappingDialog {
         // Stash doc_indices as metadata so edit/delete can locate all config
         // lines belonging to this visual group (one row may span multiple lines).
         let arr = PackedInt64Array::from(
-            row.id.0.iter().map(|&i| i as i64).collect::<Vec<i64>>().as_slice()
+            row.id
+                .0
+                .iter()
+                .map(|&i| i as i64)
+                .collect::<Vec<i64>>()
+                .as_slice(),
         );
         item.set_metadata(0, &Variant::from(arr));
 
@@ -713,7 +778,9 @@ impl MappingDialog {
             return;
         };
         tree.clear();
-        let Some(mut root) = tree.create_item() else { return };
+        let Some(mut root) = tree.create_item() else {
+            return;
+        };
 
         let Some(svc) = &self.service else { return };
 
@@ -731,7 +798,10 @@ impl MappingDialog {
             // Presets are read-only except for the enabled toggle.
             item.set_text(PCOL_LHS, &GString::from(&preset_row.lhs));
             item.set_text(PCOL_RHS, &GString::from(&preset_row.rhs));
-            item.set_text(PCOL_MODES, &GString::from(preset_row.modes_display.as_str()));
+            item.set_text(
+                PCOL_MODES,
+                &GString::from(preset_row.modes_display.as_str()),
+            );
             item.set_text(PCOL_CATEGORY, &GString::from(preset_row.category));
         }
     }

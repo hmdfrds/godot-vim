@@ -122,9 +122,13 @@ impl INode for LineNumberManager {
 
     // Defense-in-depth: disconnect signals on exit_tree.
     fn exit_tree(&mut self) {
-        panic_guard("line_numbers::exit_tree", || {
-            self.detach();
-        }, ());
+        panic_guard(
+            "line_numbers::exit_tree",
+            || {
+                self.detach();
+            },
+            (),
+        );
     }
 }
 
@@ -278,7 +282,11 @@ impl LineNumberManager {
 
     #[func]
     pub fn on_scroll_changed(&mut self, _value: f64) {
-        panic_guard("line_numbers::on_scroll_changed", || self.update_gutters(), ());
+        panic_guard(
+            "line_numbers::on_scroll_changed",
+            || self.update_gutters(),
+            (),
+        );
     }
 
     /// Force flag ensures Absolute mode also updates when lines are
@@ -336,7 +344,11 @@ impl LineNumberManager {
     /// callback via `call_deferred("update_gutters", &[])`.
     #[func]
     pub fn update_gutters(&mut self) {
-        panic_guard("line_numbers::update_gutters", || self.update_gutters_impl(), ());
+        panic_guard(
+            "line_numbers::update_gutters",
+            || self.update_gutters_impl(),
+            (),
+        );
     }
 }
 
@@ -422,7 +434,10 @@ impl LineNumberManager {
         let line_count = editor.get_line_count();
         // get_last_full_visible_line() accounts for folded/hidden lines,
         // unlike get_visible_line_count() which only returns viewport rows.
-        let last_line = std::cmp::min(editor.get_last_full_visible_line() + VISIBLE_LINE_BUFFER, line_count);
+        let last_line = std::cmp::min(
+            editor.get_last_full_visible_line() + VISIBLE_LINE_BUFFER,
+            line_count,
+        );
 
         let can_fold_icon = editor.get_theme_icon("can_fold");
         let folded_icon = editor.get_theme_icon("folded");
@@ -560,7 +575,10 @@ impl LineNumberManager {
         if !total_width.is_finite() {
             return;
         }
-        editor.set_gutter_width(self.line_gutter_index, crate::bridge::codec::f32_to_i32_sat(total_width.max(0.0)));
+        editor.set_gutter_width(
+            self.line_gutter_index,
+            crate::bridge::codec::f32_to_i32_sat(total_width.max(0.0)),
+        );
     }
 
     /// Disable built-in gutters and create (or reuse) custom STRING + ICON
@@ -698,11 +716,7 @@ fn read_native_gutter_settings() -> (bool, bool) {
 
 /// Read a single boolean from `EditorSettings`, falling back to `default` if
 /// the key doesn't exist or the value isn't convertible to `bool`.
-fn read_bool_setting(
-    settings: &godot::classes::EditorSettings,
-    key: &str,
-    default: bool,
-) -> bool {
+fn read_bool_setting(settings: &godot::classes::EditorSettings, key: &str, default: bool) -> bool {
     if settings.has_setting(key) {
         settings
             .get_setting(key)

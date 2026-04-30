@@ -86,11 +86,7 @@ impl UndoTree {
         }
     }
 
-    pub(crate) fn record_edit(
-        &mut self,
-        description: &str,
-        text: &str,
-    ) -> UndoNodeId {
+    pub(crate) fn record_edit(&mut self, description: &str, text: &str) -> UndoNodeId {
         while self.nodes.len() >= self.max_nodes {
             if !self.prune_oldest_leaf() {
                 break;
@@ -98,7 +94,8 @@ impl UndoTree {
         }
 
         let raw_id = self.next_id;
-        self.next_id = self.next_id
+        self.next_id = self
+            .next_id
             .checked_add(1)
             .expect("undo node ID space exhausted (u64 overflow)");
         let id = UndoNodeId(raw_id);
@@ -139,13 +136,19 @@ impl UndoTree {
 
     #[cfg(test)]
     #[must_use]
-    pub(crate) fn current_id(&self) -> UndoNodeId { self.current }
+    pub(crate) fn current_id(&self) -> UndoNodeId {
+        self.current
+    }
     #[cfg(test)]
     #[must_use]
-    pub(crate) fn node(&self, id: UndoNodeId) -> Option<&UndoNode> { self.nodes.get(&id) }
+    pub(crate) fn node(&self, id: UndoNodeId) -> Option<&UndoNode> {
+        self.nodes.get(&id)
+    }
     #[cfg(test)]
     #[must_use]
-    pub(crate) fn node_count(&self) -> usize { self.nodes.len() }
+    pub(crate) fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
 
     pub(crate) fn format_tree(&self) -> String {
         let mut out = String::from("Undo Tree:\n");
@@ -172,15 +175,16 @@ impl UndoTree {
     /// child to its grandparent. Returns `false` when nothing can be pruned
     /// (all remaining nodes are protected or are snapshot anchors).
     fn prune_oldest_leaf(&mut self) -> bool {
-        let protected: std::collections::HashSet<UndoNodeId> = self.current_path_ids().into_iter().collect();
+        let protected: std::collections::HashSet<UndoNodeId> =
+            self.current_path_ids().into_iter().collect();
         let root_id = UndoNodeId(0);
 
         // Phase 1: oldest unprotected non-snapshot leaf.
-        let oldest_id = self.nodes.iter()
+        let oldest_id = self
+            .nodes
+            .iter()
             .filter(|(id, node)| {
-                node.children.is_empty()
-                    && !protected.contains(id)
-                    && node.text_snapshot.is_none()
+                node.children.is_empty() && !protected.contains(id) && node.text_snapshot.is_none()
             })
             .min_by_key(|(_, node)| node.timestamp)
             .map(|(id, _)| *id);
@@ -197,7 +201,9 @@ impl UndoTree {
 
         // Phase 2: compress oldest single-child interior node (skip root,
         // current, and snapshot nodes).
-        let compress_id = self.nodes.iter()
+        let compress_id = self
+            .nodes
+            .iter()
             .filter(|(&id, node)| {
                 id != root_id
                     && node.children.len() == 1
@@ -237,13 +243,23 @@ impl UndoTree {
         // Iterative DFS: trees can be up to MAX_NODES deep, so recursion would overflow.
         let mut stack: Vec<(UndoNodeId, usize)> = vec![(root_id, 0)];
         while let Some((id, depth)) = stack.pop() {
-            let Some(node) = self.nodes.get(&id) else { continue };
+            let Some(node) = self.nodes.get(&id) else {
+                continue;
+            };
             let marker = if id == self.current { ">" } else { " " };
-            let has_snapshot = if node.text_snapshot.is_some() { " [S]" } else { "" };
+            let has_snapshot = if node.text_snapshot.is_some() {
+                " [S]"
+            } else {
+                ""
+            };
             for _ in 0..depth {
                 out.push_str("  ");
             }
-            let _ = writeln!(out, "{} #{} {}{}", marker, id, node.description, has_snapshot);
+            let _ = writeln!(
+                out,
+                "{} #{} {}{}",
+                marker, id, node.description, has_snapshot
+            );
             // Reverse so leftmost child pops first (pre-order traversal).
             for &child in node.children.iter().rev() {
                 stack.push((child, depth + 1));
@@ -254,7 +270,7 @@ impl UndoTree {
 
 // ── vim-core UndoTreeSnapshot formatting ────────────────────────────────────
 
-use vim_core::primitives::{NodeId, UndoTreeSnapshot, UndoTreeNodeView};
+use vim_core::primitives::{NodeId, UndoTreeNodeView, UndoTreeSnapshot};
 
 /// Render a vim-core `UndoTreeSnapshot` into Neovim-style `:undotree` text.
 pub(crate) fn format_undo_tree_snapshot(snapshot: &UndoTreeSnapshot) -> String {

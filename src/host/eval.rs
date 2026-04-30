@@ -42,7 +42,10 @@ fn unescape_vim_double_quote(s: &str) -> std::borrow::Cow<'_, str> {
 /// Intentionally limited: covers string/int literals, `mode()`, `nr2char(N)`,
 /// and register references — not a full VimL interpreter. Returns `E15` for
 /// anything outside this subset.
-pub(super) fn eval_simple_expression<'a>(expr: &'a str, mode_str: &'a str) -> Result<std::borrow::Cow<'a, str>, String> {
+pub(super) fn eval_simple_expression<'a>(
+    expr: &'a str,
+    mode_str: &'a str,
+) -> Result<std::borrow::Cow<'a, str>, String> {
     let expr = expr.trim();
 
     if let Some(inner) = expr.strip_prefix('\'').and_then(|s| s.strip_suffix('\'')) {
@@ -61,7 +64,10 @@ pub(super) fn eval_simple_expression<'a>(expr: &'a str, mode_str: &'a str) -> Re
     }
 
     // nr2char(0) returns "" (not NUL), matching real Vim behavior.
-    if let Some(inner) = expr.strip_prefix("nr2char(").and_then(|s| s.strip_suffix(')')) {
+    if let Some(inner) = expr
+        .strip_prefix("nr2char(")
+        .and_then(|s| s.strip_suffix(')'))
+    {
         if let Ok(n) = inner.trim().parse::<u32>() {
             if n == 0 {
                 return Ok(std::borrow::Cow::Borrowed(""));
@@ -85,11 +91,15 @@ mod tests {
     use super::*;
 
     fn dq(s: &str) -> String {
-        eval_simple_expression(&format!("\"{}\"", s), "n").unwrap().into_owned()
+        eval_simple_expression(&format!("\"{}\"", s), "n")
+            .unwrap()
+            .into_owned()
     }
 
     fn sq(s: &str) -> String {
-        eval_simple_expression(&format!("'{}'", s), "n").unwrap().into_owned()
+        eval_simple_expression(&format!("'{}'", s), "n")
+            .unwrap()
+            .into_owned()
     }
 
     #[test]

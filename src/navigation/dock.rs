@@ -12,12 +12,10 @@ use godot::classes::{CodeEdit, Control, EditorInterface, InputEventKey, Node};
 use godot::global::Key;
 use godot::prelude::*;
 
-use super::dock_nav::{
-    handle_hierarchy, handle_navigation, HierarchyAction, NavDirection,
-};
+use super::dock_nav::{handle_hierarchy, handle_navigation, HierarchyAction, NavDirection};
 use super::dock_search::{find_sibling_nav_control, find_sibling_search_box};
-use crate::scene_tree::{find_child_of_type, MAX_DISCOVERY_DEPTH};
 use super::focus::DockKind;
+use crate::scene_tree::{find_child_of_type, MAX_DISCOVERY_DEPTH};
 
 /// Tri-state result so callers can distinguish "consumed in place" from
 /// "consumed and moved focus" — the latter may need additional bookkeeping
@@ -68,11 +66,17 @@ pub(crate) fn handle_dock_input(
     key_event: &Gd<InputEventKey>,
     dock_kind: DockKind,
 ) -> DockInputResult {
-    log::trace!("dock_input: key={:?} kind={:?}", key_event.get_keycode(), dock_kind);
+    log::trace!(
+        "dock_input: key={:?} kind={:?}",
+        key_event.get_keycode(),
+        dock_kind
+    );
     // All modified keys pass through. Ctrl+hjkl is already intercepted at
     // Priority 1 in input.rs before this code is reached.
-    if key_event.is_ctrl_pressed() || key_event.is_alt_pressed()
-        || key_event.is_meta_pressed() || key_event.is_shift_pressed()
+    if key_event.is_ctrl_pressed()
+        || key_event.is_alt_pressed()
+        || key_event.is_meta_pressed()
+        || key_event.is_shift_pressed()
     {
         return DockInputResult::Ignored;
     }
@@ -200,7 +204,10 @@ fn handle_enter(focused: &Gd<Control>, dock_kind: DockKind) -> DockInputResult {
 /// Deferred because immediate `grab_focus()` during input processing can be
 /// swallowed by Godot's event dispatch loop.
 fn defer_grab_focus(target: &Gd<impl Inherits<Node>>) {
-    target.clone().upcast::<Node>().call_deferred("grab_focus", &[]);
+    target
+        .clone()
+        .upcast::<Node>()
+        .call_deferred("grab_focus", &[]);
 }
 
 /// `ESC` — return focus to the script editor's CodeEdit.
@@ -223,7 +230,9 @@ fn handle_escape_from_dock() -> DockInputResult {
         defer_grab_focus(&code_edit);
         return DockInputResult::FocusChanged;
     }
-    if let Some(text_edit) = find_child_of_type::<godot::classes::TextEdit>(&root, MAX_DISCOVERY_DEPTH) {
+    if let Some(text_edit) =
+        find_child_of_type::<godot::classes::TextEdit>(&root, MAX_DISCOVERY_DEPTH)
+    {
         defer_grab_focus(&text_edit);
         return DockInputResult::FocusChanged;
     }

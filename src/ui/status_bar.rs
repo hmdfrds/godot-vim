@@ -147,34 +147,38 @@ impl IHBoxContainer for VimStatusBar {
     }
 
     fn ready(&mut self) {
-        panic_guard("status_bar::ready", || {
-            {
-                let mut base = self.base_mut();
-                base.set_name("VimStatusBar");
-                base.set_h_size_flags(SizeFlags::SHRINK_END);
-                base.set_v_size_flags(SizeFlags::SHRINK_CENTER);
-                base.add_theme_constant_override("separation", 8);
-            }
+        panic_guard(
+            "status_bar::ready",
+            || {
+                {
+                    let mut base = self.base_mut();
+                    base.set_name("VimStatusBar");
+                    base.set_h_size_flags(SizeFlags::SHRINK_END);
+                    base.set_v_size_flags(SizeFlags::SHRINK_CENTER);
+                    base.add_theme_constant_override("separation", 8);
+                }
 
-            // MouseFilter::IGNORE on all children so clicks fall through to
-            // the CodeEdit underneath (Godot's default STOP would absorb them).
-            // The HBoxContainer itself is set to IGNORE by inject_status_bar().
-            let mut panel = PanelContainer::new_alloc();
-            panel.set_name("ModePanel");
-            panel.set_mouse_filter(MouseFilter::IGNORE);
+                // MouseFilter::IGNORE on all children so clicks fall through to
+                // the CodeEdit underneath (Godot's default STOP would absorb them).
+                // The HBoxContainer itself is set to IGNORE by inject_status_bar().
+                let mut panel = PanelContainer::new_alloc();
+                panel.set_name("ModePanel");
+                panel.set_mouse_filter(MouseFilter::IGNORE);
 
-            let mut label = Label::new_alloc();
-            label.set_name("ModeLabel");
-            label.set_text("NORMAL");
-            label.set_mouse_filter(MouseFilter::IGNORE);
+                let mut label = Label::new_alloc();
+                label.set_name("ModeLabel");
+                label.set_text("NORMAL");
+                label.set_mouse_filter(MouseFilter::IGNORE);
 
-            panel.add_child(&label);
-            self.base_mut().add_child(&panel);
+                panel.add_child(&label);
+                self.base_mut().add_child(&panel);
 
-            self.panel = Some(panel);
-            self.label = Some(label);
-            self.apply_panel_style(self.theme.mode_normal, self.theme.text_fg);
-        }, ());
+                self.panel = Some(panel);
+                self.label = Some(label);
+                self.apply_panel_style(self.theme.mode_normal, self.theme.text_fg);
+            },
+            (),
+        );
     }
 }
 
@@ -206,7 +210,12 @@ impl VimStatusBar {
             self.theme.text_fg
         } else if let Some(ref prompt) = snap.cmdline.prompt {
             let prompt_char = prompt_char_for(prompt);
-            format_cmdline_into(&mut self.display_buffer, prompt_char, &snap.cmdline.input, snap.cmdline.cursor);
+            format_cmdline_into(
+                &mut self.display_buffer,
+                prompt_char,
+                &snap.cmdline.input,
+                snap.cmdline.cursor,
+            );
             self.theme.text_fg
         } else if let Some(message) = snap.message.text() {
             self.display_buffer.push_str(message);
@@ -310,8 +319,18 @@ impl VimStatusBar {
                 tween.set_loops_ex().loops(0).done(); // 0 = infinite loops
 
                 let property = "modulate:a";
-                drop(tween.tween_property(&panel, property, &Variant::from(RECORDING_PULSE_MIN_ALPHA), RECORDING_PULSE_DURATION));
-                drop(tween.tween_property(&panel, property, &Variant::from(1.0_f64), RECORDING_PULSE_DURATION));
+                drop(tween.tween_property(
+                    &panel,
+                    property,
+                    &Variant::from(RECORDING_PULSE_MIN_ALPHA),
+                    RECORDING_PULSE_DURATION,
+                ));
+                drop(tween.tween_property(
+                    &panel,
+                    property,
+                    &Variant::from(1.0_f64),
+                    RECORDING_PULSE_DURATION,
+                ));
 
                 Some(tween)
             } else {
@@ -407,7 +426,11 @@ pub(crate) fn inject_status_bar(editor: &Gd<CodeEdit>, bar: &Gd<VimStatusBar>) {
 
     for side in [Side::LEFT, Side::TOP, Side::RIGHT, Side::BOTTOM] {
         control.set_anchor(side, 1.0);
-        let offset = if side == Side::RIGHT || side == Side::BOTTOM { -10.0 } else { 0.0 };
+        let offset = if side == Side::RIGHT || side == Side::BOTTOM {
+            -10.0
+        } else {
+            0.0
+        };
         control.set_offset(side, offset);
     }
 

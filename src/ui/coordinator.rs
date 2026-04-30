@@ -16,14 +16,14 @@ use godot::prelude::*;
 use vim_core::primitives::{CommandLinePrompt, Direction, Mode};
 
 use super::cursor_shape::{compute_cursor_geometry, VimCursor};
-use super::CursorColorMap;
 use super::highlight_yank::HighlightYankOverlay;
 use super::inccommand::InccommandOverlay;
-use super::operator_debugger::DebugRangeOverlay;
 use super::line_numbers::LineNumberManager;
+use super::operator_debugger::DebugRangeOverlay;
 use super::search_hl::SearchHighlighter;
 use super::status_bar::{self, VimStatusBar};
 use super::virtual_text::VirtualTextOverlay;
+use super::CursorColorMap;
 use crate::types::{CharLineCol, StatusMessage, UiSnapshot};
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -173,10 +173,7 @@ impl UiCoordinator {
         } else {
             None
         };
-        editor.add_theme_color_override(
-            "caret_color",
-            Color::from_rgba(0.0, 0.0, 0.0, 0.0),
-        );
+        editor.add_theme_color_override("caret_color", Color::from_rgba(0.0, 0.0, 0.0, 0.0));
 
         // ── 3b. Cache caret type ───────────────────────────────────────
         self.saved.caret_type = Some(editor.get_caret_type());
@@ -287,12 +284,19 @@ impl UiCoordinator {
         let mode_changed = self.cache.last_mode != Some(snap.mode);
         let message_changed = self.cache.last_message != snap.message;
         let recording_changed = self.cache.last_recording != snap.recording_register;
-        let pending_changed = self.cache.last_pending_command.as_deref() != Some(snap.pending_command.as_str())
+        let pending_changed = self.cache.last_pending_command.as_deref()
+            != Some(snap.pending_command.as_str())
             || self.cache.last_pending_keys.as_deref() != Some(snap.pending_keys.as_str());
         let cmdline_active = snap.cmdline.prompt.is_some();
         let vimdebug_active = snap.vimdebug.is_active();
 
-        if mode_changed || message_changed || recording_changed || pending_changed || cmdline_active || vimdebug_active {
+        if mode_changed
+            || message_changed
+            || recording_changed
+            || pending_changed
+            || cmdline_active
+            || vimdebug_active
+        {
             if let Some(ref mut bar) = self.status_bar {
                 bar.bind_mut().update(snap);
             }
@@ -315,7 +319,9 @@ impl UiCoordinator {
             if let Some(geom) = compute_cursor_geometry(editor, snap.visual_head) {
                 vim_cursor.set_target(geom.pos, geom.height, geom.width);
             } else {
-                log::trace!("cursor geometry unavailable (folded/offscreen?), keeping previous position");
+                log::trace!(
+                    "cursor geometry unavailable (folded/offscreen?), keeping previous position"
+                );
             }
         }
 
@@ -349,7 +355,11 @@ impl UiCoordinator {
         let has_incsearch_input = is_incsearch && !snap.cmdline.input.is_empty();
         let hlsearch = snap.hlsearch_enabled || has_incsearch_input;
         if let Some((pattern, _)) = effective_search {
-            log::trace!("ui::update: search={} hlsearch={}", pattern.as_str(), hlsearch);
+            log::trace!(
+                "ui::update: search={} hlsearch={}",
+                pattern.as_str(),
+                hlsearch
+            );
         }
         self.search_hl.update(editor, effective_search, hlsearch);
 
@@ -372,7 +382,9 @@ impl UiCoordinator {
         if let Some(ref yank) = snap.highlight_yank {
             if yank.duration_ms > 0 {
                 if let Some(ref mut overlay) = self.highlight_yank {
-                    overlay.bind_mut().show_yank(yank.start, yank.end, yank.duration_ms, editor);
+                    overlay
+                        .bind_mut()
+                        .show_yank(yank.start, yank.end, yank.duration_ms, editor);
                 }
             }
         }
@@ -381,7 +393,9 @@ impl UiCoordinator {
         match snap.vimdebug.range() {
             Some(range) => {
                 if let Some(ref mut overlay) = self.debug_overlay {
-                    overlay.bind_mut().show_range(range.start, range.end, editor);
+                    overlay
+                        .bind_mut()
+                        .show_range(range.start, range.end, editor);
                 }
             }
             // Only clear when vimdebug is fully inactive, not just range-less.
@@ -397,7 +411,9 @@ impl UiCoordinator {
     pub(crate) fn update_cursor_position(&mut self, editor: &Gd<CodeEdit>) {
         if let Some(ref mut cursor) = self.cursor {
             if let Some(geom) = compute_cursor_geometry(editor, self.cache.cached_visual_head) {
-                cursor.bind_mut().set_target(geom.pos, geom.height, geom.width);
+                cursor
+                    .bind_mut()
+                    .set_target(geom.pos, geom.height, geom.width);
             } else {
                 log::trace!("cursor_position: geometry unavailable, skipping update");
             }
@@ -428,7 +444,11 @@ impl UiCoordinator {
             // Blink speed: derive from Godot's native caret_blink settings.
             let blink_speed = if editor.is_caret_blink_enabled() {
                 let interval = editor.get_caret_blink_interval() as f64;
-                if interval > 0.0 { std::f64::consts::PI / interval } else { 0.0 }
+                if interval > 0.0 {
+                    std::f64::consts::PI / interval
+                } else {
+                    0.0
+                }
             } else {
                 0.0
             };
@@ -452,10 +472,8 @@ impl UiCoordinator {
                 }
                 editor.set_caret_type(mode_to_native_caret(current_mode));
             } else {
-                editor.add_theme_color_override(
-                    "caret_color",
-                    Color::from_rgba(0.0, 0.0, 0.0, 0.0),
-                );
+                editor
+                    .add_theme_color_override("caret_color", Color::from_rgba(0.0, 0.0, 0.0, 0.0));
                 if let Some(ref mut cursor) = self.cursor {
                     cursor.set_visible(true);
                 }
@@ -523,7 +541,9 @@ impl Drop for UiCoordinator {
             || self.virtual_text.is_some()
             || self.highlight_yank.is_some()
         {
-            log::warn!("UiCoordinator dropped with overlays still attached — detach() was not called");
+            log::warn!(
+                "UiCoordinator dropped with overlays still attached — detach() was not called"
+            );
         }
     }
 }

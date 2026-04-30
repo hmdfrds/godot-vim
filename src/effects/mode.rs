@@ -32,7 +32,10 @@ pub(super) fn handle_begin_insert(
 ) {
     log::trace!(
         "BeginInsert: entry_type={:?}, count={}, auto_indent_len={}, entry_offset={}",
-        entry_type, count, auto_indent_len, entry_offset.get()
+        entry_type,
+        count,
+        auto_indent_len,
+        entry_offset.get()
     );
 }
 
@@ -44,6 +47,8 @@ pub(super) fn handle_set_block_insert(
 ) {
     log::trace!(
         "SetBlockInsert: lines_below={}, grapheme_col={}, cursor_return_offset={}",
-        lines_below, grapheme_col, cursor_return_offset.get()
+        lines_below,
+        grapheme_col,
+        cursor_return_offset.get()
     );
 }

@@ -38,17 +38,9 @@ pub(crate) fn install_panic_hook() {
         let previous = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
             let msg = extract_panic_message(info.payload());
-            let location = info.location().map_or_else(
-                String::new,
-                |loc| {
-                    format!(
-                        " at {}:{}:{}",
-                        loc.file(),
-                        loc.line(),
-                        loc.column(),
-                    )
-                },
-            );
+            let location = info.location().map_or_else(String::new, |loc| {
+                format!(" at {}:{}:{}", loc.file(), loc.line(), loc.column(),)
+            });
             // Guard: godot_error! requires the Godot engine to be
             // initialized. During shutdown a panic can fire after the
             // engine has de-initialized; calling godot_error! then would

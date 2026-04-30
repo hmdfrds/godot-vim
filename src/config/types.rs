@@ -178,11 +178,12 @@ pub(crate) struct ConfigDocument {
 
 impl ConfigDocument {
     pub(crate) fn add_user_mapping(&mut self, mapping: ParsedMapping) {
-        self.lines.push(ConfigLine::Mapping(Box::new(MappingPayload {
-            preset_id: None,
-            enabled: true,
-            parsed: mapping,
-        })));
+        self.lines
+            .push(ConfigLine::Mapping(Box::new(MappingPayload {
+                preset_id: None,
+                enabled: true,
+                parsed: mapping,
+            })));
     }
 
     pub(crate) fn timeoutlen(&self) -> Option<u32> {
@@ -213,8 +214,10 @@ impl ConfigDocument {
             .iter()
             .position(|l| matches!(l, ConfigLine::Leader(_)))
             .map_or(0, |i| i + 1);
-        self.lines
-            .insert(insert_pos, ConfigLine::Setting(format!("set timeoutlen={ms}")));
+        self.lines.insert(
+            insert_pos,
+            ConfigLine::Setting(format!("set timeoutlen={ms}")),
+        );
     }
 }
 

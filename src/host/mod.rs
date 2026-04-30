@@ -24,7 +24,10 @@ use compact_str::CompactString;
 use vim_core::execution::{HostRequestId, HostResult};
 
 pub(crate) fn host_failure(id: HostRequestId, msg: impl Into<CompactString>) -> HostResult {
-    HostResult::Failure { id, error: msg.into() }
+    HostResult::Failure {
+        id,
+        error: msg.into(),
+    }
 }
 
 pub(crate) fn host_success(id: HostRequestId) -> HostResult {

@@ -18,6 +18,7 @@
 
 mod coordinator;
 pub(crate) mod cursor_shape;
+mod geometry;
 mod highlight_yank;
 mod inccommand;
 mod line_numbers;
@@ -25,7 +26,6 @@ pub(crate) mod mapping_dialog;
 mod operator_debugger;
 mod search_hl;
 mod status_bar;
-mod geometry;
 // Virtual text overlay is wired into the attach/detach lifecycle but the
 // engine does not yet emit virtual text effects, so update methods are
 // unused. Dead-code suppression is narrowed to individual methods in the module.

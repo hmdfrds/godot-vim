@@ -81,17 +81,21 @@ impl IControl for VirtualTextOverlay {
     }
 
     fn draw(&mut self) {
-        panic_guard("virtual_text::draw", || {
-            if self.draw_list.is_empty() {
-                return;
-            }
-            let color = Color::from_rgba(0.6, 0.5, 1.0, 0.15);
-            // Index loop avoids iterator borrow conflict with base_mut().
-            for i in 0..self.draw_list.len() {
-                let rect = self.draw_list[i].rect;
-                self.base_mut().draw_rect(rect, color);
-            }
-        }, ());
+        panic_guard(
+            "virtual_text::draw",
+            || {
+                if self.draw_list.is_empty() {
+                    return;
+                }
+                let color = Color::from_rgba(0.6, 0.5, 1.0, 0.15);
+                // Index loop avoids iterator borrow conflict with base_mut().
+                for i in 0..self.draw_list.len() {
+                    let rect = self.draw_list[i].rect;
+                    self.base_mut().draw_rect(rect, color);
+                }
+            },
+            (),
+        );
     }
 }
 
@@ -101,11 +105,7 @@ impl VirtualTextOverlay {}
 impl VirtualTextOverlay {
     /// Upsert a single entry (keyed by namespace + line + col) and rebuild draw list.
     #[allow(dead_code)] // API reserved for when engine emits virtual text effects
-    pub(crate) fn set_entry(
-        &mut self,
-        entry: VirtualTextEntry,
-        editor: &Gd<CodeEdit>,
-    ) {
+    pub(crate) fn set_entry(&mut self, entry: VirtualTextEntry, editor: &Gd<CodeEdit>) {
         self.enforce_capacity();
 
         let ns = entry.namespace.clone();
@@ -154,7 +154,8 @@ impl VirtualTextOverlay {
 
         for bucket in self.entries.values() {
             for entry in bucket {
-                let Some(col_pos) = super::geometry::corrected_col_x(editor, entry.line, entry.col) else {
+                let Some(col_pos) = super::geometry::corrected_col_x(editor, entry.line, entry.col)
+                else {
                     continue;
                 };
 
@@ -162,9 +163,7 @@ impl VirtualTextOverlay {
                 let x = match entry.style {
                     VirtualTextStyle::Eol => col_pos.x as f32 + 4.0,
                     VirtualTextStyle::Overlay => col_pos.x as f32,
-                    VirtualTextStyle::RightAlign => {
-                        (editor_width - text_width - 8.0).max(0.0)
-                    }
+                    VirtualTextStyle::RightAlign => (editor_width - text_width - 8.0).max(0.0),
                 };
 
                 self.draw_list.push(DrawCmd {

@@ -5,9 +5,9 @@
 //! these tests focus on multi-effect interactions that only manifest through the
 //! full dispatch path.
 
+use super::macros::DispatchCtx;
 use crate::bridge::port::TextEditorPort;
 use crate::testing::MockTextEdit;
-use super::macros::DispatchCtx;
 
 // ── Basic round-trips (single undo group, verify text + cursor) ─────────
 
@@ -228,13 +228,20 @@ fn dispatch_clear_selection_re_enables_cursor() {
 
 #[test]
 fn dispatch_scroll_effects() {
-    let lines: String = (0..50).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
+    let lines: String = (0..50)
+        .map(|i| format!("line {}", i))
+        .collect::<Vec<_>>()
+        .join("\n");
     let mut mock = MockTextEdit::new(&lines);
     mock.set_visible_line_count(10);
     let mut ctx = DispatchCtx::new();
 
     // Move cursor to line 20, then CenterCursor
-    let offset_20 = lines.match_indices('\n').nth(19).map(|(i, _)| i + 1).unwrap();
+    let offset_20 = lines
+        .match_indices('\n')
+        .nth(19)
+        .map(|(i, _)| i + 1)
+        .unwrap();
     let fx = effects![set_cursor(offset_20); center_cursor];
     ctx.dispatch(&mut mock, fx);
     assert_editor!(mock, cursor: (20, 0), scroll: 15);
@@ -242,12 +249,19 @@ fn dispatch_scroll_effects() {
 
 #[test]
 fn dispatch_cursor_to_bottom() {
-    let lines: String = (0..50).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
+    let lines: String = (0..50)
+        .map(|i| format!("line {}", i))
+        .collect::<Vec<_>>()
+        .join("\n");
     let mut mock = MockTextEdit::new(&lines);
     mock.set_visible_line_count(10);
     let mut ctx = DispatchCtx::new();
 
-    let offset_20 = lines.match_indices('\n').nth(19).map(|(i, _)| i + 1).unwrap();
+    let offset_20 = lines
+        .match_indices('\n')
+        .nth(19)
+        .map(|(i, _)| i + 1)
+        .unwrap();
     let fx = effects![set_cursor(offset_20); cursor_to_bottom];
     ctx.dispatch(&mut mock, fx);
     assert_editor!(mock, cursor: (20, 0), scroll: 11);
@@ -267,13 +281,20 @@ fn dispatch_scroll_left_right_round_trip() {
 
 #[test]
 fn dispatch_scroll_to_offset() {
-    let lines: String = (0..20).map(|i| format!("line {}", i)).collect::<Vec<_>>().join("\n");
+    let lines: String = (0..20)
+        .map(|i| format!("line {}", i))
+        .collect::<Vec<_>>()
+        .join("\n");
     let mut mock = MockTextEdit::new(&lines);
     mock.set_visible_line_count(10);
     let mut ctx = DispatchCtx::new();
 
     // ScrollTo offset at start of line 10
-    let byte_offset = lines.match_indices('\n').nth(9).map(|(i, _)| i + 1).unwrap();
+    let byte_offset = lines
+        .match_indices('\n')
+        .nth(9)
+        .map(|(i, _)| i + 1)
+        .unwrap();
     ctx.dispatch(&mut mock, effects![scroll_to(byte_offset)]);
     assert_editor!(mock, scroll: 10);
 }

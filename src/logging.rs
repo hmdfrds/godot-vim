@@ -157,7 +157,10 @@ mod tests {
 
     #[test]
     fn shorten_godot_vim_two_segments() {
-        assert_eq!(shorten_target("godot_vim::effects::marks"), "effects::marks");
+        assert_eq!(
+            shorten_target("godot_vim::effects::marks"),
+            "effects::marks"
+        );
     }
 
     #[test]

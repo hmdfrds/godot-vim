@@ -138,11 +138,7 @@ pub(crate) fn execute(
             if let Err(result) = require_shell_enabled(request.id(), policy) {
                 return result;
             }
-            super::external::handle_filter(
-                request.id(),
-                input_text.as_str(),
-                command.as_str(),
-            )
+            super::external::handle_filter(request.id(), input_text.as_str(), command.as_str())
         }
 
         HostRequest::ReindentRange {
@@ -151,12 +147,7 @@ pub(crate) fn execute(
             motion_type: _,
             input_text,
             ..
-        } => super::external::handle_reindent(
-            request.id(),
-            editor,
-            input_text.as_str(),
-            range,
-        ),
+        } => super::external::handle_reindent(request.id(), editor, input_text.as_str(), range),
 
         HostRequest::ReadClipboard {
             meta: _,
@@ -171,11 +162,7 @@ pub(crate) fn execute(
         }
 
         HostRequest::CustomExCommand { meta: _, command } => {
-            super::custom_commands::handle_custom_ex_command(
-                request.id(),
-                command.as_str(),
-                editor,
-            )
+            super::custom_commands::handle_custom_ex_command(request.id(), command.as_str(), editor)
         }
 
         HostRequest::SyncCommandLine { meta: _, .. } => {
@@ -189,23 +176,23 @@ pub(crate) fn execute(
             super::buffer::handle_goto_buffer(request.id(), *number as usize)
         }
 
-        HostRequest::BufferNext { meta: _, count }
-        | HostRequest::TabNext { meta: _, count } => {
-            super::buffer::handle_switch_buffer(request.id(), crate::bridge::codec::u32_to_i32_sat(*count))
+        HostRequest::BufferNext { meta: _, count } | HostRequest::TabNext { meta: _, count } => {
+            super::buffer::handle_switch_buffer(
+                request.id(),
+                crate::bridge::codec::u32_to_i32_sat(*count),
+            )
         }
 
-        HostRequest::BufferPrev { meta: _, count }
-        | HostRequest::TabPrev { meta: _, count } => {
-            super::buffer::handle_switch_buffer(request.id(), -crate::bridge::codec::u32_to_i32_sat(*count))
+        HostRequest::BufferPrev { meta: _, count } | HostRequest::TabPrev { meta: _, count } => {
+            super::buffer::handle_switch_buffer(
+                request.id(),
+                -crate::bridge::codec::u32_to_i32_sat(*count),
+            )
         }
 
-        HostRequest::BufferFirst { meta: _ } => {
-            super::buffer::handle_goto_buffer(request.id(), 1)
-        }
+        HostRequest::BufferFirst { meta: _ } => super::buffer::handle_goto_buffer(request.id(), 1),
 
-        HostRequest::BufferLast { meta: _ } => {
-            super::buffer::handle_goto_last_buffer(request.id())
-        }
+        HostRequest::BufferLast { meta: _ } => super::buffer::handle_goto_last_buffer(request.id()),
 
         HostRequest::TabClose { meta: _, force } => {
             let mut host = super::GodotEditorHost(editor);
@@ -227,16 +214,19 @@ pub(crate) fn execute(
             }
         }
 
-        HostRequest::BufferList { meta: _ } => {
-            super::buffer::handle_buffer_list(request.id())
-        }
+        HostRequest::BufferList { meta: _ } => super::buffer::handle_buffer_list(request.id()),
 
         HostRequest::ReadConfigFile { meta: _, path } => {
-            if let Err(e) = super::file::validate_path_scope(path.as_str(), policy.file_access_scope) {
+            if let Err(e) =
+                super::file::validate_path_scope(path.as_str(), policy.file_access_scope)
+            {
                 return host_failure(request.id(), e.to_string());
             }
             let gpath = GString::from(path.as_str());
-            match godot::classes::FileAccess::open(&gpath, godot::classes::file_access::ModeFlags::READ) {
+            match godot::classes::FileAccess::open(
+                &gpath,
+                godot::classes::file_access::ModeFlags::READ,
+            ) {
                 Some(fa) => {
                     // Raw text returned here. Sandbox filtering (stripping
                     // dangerous :! commands etc.) is applied by host_bridge
@@ -252,13 +242,16 @@ pub(crate) fn execute(
             }
         }
 
-        HostRequest::EvaluateExpression { meta: _, expression } => {
-            eval_to_host_result(request.id(), expression.as_str(), mode_str)
-        }
+        HostRequest::EvaluateExpression {
+            meta: _,
+            expression,
+        } => eval_to_host_result(request.id(), expression.as_str(), mode_str),
 
-        HostRequest::EvaluateMapping { meta: _, expression, .. } => {
-            eval_to_host_result(request.id(), expression.as_str(), mode_str)
-        }
+        HostRequest::EvaluateMapping {
+            meta: _,
+            expression,
+            ..
+        } => eval_to_host_result(request.id(), expression.as_str(), mode_str),
 
         HostRequest::RequestCompletion { .. } => {
             if editor.is_code_completion_enabled() {
@@ -268,28 +261,35 @@ pub(crate) fn execute(
         }
 
         HostRequest::ShowMessageHistory { meta: _, entries } => {
-            let text = entries.iter().map(|e| e.text.as_str()).collect::<Vec<_>>().join("\n");
+            let text = entries
+                .iter()
+                .map(|e| e.text.as_str())
+                .collect::<Vec<_>>()
+                .join("\n");
             HostResult::Success {
                 id: request.id(),
                 message: Some(CompactString::from(text)),
             }
         }
 
-        HostRequest::JumpToBuffer { meta: _, buffer_id, offset: jump_offset } => {
-            super::buffer::handle_jump_to_buffer(
-                request.id(),
-                buffer_id.get(),
-                jump_offset.get(),
-                buffer_id,
-            )
-        }
+        HostRequest::JumpToBuffer {
+            meta: _,
+            buffer_id,
+            offset: jump_offset,
+        } => super::buffer::handle_jump_to_buffer(
+            request.id(),
+            buffer_id.get(),
+            jump_offset.get(),
+            buffer_id,
+        ),
 
         HostRequest::ListActions { meta: _, filter } => {
             let all_commands = super::custom_commands::list_all_commands();
             let filtered: Vec<&&str> = match filter {
-                Some(f) if !f.is_empty() => {
-                    all_commands.iter().filter(|c| c.starts_with(f.as_str())).collect()
-                }
+                Some(f) if !f.is_empty() => all_commands
+                    .iter()
+                    .filter(|c| c.starts_with(f.as_str()))
+                    .collect(),
                 _ => all_commands.iter().collect(),
             };
             let text = filtered.iter().map(|s| **s).collect::<Vec<_>>().join("\n");
@@ -304,19 +304,24 @@ pub(crate) fn execute(
         // operations have no meaningful mapping, but nav commands can map
         // to tab switching (handled via CompoundAction in effect dispatch).
         // As host requests they return descriptive failures.
-        HostRequest::SplitWindow { .. } => {
-            host_failure(request.id(), "Window splitting is not supported in the Godot editor")
-        }
+        HostRequest::SplitWindow { .. } => host_failure(
+            request.id(),
+            "Window splitting is not supported in the Godot editor",
+        ),
         HostRequest::CloseWindow { meta: _, force } => {
             let mut host = super::GodotEditorHost(editor);
             super::file::handle_quit(request.id(), &mut host, ForceOverride::from(*force))
         }
-        HostRequest::CloseOtherWindows { .. } => {
-            host_failure(request.id(), "Window management is not supported in the Godot editor")
-        }
+        HostRequest::CloseOtherWindows { .. } => host_failure(
+            request.id(),
+            "Window management is not supported in the Godot editor",
+        ),
         HostRequest::WriteAll { .. } => {
             // TODO: iterate all open scripts and save each
-            host_failure(request.id(), ":wall is not yet supported in the Godot editor")
+            host_failure(
+                request.id(),
+                ":wall is not yet supported in the Godot editor",
+            )
         }
         HostRequest::QuitAll { meta: _, force } => {
             let mut host = super::GodotEditorHost(editor);
@@ -334,24 +339,12 @@ pub(crate) fn execute(
         // ── Window navigation (Ctrl-W commands) ─────────────────────────
         // These are now routed as HostRequests rather than Effects. In
         // Godot's tab model, nav commands map to tab switching.
-        HostRequest::WindowNext { .. } => {
-            super::buffer::handle_switch_buffer(request.id(), 1)
-        }
-        HostRequest::WindowPrev { .. } => {
-            super::buffer::handle_switch_buffer(request.id(), -1)
-        }
-        HostRequest::WindowMoveLeft { .. } => {
-            super::buffer::handle_switch_buffer(request.id(), -1)
-        }
-        HostRequest::WindowMoveRight { .. } => {
-            super::buffer::handle_switch_buffer(request.id(), 1)
-        }
-        HostRequest::WindowMoveUp { .. } => {
-            super::buffer::handle_switch_buffer(request.id(), -1)
-        }
-        HostRequest::WindowMoveDown { .. } => {
-            super::buffer::handle_switch_buffer(request.id(), 1)
-        }
+        HostRequest::WindowNext { .. } => super::buffer::handle_switch_buffer(request.id(), 1),
+        HostRequest::WindowPrev { .. } => super::buffer::handle_switch_buffer(request.id(), -1),
+        HostRequest::WindowMoveLeft { .. } => super::buffer::handle_switch_buffer(request.id(), -1),
+        HostRequest::WindowMoveRight { .. } => super::buffer::handle_switch_buffer(request.id(), 1),
+        HostRequest::WindowMoveUp { .. } => super::buffer::handle_switch_buffer(request.id(), -1),
+        HostRequest::WindowMoveDown { .. } => super::buffer::handle_switch_buffer(request.id(), 1),
         // No meaningful mapping in Godot's single-editor-per-tab model.
         HostRequest::WindowRotateDown { .. }
         | HostRequest::WindowRotateUp { .. }
@@ -379,7 +372,10 @@ pub(crate) fn execute(
         // ── Command-line / extension ────────────────────────────────────
         HostRequest::OpenCommandWindow { .. } => {
             log::warn!("q: / q/ command window not supported in CodeEdit");
-            host_failure(request.id(), "E11: Command window not supported in CodeEdit")
+            host_failure(
+                request.id(),
+                "E11: Command window not supported in CodeEdit",
+            )
         }
         HostRequest::CallOperatorFunc { .. } => {
             log::warn!("operatorfunc (g@) not yet supported in the Godot editor");
@@ -389,21 +385,33 @@ pub(crate) fn execute(
             // :norm is handled as a compound action in effect dispatch, not
             // as a host request. If it arrives here, something is unexpected.
             log::warn!("ExecuteNorm arrived as host request — expected compound action path");
-            host_failure(request.id(), ":norm host request routing not expected in Godot editor")
+            host_failure(
+                request.id(),
+                ":norm host request routing not expected in Godot editor",
+            )
         }
 
         // ── Global mark / action / cmdline completion ───────────────────
-        HostRequest::JumpToGlobalMark { meta: _, buffer_id, offset: jump_offset, .. } => {
-            super::buffer::handle_jump_to_buffer(
-                request.id(),
-                buffer_id.get(),
-                jump_offset.get(),
-                buffer_id,
-            )
-        }
+        HostRequest::JumpToGlobalMark {
+            meta: _,
+            buffer_id,
+            offset: jump_offset,
+            ..
+        } => super::buffer::handle_jump_to_buffer(
+            request.id(),
+            buffer_id.get(),
+            jump_offset.get(),
+            buffer_id,
+        ),
         HostRequest::RunAction { meta: _, ref name } => {
             log::debug!("RunAction: {}", name);
-            host_failure(request.id(), format!("Host action '{}' is not available in the Godot editor", name))
+            host_failure(
+                request.id(),
+                format!(
+                    "Host action '{}' is not available in the Godot editor",
+                    name
+                ),
+            )
         }
         HostRequest::RequestCmdlineCompletion { .. } => {
             // Return empty candidates — Godot doesn't provide cmdline completion.

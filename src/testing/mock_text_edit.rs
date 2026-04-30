@@ -144,12 +144,7 @@ impl MockTextEdit {
     // perform raw text manipulation without undo recording.
 
     /// Returns `(end_line, end_col)` — the position just past the inserted text.
-    fn base_insert_text(
-        &mut self,
-        p_line: i32,
-        p_col: i32,
-        p_text: &str,
-    ) -> (i32, i32) {
+    fn base_insert_text(&mut self, p_line: i32, p_col: i32, p_text: &str) -> (i32, i32) {
         debug_assert!(p_line >= 0, "negative line: {}", p_line);
         debug_assert!(p_col >= 0, "negative col: {}", p_col);
         let line_idx = p_line as usize;
@@ -214,7 +209,8 @@ impl MockTextEdit {
         let post = self.lines[to_line as usize][to_col as usize..].to_string();
 
         if to_line > from_line {
-            self.lines.drain((from_line as usize + 1)..=(to_line as usize));
+            self.lines
+                .drain((from_line as usize + 1)..=(to_line as usize));
         }
 
         self.lines[from_line as usize] = pre + &post;
@@ -222,13 +218,7 @@ impl MockTextEdit {
         removed
     }
 
-    fn base_get_text(
-        &self,
-        from_line: i32,
-        from_col: i32,
-        to_line: i32,
-        to_col: i32,
-    ) -> String {
+    fn base_get_text(&self, from_line: i32, from_col: i32, to_line: i32, to_col: i32) -> String {
         debug_assert!(from_line >= 0, "negative from_line: {}", from_line);
         debug_assert!(from_col >= 0, "negative from_col: {}", from_col);
         debug_assert!(to_line >= 0, "negative to_line: {}", to_line);
@@ -257,12 +247,7 @@ impl MockTextEdit {
     // These pair raw text mutation with undo recording, matching how Godot's
     // `insert_text` and `remove_text` interact with the undo system.
 
-    fn insert_text_record(
-        &mut self,
-        p_line: i32,
-        p_col: i32,
-        p_text: &str,
-    ) -> (i32, i32) {
+    fn insert_text_record(&mut self, p_line: i32, p_col: i32, p_text: &str) -> (i32, i32) {
         self.clear_redo();
 
         let (end_line, end_col) = self.base_insert_text(p_line, p_col, p_text);
@@ -280,13 +265,7 @@ impl MockTextEdit {
         (end_line, end_col)
     }
 
-    fn remove_text_record(
-        &mut self,
-        from_line: i32,
-        from_col: i32,
-        to_line: i32,
-        to_col: i32,
-    ) {
+    fn remove_text_record(&mut self, from_line: i32, from_col: i32, to_line: i32, to_col: i32) {
         self.clear_redo();
 
         let removed_text = self.base_get_text(from_line, from_col, to_line, to_col);
@@ -350,13 +329,7 @@ impl MockTextEdit {
     // mirrors Godot's `_offset_carets_after` which adjusts both caret
     // positions and selection origins.
 
-    fn offset_carets_after(
-        &mut self,
-        old_line: i32,
-        old_col: i32,
-        new_line: i32,
-        new_col: i32,
-    ) {
+    fn offset_carets_after(&mut self, old_line: i32, old_col: i32, new_line: i32, new_col: i32) {
         let edit_height = new_line - old_line;
         let edit_size = new_col - old_col;
 
@@ -364,16 +337,22 @@ impl MockTextEdit {
             Self::offset_point(
                 &mut caret.line,
                 &mut caret.column,
-                old_line, old_col,
-                edit_height, edit_size, new_line,
+                old_line,
+                old_col,
+                edit_height,
+                edit_size,
+                new_line,
             );
 
             if caret.selection.active {
                 Self::offset_point(
                     &mut caret.selection.origin_line,
                     &mut caret.selection.origin_column,
-                    old_line, old_col,
-                    edit_height, edit_size, new_line,
+                    old_line,
+                    old_col,
+                    edit_height,
+                    edit_size,
+                    new_line,
                 );
             }
         }
@@ -451,8 +430,7 @@ impl TextEditorPort for MockTextEdit {
             let from_line = self.carets[i].line;
             let from_col = self.carets[i].column;
 
-            let (new_line, new_col) =
-                self.insert_text_record(from_line, from_col, text);
+            let (new_line, new_col) = self.insert_text_record(from_line, from_col, text);
 
             self.offset_carets_after(from_line, from_col, new_line, new_col);
 
@@ -513,11 +491,7 @@ impl TextEditorPort for MockTextEdit {
     }
 
     /// No folds to unfold in the mock — delegates straight to `set_caret_line`.
-    fn set_caret_line_unfold(
-        &mut self,
-        line: i32,
-        _viewport: crate::bridge::port::ViewportAdjust,
-    ) {
+    fn set_caret_line_unfold(&mut self, line: i32, _viewport: crate::bridge::port::ViewportAdjust) {
         self.set_caret_line(line);
     }
 
@@ -535,11 +509,7 @@ impl TextEditorPort for MockTextEdit {
 
     // ── Selection ───────────────────────────────────────────────────────
 
-    fn select(
-        &mut self,
-        from: crate::types::CharLineCol,
-        to: crate::types::CharLineCol,
-    ) {
+    fn select(&mut self, from: crate::types::CharLineCol, to: crate::types::CharLineCol) {
         let caret_line = self.clamp_line(to.line);
         let caret_col = self.clamp_column(caret_line, to.col);
         self.carets[0].line = caret_line;
@@ -550,8 +520,7 @@ impl TextEditorPort for MockTextEdit {
         self.carets[0].selection.origin_line = origin_line;
         self.carets[0].selection.origin_column = origin_col;
 
-        self.carets[0].selection.active =
-            origin_line != caret_line || origin_col != caret_col;
+        self.carets[0].selection.active = origin_line != caret_line || origin_col != caret_col;
     }
 
     fn deselect(&mut self) {
@@ -582,8 +551,7 @@ impl TextEditorPort for MockTextEdit {
         self.carets[idx].selection.origin_line = origin_line;
         self.carets[idx].selection.origin_column = origin_col;
 
-        self.carets[idx].selection.active =
-            origin_line != caret_line || origin_col != caret_col;
+        self.carets[idx].selection.active = origin_line != caret_line || origin_col != caret_col;
     }
 
     // ── Multi-caret ─────────────────────────────────────────────────────
@@ -715,11 +683,7 @@ impl TextEditorPort for MockTextEdit {
 
     /// Without code folding, every line is visible — so the visible offset
     /// from any line is just the absolute count requested.
-    fn get_next_visible_line_offset_from(
-        &self,
-        _line: i32,
-        visible_amount: i32,
-    ) -> i32 {
+    fn get_next_visible_line_offset_from(&self, _line: i32, visible_amount: i32) -> i32 {
         visible_amount.abs()
     }
 }
@@ -909,7 +873,11 @@ mod tests {
     fn select_for_secondary_caret() {
         let mut mock = MockTextEdit::new("abcd\nefgh");
         let idx = mock.add_caret(1, 0);
-        mock.select_for_caret(crate::types::CharLineCol::new(1, 1), crate::types::CharLineCol::new(1, 3), idx);
+        mock.select_for_caret(
+            crate::types::CharLineCol::new(1, 1),
+            crate::types::CharLineCol::new(1, 3),
+            idx,
+        );
         assert_eq!(mock.get_caret_line(), 0);
         assert!(mock.carets[idx as usize].selection.active);
     }

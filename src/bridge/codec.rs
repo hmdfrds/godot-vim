@@ -46,7 +46,10 @@ impl LineIndex {
                 line_starts.push(i + 1);
             }
         }
-        debug_assert_eq!(line_starts[0], 0, "LineIndex: first line must start at offset 0");
+        debug_assert_eq!(
+            line_starts[0], 0,
+            "LineIndex: first line must start at offset 0"
+        );
         debug_assert!(
             line_starts.windows(2).all(|w| w[0] < w[1]),
             "LineIndex: line_starts must be strictly increasing"
@@ -203,7 +206,8 @@ impl LineIndex {
         };
 
         // Collect new line starts from the inserted text (already at final offsets).
-        let new_line_starts: Vec<usize> = new_text.bytes()
+        let new_line_starts: Vec<usize> = new_text
+            .bytes()
             .enumerate()
             .filter(|(_, b)| *b == b'\n')
             .map(|(i, _)| offset + i + 1)
@@ -217,7 +221,8 @@ impl LineIndex {
 
         if !new_line_starts.is_empty() {
             let insert_pos = line + 1;
-            self.line_starts.splice(insert_pos..insert_pos, new_line_starts);
+            self.line_starts
+                .splice(insert_pos..insert_pos, new_line_starts);
         }
 
         self.text_len += new_bytes;
@@ -295,7 +300,9 @@ fn find_line_start(text: &str, target_line: usize) -> Option<usize> {
 #[cfg(test)]
 fn line_text_at(text: &str, line_start: usize) -> &str {
     let remaining = &text[line_start..];
-    remaining.split_once('\n').map_or(remaining, |(line, _)| line)
+    remaining
+        .split_once('\n')
+        .map_or(remaining, |(line, _)| line)
 }
 
 #[cfg(test)]
@@ -308,17 +315,16 @@ fn line_col_to_byte(text: &str, line: i32, col: i32) -> usize {
     let target_line = i32_to_usize(line);
     let target_char_col = i32_to_usize(col);
 
-    let line_start = find_line_start(text, target_line)
-        .unwrap_or_else(|| {
-            // Out-of-range line: clamp to the last line by walking to its start.
-            let mut ls: usize = 0;
-            for (i, &byte) in text.as_bytes().iter().enumerate() {
-                if byte == b'\n' {
-                    ls = i + 1;
-                }
+    let line_start = find_line_start(text, target_line).unwrap_or_else(|| {
+        // Out-of-range line: clamp to the last line by walking to its start.
+        let mut ls: usize = 0;
+        for (i, &byte) in text.as_bytes().iter().enumerate() {
+            if byte == b'\n' {
+                ls = i + 1;
             }
-            ls
-        });
+        }
+        ls
+    });
 
     let line_text = line_text_at(text, line_start);
     let byte_col = char_col_to_byte_offset(line_text, target_char_col);
@@ -787,15 +793,16 @@ mod tests {
         use proptest::prelude::*;
 
         fn arb_ascii_doc() -> impl Strategy<Value = String> {
-            prop::collection::vec("[a-zA-Z0-9 ]{0,80}", 1..50)
-                .prop_map(|lines| lines.join("\n"))
+            prop::collection::vec("[a-zA-Z0-9 ]{0,80}", 1..50).prop_map(|lines| lines.join("\n"))
         }
 
         /// Generate text with Unicode characters: accented Latin, CJK, emoji.
         fn arb_unicode_doc() -> impl Strategy<Value = String> {
             prop::collection::vec(
-                prop::string::string_regex("[a-zA-Z\u{00e0}-\u{00ff}\u{4e00}-\u{4e10}\u{0300}-\u{0302}]{0,40}")
-                    .unwrap(),
+                prop::string::string_regex(
+                    "[a-zA-Z\u{00e0}-\u{00ff}\u{4e00}-\u{4e10}\u{0300}-\u{0302}]{0,40}",
+                )
+                .unwrap(),
                 1..20,
             )
             .prop_map(|lines| lines.join("\n"))

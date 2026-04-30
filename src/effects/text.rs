@@ -4,8 +4,8 @@
 //! All coordinate lookups use the caller-provided `LineIndex` for O(log n)
 //! binary search, avoiding the O(n) linear scan of the free-function fallback.
 
-use crate::bridge::port::TextEditorPort;
 use crate::bridge::codec::DocumentView;
+use crate::bridge::port::TextEditorPort;
 use crate::types::CharLineCol;
 
 /// Canonical single-point insert. Collapses any existing selection first
@@ -26,7 +26,13 @@ pub(crate) fn handle_insert(
     content: &str,
 ) {
     let pos = doc.line_index.byte_to_line_col(doc.text, offset);
-    log::trace!("text_insert: offset={} -> line={} col={} len={}", offset, pos.line, pos.col, content.len());
+    log::trace!(
+        "text_insert: offset={} -> line={} col={} len={}",
+        offset,
+        pos.line,
+        pos.col,
+        content.len()
+    );
     insert_at(editor, pos.line, pos.col, content);
 }
 
@@ -38,7 +44,15 @@ pub(crate) fn handle_delete(
 ) {
     let start_pos = doc.line_index.byte_to_line_col(doc.text, start);
     let end_pos = doc.line_index.byte_to_line_col(doc.text, end);
-    log::trace!("text_delete: range={}..{} -> ({},{})..({},{})", start, end, start_pos.line, start_pos.col, end_pos.line, end_pos.col);
+    log::trace!(
+        "text_delete: range={}..{} -> ({},{})..({},{})",
+        start,
+        end,
+        start_pos.line,
+        start_pos.col,
+        end_pos.line,
+        end_pos.col
+    );
     editor.select(start_pos, end_pos);
     editor.delete_selection();
 }
@@ -54,7 +68,16 @@ pub(crate) fn handle_replace(
 ) {
     let start_pos = doc.line_index.byte_to_line_col(doc.text, start);
     let end_pos = doc.line_index.byte_to_line_col(doc.text, end);
-    log::trace!("text_replace: range={}..{} -> ({},{})..({},{}) new_len={}", start, end, start_pos.line, start_pos.col, end_pos.line, end_pos.col, content.len());
+    log::trace!(
+        "text_replace: range={}..{} -> ({},{})..({},{}) new_len={}",
+        start,
+        end,
+        start_pos.line,
+        start_pos.col,
+        end_pos.line,
+        end_pos.col,
+        content.len()
+    );
 
     editor.select(start_pos, end_pos);
     editor.insert_text_at_caret(content);

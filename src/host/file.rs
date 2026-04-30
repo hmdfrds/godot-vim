@@ -94,7 +94,11 @@ pub(super) fn handle_write_file(
     force: ForceOverride,
     scope: FileAccessScope,
 ) -> HostResult {
-    log::debug!("file::write: path={} force={}", path.unwrap_or("<none>"), force.is_force());
+    log::debug!(
+        "file::write: path={} force={}",
+        path.unwrap_or("<none>"),
+        force.is_force()
+    );
     if let Some(p) = path {
         if p.is_empty() {
             return host_failure(id, "E32: No file name");
@@ -114,7 +118,11 @@ pub(super) fn handle_write_file(
                 }
             }
             let text = editor.get_text();
-            log::info!("file::write_external: path={} force={}", p, force.is_force());
+            log::info!(
+                "file::write_external: path={} force={}",
+                p,
+                force.is_force()
+            );
             return match std::fs::write(p, &text) {
                 Ok(()) => {
                     let line_count = text.lines().count();
@@ -256,11 +264,7 @@ pub(super) fn handle_edit_file(
 
 /// Reload from disk, discarding editor changes. Updates both the Script
 /// resource (in-memory) and the CodeEdit buffer to keep them in sync.
-fn reload_from_disk(
-    id: HostRequestId,
-    editor: &mut impl EditorHost,
-    path: &str,
-) -> HostResult {
+fn reload_from_disk(id: HostRequestId, editor: &mut impl EditorHost, path: &str) -> HostResult {
     let text = match editor.read_file(path) {
         Ok(t) => t,
         Err(e) => return host_failure(id, e.to_string()),
@@ -294,11 +298,10 @@ pub(super) fn handle_read_file(
         read_via_godot(path)
     } else {
         check_fs_file_size(path).and_then(|_| {
-            std::fs::read_to_string(path)
-                .map_err(|e| HostError::CantOpenFile {
-                    path: CompactString::from(path),
-                    detail: Some(CompactString::from(e.to_string())),
-                })
+            std::fs::read_to_string(path).map_err(|e| HostError::CantOpenFile {
+                path: CompactString::from(path),
+                detail: Some(CompactString::from(e.to_string())),
+            })
         })
     };
 
@@ -317,11 +320,12 @@ fn read_via_godot(path: &str) -> Result<String, HostError> {
     use godot::classes::FileAccess;
     use godot::prelude::*;
 
-    let file = FileAccess::open(&GString::from(path), ModeFlags::READ)
-        .ok_or_else(|| HostError::CantOpenFile {
+    let file = FileAccess::open(&GString::from(path), ModeFlags::READ).ok_or_else(|| {
+        HostError::CantOpenFile {
             path: CompactString::from(path),
             detail: None,
-        })?;
+        }
+    })?;
     let length = usize::try_from(file.get_length()).unwrap_or(usize::MAX);
     if length > MAX_READ_FILE_SIZE {
         return Err(HostError::CantOpenFile {
@@ -672,7 +676,11 @@ mod tests {
             FileAccessScope::Unrestricted,
         );
         assert_failure(&result);
-        assert!(failure_msg(&result).contains("E166"), "msg={}", failure_msg(&result));
+        assert!(
+            failure_msg(&result).contains("E166"),
+            "msg={}",
+            failure_msg(&result)
+        );
 
         std::fs::remove_file(&link).ok();
         std::fs::remove_file(&target).ok();
@@ -758,7 +766,11 @@ mod tests {
             FileAccessScope::Unrestricted,
         );
         assert_failure(&result);
-        assert!(failure_msg(&result).contains("E514"), "msg={}", failure_msg(&result));
+        assert!(
+            failure_msg(&result).contains("E514"),
+            "msg={}",
+            failure_msg(&result)
+        );
         assert!(!failure_msg(&result).contains("force-write"));
     }
 
@@ -773,8 +785,16 @@ mod tests {
             FileAccessScope::Unrestricted,
         );
         assert_failure(&result);
-        assert!(failure_msg(&result).contains("E514"), "msg={}", failure_msg(&result));
-        assert!(failure_msg(&result).contains("force-write"), "msg={}", failure_msg(&result));
+        assert!(
+            failure_msg(&result).contains("E514"),
+            "msg={}",
+            failure_msg(&result)
+        );
+        assert!(
+            failure_msg(&result).contains("force-write"),
+            "msg={}",
+            failure_msg(&result)
+        );
     }
 
     #[test]
@@ -784,7 +804,10 @@ mod tests {
         let result = handle_quit(test_id(), &mut editor, ForceOverride::Normal);
         assert_failure(&result);
         assert!(failure_msg(&result).contains("E37"));
-        assert!(!matches!(editor.buffer_state, MockBufferState::Closed), "tab should NOT be closed");
+        assert!(
+            !matches!(editor.buffer_state, MockBufferState::Closed),
+            "tab should NOT be closed"
+        );
     }
 
     #[test]
@@ -794,7 +817,10 @@ mod tests {
         let result = handle_quit(test_id(), &mut editor, ForceOverride::Force);
         assert_success(&result);
         assert!(editor.save_called, "tag_saved_version should be called");
-        assert!(matches!(editor.buffer_state, MockBufferState::Closed), "tab should be closed");
+        assert!(
+            matches!(editor.buffer_state, MockBufferState::Closed),
+            "tab should be closed"
+        );
     }
 
     #[test]
@@ -802,8 +828,14 @@ mod tests {
         let mut editor = MockEditorHost::new("clean", Some("res://script.gd"));
         let result = handle_quit(test_id(), &mut editor, ForceOverride::Normal);
         assert_success(&result);
-        assert!(matches!(editor.buffer_state, MockBufferState::Closed), "tab should be closed");
-        assert!(!editor.save_called, "tag_saved_version should NOT be called for non-force quit of clean buffer");
+        assert!(
+            matches!(editor.buffer_state, MockBufferState::Closed),
+            "tab should be closed"
+        );
+        assert!(
+            !editor.save_called,
+            "tag_saved_version should NOT be called for non-force quit of clean buffer"
+        );
     }
 
     #[test]
@@ -811,7 +843,10 @@ mod tests {
         let mut editor = MockEditorHost::new("clean", Some("res://script.gd"));
         let result = handle_quit(test_id(), &mut editor, ForceOverride::Force);
         assert_success(&result);
-        assert!(editor.save_called, "tag_saved_version should be called with force");
+        assert!(
+            editor.save_called,
+            "tag_saved_version should be called with force"
+        );
         assert!(matches!(editor.buffer_state, MockBufferState::Closed));
     }
 
@@ -835,7 +870,10 @@ mod tests {
         assert_failure(&result);
         assert!(failure_msg(&result).contains("E514"));
         assert!(!failure_msg(&result).contains("use :q!"));
-        assert!(!matches!(editor.buffer_state, MockBufferState::Closed), "tab should NOT be closed on save failure");
+        assert!(
+            !matches!(editor.buffer_state, MockBufferState::Closed),
+            "tab should NOT be closed on save failure"
+        );
     }
 
     #[test]
@@ -847,8 +885,15 @@ mod tests {
         }));
         let result = handle_write_quit(test_id(), &mut editor, ForceOverride::Force);
         assert_failure(&result);
-        assert!(failure_msg(&result).contains("use :q! to discard changes"), "msg={}", failure_msg(&result));
-        assert!(!matches!(editor.buffer_state, MockBufferState::Closed), "tab should NOT be closed on save failure");
+        assert!(
+            failure_msg(&result).contains("use :q! to discard changes"),
+            "msg={}",
+            failure_msg(&result)
+        );
+        assert!(
+            !matches!(editor.buffer_state, MockBufferState::Closed),
+            "tab should NOT be closed on save failure"
+        );
     }
 
     #[test]
@@ -880,7 +925,10 @@ mod tests {
     #[test]
     fn handle_edit_file_same_path_force_reloads() {
         let mut editor = MockEditorHost::new("old text", Some("res://script.gd"));
-        editor.files.insert("res://script.gd".to_string(), "new disk text\nline2".to_string());
+        editor.files.insert(
+            "res://script.gd".to_string(),
+            "new disk text\nline2".to_string(),
+        );
         let result = handle_edit_file(
             test_id(),
             &mut editor,
@@ -890,8 +938,14 @@ mod tests {
         );
         assert_success(&result);
         assert_eq!(editor.text, "new disk text\nline2");
-        assert!(editor.save_called, "tag_saved_version should be called after reload");
-        assert!(editor.script_source_updated.is_some(), "script source should be updated");
+        assert!(
+            editor.save_called,
+            "tag_saved_version should be called after reload"
+        );
+        assert!(
+            editor.script_source_updated.is_some(),
+            "script source should be updated"
+        );
     }
 
     #[test]

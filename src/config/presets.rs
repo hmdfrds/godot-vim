@@ -25,9 +25,8 @@ impl PresetDefinition {
         let parsed = ParsedMapping {
             lhs: self.lhs.to_string(),
             rhs: self.rhs.to_string(),
-            modes: parse_mode_prefix(self.mode_prefix).unwrap_or(
-                vim_core::grammar::MapModePrefix::Normal,
-            ),
+            modes: parse_mode_prefix(self.mode_prefix)
+                .unwrap_or(vim_core::grammar::MapModePrefix::Normal),
             kind: self.kind,
         };
         mapping_to_vim_command(&parsed)

@@ -1,19 +1,29 @@
 //! Applies scroll effects (scroll-to, center, top, bottom, horizontal scroll)
 //! to CodeEdit's viewport.
 
-use crate::bridge::port::TextEditorPort;
 use crate::bridge::codec::{self, DocumentView};
+use crate::bridge::port::TextEditorPort;
 
 /// Scroll the viewport so that `offset` (byte position) is at the top.
 ///
 /// If the target line is inside a folded region (hidden), the viewport is
 /// scrolled to the nearest visible line at or above the target instead of
 /// landing on a hidden line.
-pub(super) fn handle_scroll_to(editor: &mut impl TextEditorPort, doc: &DocumentView, offset: usize) {
+pub(super) fn handle_scroll_to(
+    editor: &mut impl TextEditorPort,
+    doc: &DocumentView,
+    offset: usize,
+) {
     let before = editor.get_first_visible_line();
     let line = doc.line_index.byte_to_line_col(doc.text, offset).line;
     let scroll_line = nearest_visible_line_at_or_above(editor, line);
-    log::trace!("scroll_to: offset={} target={} scroll={} before={}", offset, line, scroll_line, before);
+    log::trace!(
+        "scroll_to: offset={} target={} scroll={} before={}",
+        offset,
+        line,
+        scroll_line,
+        before
+    );
     editor.set_v_scroll(scroll_line.into());
 }
 

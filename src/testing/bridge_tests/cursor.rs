@@ -2,10 +2,10 @@
 //! multi-caret management. These verify that the bridge correctly translates
 //! vim-core's byte-offset selections into Godot's line/col selection API.
 
+use super::macros::apply_set_selection;
 use crate::bridge::port::TextEditorPort;
 use crate::testing::MockTextEdit;
 use crate::types::CharLineCol;
-use super::macros::apply_set_selection;
 use vim_core::primitives::SelectionShape;
 
 // ── Cursor clamping (validates MockTextEdit matches Godot's clamping) ───

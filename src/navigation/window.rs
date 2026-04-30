@@ -64,7 +64,10 @@ pub(crate) fn handle_window_nav(
 
     log::debug!(
         "window_nav: direction={:?} current_center=({:.0},{:.0}) candidates={}",
-        direction, current_center.x, current_center.y, candidates.len()
+        direction,
+        current_center.x,
+        current_center.y,
+        candidates.len()
     );
 
     for candidate in candidates {
@@ -91,7 +94,13 @@ pub(crate) fn handle_window_nav(
         let dist = current_center.distance_squared_to(cand_center);
         log::trace!(
             "  candidate: {} center=({:.0},{:.0}) diff=({:.0},{:.0}) in_cone={} dist={:.0}",
-            class, cand_center.x, cand_center.y, diff.x, diff.y, in_cone, dist
+            class,
+            cand_center.x,
+            cand_center.y,
+            diff.x,
+            diff.y,
+            in_cone,
+            dist
         );
 
         if in_cone && dist < min_score {
@@ -101,7 +110,11 @@ pub(crate) fn handle_window_nav(
     }
 
     if let Some(target) = best_candidate {
-        log::debug!("window_nav: {:?} -> focused #{}", direction, target.instance_id().to_i64());
+        log::debug!(
+            "window_nav: {:?} -> focused #{}",
+            direction,
+            target.instance_id().to_i64()
+        );
         target
             .clone()
             .upcast::<Node>()
@@ -127,7 +140,9 @@ fn find_window_candidates(root: &Gd<Control>) -> Vec<Gd<Control>> {
         &mut candidates,
         &|node| {
             let control = node.clone().try_cast::<Control>().ok()?;
-            if !control.is_visible_in_tree() { return None; }
+            if !control.is_visible_in_tree() {
+                return None;
+            }
             is_window_candidate(&control).then_some(control)
         },
     );

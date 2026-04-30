@@ -100,10 +100,7 @@ pub(crate) fn compute_cursor_geometry(
     if is_empty_doc_rect(rect) {
         log::trace!("cursor_geom: empty document, using fallback geometry");
         return Some(CursorGeometry {
-            pos: Vector2::new(
-                editor.get_caret_draw_pos().x,
-                0.0,
-            ),
+            pos: Vector2::new(editor.get_caret_draw_pos().x, 0.0),
             height: line_height,
             width: fallback_char_width,
         });
@@ -120,7 +117,11 @@ pub(crate) fn compute_cursor_geometry(
 
     let height = {
         let h = rect.size.y as f32;
-        if h > 0.1 { h } else { line_height }
+        if h > 0.1 {
+            h
+        } else {
+            line_height
+        }
     };
 
     // chars().len() gives a UTF-32 character count, matching
@@ -130,13 +131,27 @@ pub(crate) fn compute_cursor_geometry(
     let (target_x, width) = if override_pos.is_some() {
         // Override path: shapes the line once for both x and width.
         compute_override_x_and_width(
-            editor, &font, font_size, line, col, line_len, fallback_char_width,
+            editor,
+            &font,
+            font_size,
+            line,
+            col,
+            line_len,
+            fallback_char_width,
         )
     } else {
         // Native caret path: x from Godot's built-in draw_pos (free),
         // width from a shaped-text measurement (cached per line).
         let x = editor.get_caret_draw_pos().x;
-        let w = compute_char_width_ts(editor, &font, font_size, line, col, line_len, fallback_char_width);
+        let w = compute_char_width_ts(
+            editor,
+            &font,
+            font_size,
+            line,
+            col,
+            line_len,
+            fallback_char_width,
+        );
         (x, w)
     };
 
@@ -173,7 +188,15 @@ fn compute_override_x_and_width(
 
     // Fast path: override matches native caret, so draw_pos is exact.
     if caret_line == line && caret_col == col {
-        let w = compute_char_width_ts(editor, font, font_size, line, col, line_len, fallback_char_width);
+        let w = compute_char_width_ts(
+            editor,
+            font,
+            font_size,
+            line,
+            col,
+            line_len,
+            fallback_char_width,
+        );
         return (draw_pos.x, w);
     }
 
@@ -186,7 +209,11 @@ fn compute_override_x_and_width(
             match (target_x, caret_x) {
                 (Some(tx), Some(cx)) => {
                     let result = draw_pos.x + (tx - cx);
-                    if is_sane_coord(result) { Some(result) } else { None }
+                    if is_sane_coord(result) {
+                        Some(result)
+                    } else {
+                        None
+                    }
                 }
                 _ => None,
             }
@@ -203,7 +230,11 @@ fn compute_override_x_and_width(
                 match (col_x, col0_x) {
                     (Some(cx), Some(c0)) => {
                         let result = base_x + (cx - c0);
-                        if is_sane_coord(result) { Some(result) } else { None }
+                        if is_sane_coord(result) {
+                            Some(result)
+                        } else {
+                            None
+                        }
                     }
                     _ => None,
                 }
@@ -217,7 +248,11 @@ fn compute_override_x_and_width(
             match (col_next, col_cur) {
                 (Some(nx), Some(cx)) => {
                     let w = (nx - cx).abs();
-                    if is_sane_coord(w) && w >= MIN_CURSOR_WIDTH { w } else { fallback_char_width }
+                    if is_sane_coord(w) && w >= MIN_CURSOR_WIDTH {
+                        w
+                    } else {
+                        fallback_char_width
+                    }
                 }
                 _ => fallback_char_width,
             }
@@ -588,81 +623,100 @@ impl IControl for VimCursor {
     }
 
     fn ready(&mut self) {
-        panic_guard("cursor_shape::ready", || {
-            let mut visual = Panel::new_alloc();
-            visual.set_name("CursorShape");
-            visual.set_mouse_filter(MouseFilter::IGNORE);
+        panic_guard(
+            "cursor_shape::ready",
+            || {
+                let mut visual = Panel::new_alloc();
+                visual.set_name("CursorShape");
+                visual.set_mouse_filter(MouseFilter::IGNORE);
 
-            // Attach the difference-blend shader so the cursor inverts
-            // against whatever text/background is underneath.
-            let mut shader = Shader::new_gd();
-            shader.set_code(CURSOR_SHADER_CODE);
-            let mut material = ShaderMaterial::new_gd();
-            material.set_shader(&shader);
-            visual.set_material(&material.upcast::<godot::classes::Material>());
+                // Attach the difference-blend shader so the cursor inverts
+                // against whatever text/background is underneath.
+                let mut shader = Shader::new_gd();
+                shader.set_code(CURSOR_SHADER_CODE);
+                let mut material = ShaderMaterial::new_gd();
+                material.set_shader(&shader);
+                visual.set_material(&material.upcast::<godot::classes::Material>());
 
-            let visual_node: Gd<godot::classes::Node> = visual.clone().upcast();
-            self.base_mut().add_child(&visual_node);
+                let visual_node: Gd<godot::classes::Node> = visual.clone().upcast();
+                self.base_mut().add_child(&visual_node);
 
-            // Both the Control wrapper and the Panel child need high z-index
-            // so the shader's screen_texture reads fully composited text.
-            visual.clone().upcast::<CanvasItem>().set_z_index(CURSOR_Z_INDEX);
-            self.base().clone().upcast::<CanvasItem>().set_z_index(CURSOR_Z_INDEX);
+                // Both the Control wrapper and the Panel child need high z-index
+                // so the shader's screen_texture reads fully composited text.
+                visual
+                    .clone()
+                    .upcast::<CanvasItem>()
+                    .set_z_index(CURSOR_Z_INDEX);
+                self.base()
+                    .clone()
+                    .upcast::<CanvasItem>()
+                    .set_z_index(CURSOR_Z_INDEX);
 
-            // Pass-through: clicks should reach the editor, not the cursor.
-            self.base_mut().set_mouse_filter(MouseFilter::IGNORE);
+                // Pass-through: clicks should reach the editor, not the cursor.
+                self.base_mut().set_mouse_filter(MouseFilter::IGNORE);
 
-            self.visual = Some(visual);
-            self.update_visual_style(Mode::Normal);
-            self.update_visual_shape();
-            self.base_mut().set_process(true);
-        }, ());
+                self.visual = Some(visual);
+                self.update_visual_style(Mode::Normal);
+                self.update_visual_shape();
+                self.base_mut().set_process(true);
+            },
+            (),
+        );
     }
 
     fn process(&mut self, delta: f64) {
-        panic_guard("cursor_shape::process", || {
-            let current = self.animation.current_pos;
-            let target = self.animation.target_pos;
-            let dist = target - current;
-            let is_moving = dist.length_squared() > 0.25;
+        panic_guard(
+            "cursor_shape::process",
+            || {
+                let current = self.animation.current_pos;
+                let target = self.animation.target_pos;
+                let dist = target - current;
+                let is_moving = dist.length_squared() > 0.25;
 
-            if is_moving {
-                // Exponential decay lerp: frame-rate independent, converges
-                // smoothly regardless of delta fluctuations.
-                let new_pos = current.lerp(target, (1.0 - (-self.animation.lerp_speed * delta).exp()) as f32);
-                self.animation.current_pos = new_pos;
-                self.base_mut().set_position(new_pos);
-                // Stay fully visible while moving so rapid keystrokes don't
-                // produce a flickering cursor.
-                self.animation.blink_time = 0.0;
-                self.update_alpha(1.0);
-            } else {
-                // Snap to exact target to avoid sub-pixel jitter.
-                if dist.length_squared() > 0.0 {
-                    self.animation.current_pos = target;
-                    self.base_mut().set_position(target);
-                }
-
-                // Square-wave blink: sin(t) >= 0 -> visible, < 0 -> hidden.
-                self.animation.blink_time += delta * self.animation.blink_speed;
-                let blink_factor = if self.animation.blink_time.sin() >= 0.0 {
-                    1.0
+                if is_moving {
+                    // Exponential decay lerp: frame-rate independent, converges
+                    // smoothly regardless of delta fluctuations.
+                    let new_pos = current.lerp(
+                        target,
+                        (1.0 - (-self.animation.lerp_speed * delta).exp()) as f32,
+                    );
+                    self.animation.current_pos = new_pos;
+                    self.base_mut().set_position(new_pos);
+                    // Stay fully visible while moving so rapid keystrokes don't
+                    // produce a flickering cursor.
+                    self.animation.blink_time = 0.0;
+                    self.update_alpha(1.0);
                 } else {
-                    0.0
-                };
-                self.update_alpha(self.base_alpha * blink_factor);
-            }
+                    // Snap to exact target to avoid sub-pixel jitter.
+                    if dist.length_squared() > 0.0 {
+                        self.animation.current_pos = target;
+                        self.base_mut().set_position(target);
+                    }
 
-            // Manual clip: the screen_texture shader bypasses Godot's
-            // clip_children, so we hide the cursor when it extends below
-            // the editor rect (e.g. bottom dock overlap).
-            if self.animation.cached_editor_height > 0.0 {
-                let cursor_bottom = self.animation.current_pos.y + self.font_height;
-                if let Some(visual) = self.visual.clone() {
-                    visual.upcast::<CanvasItem>().set_visible(cursor_bottom <= self.animation.cached_editor_height);
+                    // Square-wave blink: sin(t) >= 0 -> visible, < 0 -> hidden.
+                    self.animation.blink_time += delta * self.animation.blink_speed;
+                    let blink_factor = if self.animation.blink_time.sin() >= 0.0 {
+                        1.0
+                    } else {
+                        0.0
+                    };
+                    self.update_alpha(self.base_alpha * blink_factor);
                 }
-            }
-        }, ());
+
+                // Manual clip: the screen_texture shader bypasses Godot's
+                // clip_children, so we hide the cursor when it extends below
+                // the editor rect (e.g. bottom dock overlap).
+                if self.animation.cached_editor_height > 0.0 {
+                    let cursor_bottom = self.animation.current_pos.y + self.font_height;
+                    if let Some(visual) = self.visual.clone() {
+                        visual
+                            .upcast::<CanvasItem>()
+                            .set_visible(cursor_bottom <= self.animation.cached_editor_height);
+                    }
+                }
+            },
+            (),
+        );
     }
 }
 
@@ -744,7 +798,6 @@ impl VimCursor {
         self.underline_height = underline_height;
         self.update_visual_shape();
     }
-
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -810,10 +863,7 @@ impl VimCursor {
             }
             CursorShapeMode::Underline => {
                 visual.set_size(Vector2::new(self.char_width, self.underline_height));
-                visual.set_position(Vector2::new(
-                    0.0,
-                    self.font_height - self.underline_height,
-                ));
+                visual.set_position(Vector2::new(0.0, self.font_height - self.underline_height));
             }
             CursorShapeMode::Block => {
                 visual.set_size(Vector2::new(self.char_width, self.font_height));

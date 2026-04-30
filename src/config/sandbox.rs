@@ -107,18 +107,30 @@ pub(crate) fn sandbox_config_text(text: &str) -> String {
 /// Options that can execute shell commands or exfiltrate data.
 /// Both long and short forms must be listed (Vim accepts either).
 const BLOCKED_SET_OPTIONS: &[&str] = &[
-    "shell", "sh",
-    "shellcmdflag", "shcf",
-    "shellpipe", "sp",
-    "shellredir", "srr",
-    "shellquote", "shq",
-    "shellxquote", "sxq",
-    "shellxescape", "sxe",
-    "makeprg", "mp",
-    "grepprg", "gp",
-    "equalprg", "ep",
-    "formatprg", "fp",
-    "keywordprg", "kp",
+    "shell",
+    "sh",
+    "shellcmdflag",
+    "shcf",
+    "shellpipe",
+    "sp",
+    "shellredir",
+    "srr",
+    "shellquote",
+    "shq",
+    "shellxquote",
+    "sxq",
+    "shellxescape",
+    "sxe",
+    "makeprg",
+    "mp",
+    "grepprg",
+    "gp",
+    "equalprg",
+    "ep",
+    "formatprg",
+    "fp",
+    "keywordprg",
+    "kp",
 ];
 
 /// Extract the option name from a `set` token, stripping value delimiters
@@ -141,14 +153,17 @@ fn is_safe_non_mapping_line(trimmed: &str) -> bool {
     }
     // Case-insensitive: the engine may accept `Set`, `SET`, etc.
     let trimmed_lower = trimmed.to_ascii_lowercase();
-    let after_set = trimmed_lower.strip_prefix("set ")
+    let after_set = trimmed_lower
+        .strip_prefix("set ")
         .or_else(|| trimmed_lower.strip_prefix("se "));
     if let Some(options_str) = after_set {
         // Check ALL space-separated options -- `set scrolloff=5 shell=/bin/evil`
         // must be blocked because `shell` is dangerous even if `scrolloff` is safe.
         let has_blocked = options_str.split_whitespace().any(|token| {
             let name = extract_option_name_from_token(token);
-            BLOCKED_SET_OPTIONS.iter().any(|blocked| name.eq_ignore_ascii_case(blocked))
+            BLOCKED_SET_OPTIONS
+                .iter()
+                .any(|blocked| name.eq_ignore_ascii_case(blocked))
         });
         return !has_blocked;
     }
@@ -220,12 +235,24 @@ fn matches_abbrev(name: &str, min: &str, full: &str) -> bool {
 /// variants or `unmap`. This distinction is critical: recursive maps are
 /// unconditionally stripped in sandbox mode.
 fn is_recursive_map_abbrev(name: &str) -> bool {
-    if name.eq_ignore_ascii_case("map") { return true; }
-    if matches_abbrev(name, "nm", "nmap") { return true; }
-    if matches_abbrev(name, "vm", "vmap") { return true; }
-    if matches_abbrev(name, "im", "imap") { return true; }
-    if matches_abbrev(name, "om", "omap") { return true; }
-    if matches_abbrev(name, "cm", "cmap") { return true; }
+    if name.eq_ignore_ascii_case("map") {
+        return true;
+    }
+    if matches_abbrev(name, "nm", "nmap") {
+        return true;
+    }
+    if matches_abbrev(name, "vm", "vmap") {
+        return true;
+    }
+    if matches_abbrev(name, "im", "imap") {
+        return true;
+    }
+    if matches_abbrev(name, "om", "omap") {
+        return true;
+    }
+    if matches_abbrev(name, "cm", "cmap") {
+        return true;
+    }
 
     false
 }
@@ -233,27 +260,63 @@ fn is_recursive_map_abbrev(name: &str) -> bool {
 /// Matches any map/noremap/unmap abbreviation. Must stay in sync with the
 /// engine's `matches_abbrev` logic to prevent sandbox bypasses.
 fn is_map_or_noremap_abbrev(name: &str) -> bool {
-    if name.eq_ignore_ascii_case("map") { return true; }
-    if matches_abbrev(name, "nm", "nmap") { return true; }
-    if matches_abbrev(name, "vm", "vmap") { return true; }
-    if matches_abbrev(name, "im", "imap") { return true; }
-    if matches_abbrev(name, "om", "omap") { return true; }
-    if matches_abbrev(name, "cm", "cmap") { return true; }
+    if name.eq_ignore_ascii_case("map") {
+        return true;
+    }
+    if matches_abbrev(name, "nm", "nmap") {
+        return true;
+    }
+    if matches_abbrev(name, "vm", "vmap") {
+        return true;
+    }
+    if matches_abbrev(name, "im", "imap") {
+        return true;
+    }
+    if matches_abbrev(name, "om", "omap") {
+        return true;
+    }
+    if matches_abbrev(name, "cm", "cmap") {
+        return true;
+    }
 
-    if matches_abbrev(name, "no", "noremap") { return true; }
-    if matches_abbrev(name, "nn", "nnoremap") { return true; }
-    if matches_abbrev(name, "vn", "vnoremap") { return true; }
-    if matches_abbrev(name, "ino", "inoremap") { return true; }
-    if matches_abbrev(name, "ono", "onoremap") { return true; }
-    if matches_abbrev(name, "cno", "cnoremap") { return true; }
+    if matches_abbrev(name, "no", "noremap") {
+        return true;
+    }
+    if matches_abbrev(name, "nn", "nnoremap") {
+        return true;
+    }
+    if matches_abbrev(name, "vn", "vnoremap") {
+        return true;
+    }
+    if matches_abbrev(name, "ino", "inoremap") {
+        return true;
+    }
+    if matches_abbrev(name, "ono", "onoremap") {
+        return true;
+    }
+    if matches_abbrev(name, "cno", "cnoremap") {
+        return true;
+    }
 
     // Unmap could remove safety bindings the user relies on.
-    if matches_abbrev(name, "unm", "unmap") { return true; }
-    if matches_abbrev(name, "nun", "nunmap") { return true; }
-    if matches_abbrev(name, "vu", "vunmap") { return true; }
-    if matches_abbrev(name, "iu", "iunmap") { return true; }
-    if matches_abbrev(name, "ou", "ounmap") { return true; }
-    if matches_abbrev(name, "cu", "cunmap") { return true; }
+    if matches_abbrev(name, "unm", "unmap") {
+        return true;
+    }
+    if matches_abbrev(name, "nun", "nunmap") {
+        return true;
+    }
+    if matches_abbrev(name, "vu", "vunmap") {
+        return true;
+    }
+    if matches_abbrev(name, "iu", "iunmap") {
+        return true;
+    }
+    if matches_abbrev(name, "ou", "ounmap") {
+        return true;
+    }
+    if matches_abbrev(name, "cu", "cunmap") {
+        return true;
+    }
 
     false
 }
@@ -269,7 +332,11 @@ fn contains_shell_pattern(line: &str) -> bool {
         let after_colon = &line[i + 1..];
         // Skip range chars so `:%!sort` and `:'<,'>!cmd` are caught.
         let after_range = after_colon.trim_start_matches(|c: char| {
-            c.is_ascii_digit() || matches!(c, '%' | '$' | '.' | '\'' | ',' | '+' | '-' | '<' | '>' | ' ')
+            c.is_ascii_digit()
+                || matches!(
+                    c,
+                    '%' | '$' | '.' | '\'' | ',' | '+' | '-' | '<' | '>' | ' '
+                )
         });
         for &(min, full, suffix) in EX_COMMAND_PATTERNS {
             if matches_ex_pattern(after_range, min, full, suffix) {
@@ -286,10 +353,10 @@ fn matches_ex_pattern(text: &str, min: &str, full: &str, suffix: &str) -> bool {
             continue;
         }
         // .get() avoids panic on multi-byte UTF-8 character boundaries.
-        let Some(prefix) = text.get(..len) else { continue };
-        if prefix.eq_ignore_ascii_case(&full[..len])
-            && text[len..].starts_with(suffix)
-        {
+        let Some(prefix) = text.get(..len) else {
+            continue;
+        };
+        if prefix.eq_ignore_ascii_case(&full[..len]) && text[len..].starts_with(suffix) {
             return true;
         }
     }
@@ -309,18 +376,14 @@ pub(crate) fn apply_vimrc_policy(
     }
     match policy {
         crate::settings::ProjectVimrc::Disabled => {
-            log::info!(
-                "project vimrc skipped: security/project_vimrc is set to Disabled"
-            );
+            log::info!("project vimrc skipped: security/project_vimrc is set to Disabled");
             None
         }
         crate::settings::ProjectVimrc::Sandbox => {
             log::info!("project vimrc loaded in sandbox mode");
             Some(sandbox_config_text(text))
         }
-        crate::settings::ProjectVimrc::Trusted => {
-            Some(text.to_string())
-        }
+        crate::settings::ProjectVimrc::Trusted => Some(text.to_string()),
     }
 }
 
@@ -383,7 +446,9 @@ inoremap jk <Esc>
 ";
         let output = sandbox_config_text(input);
         assert!(output.contains("nnoremap j gj"));
-        assert!(!output.lines().any(|l| l.trim().starts_with("nnoremap <Leader>r :!cargo")));
+        assert!(!output
+            .lines()
+            .any(|l| l.trim().starts_with("nnoremap <Leader>r :!cargo")));
         assert!(output.contains("set scrolloff=5"));
         assert!(output.contains("inoremap jk <Esc>"));
     }
@@ -557,7 +622,10 @@ inoremap jk <Esc>
         // the mapleader variable — must be stripped by the sandbox.
         let input = "let mapleader_hack = 1\n";
         let output = sandbox_config_text(input);
-        assert!(output.contains("[sandbox] stripped"), "mapleader_hack should be stripped");
+        assert!(
+            output.contains("[sandbox] stripped"),
+            "mapleader_hack should be stripped"
+        );
     }
 
     #[test]
@@ -624,7 +692,11 @@ inoremap jk <Esc>
         for abbrev in &["sou", "sour", "sourc", "source"] {
             let input = format!("nnoremap <Leader>s :{} evil.txt<CR>\n", abbrev);
             let output = sandbox_config_text(&input);
-            assert!(output.contains("[sandbox] stripped"), "failed for :{}", abbrev);
+            assert!(
+                output.contains("[sandbox] stripped"),
+                "failed for :{}",
+                abbrev
+            );
         }
     }
 
@@ -633,7 +705,11 @@ inoremap jk <Esc>
         for abbrev in &["r", "re", "rea", "read"] {
             let input = format!("nnoremap <Leader>r :{} !cat /etc/passwd<CR>\n", abbrev);
             let output = sandbox_config_text(&input);
-            assert!(output.contains("[sandbox] stripped"), "failed for :{}", abbrev);
+            assert!(
+                output.contains("[sandbox] stripped"),
+                "failed for :{}",
+                abbrev
+            );
         }
     }
 
@@ -650,7 +726,11 @@ inoremap jk <Esc>
         ];
         for case in cases {
             let output = sandbox_config_text(case);
-            assert!(output.contains("[sandbox] stripped"), "failed for: {}", case.trim());
+            assert!(
+                output.contains("[sandbox] stripped"),
+                "failed for: {}",
+                case.trim()
+            );
         }
     }
 
@@ -664,7 +744,11 @@ inoremap jk <Esc>
         ];
         for case in cases {
             let output = sandbox_config_text(case);
-            assert!(output.contains("[sandbox] stripped"), "failed for: {}", case.trim());
+            assert!(
+                output.contains("[sandbox] stripped"),
+                "failed for: {}",
+                case.trim()
+            );
         }
     }
 
@@ -837,8 +921,12 @@ imap jj <Esc>
         assert!(output.contains("inoremap jk <Esc>"));
         assert!(output.contains("set scrolloff=5"));
         // nmap and imap are stripped
-        assert!(output.lines().any(|l| l.contains("stripped recursive map") && l.contains("nmap k gk")));
-        assert!(output.lines().any(|l| l.contains("stripped recursive map") && l.contains("imap jj <Esc>")));
+        assert!(output
+            .lines()
+            .any(|l| l.contains("stripped recursive map") && l.contains("nmap k gk")));
+        assert!(output
+            .lines()
+            .any(|l| l.contains("stripped recursive map") && l.contains("imap jj <Esc>")));
     }
 
     // --- M21: Multi-option `set` line blocking ---

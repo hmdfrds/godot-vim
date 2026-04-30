@@ -137,9 +137,7 @@ impl AutoBraceSnapshot {
     /// preventing the two systems from conflicting on the same pair set.
     pub(crate) fn filter_engine_owned_pairs(&mut self) {
         let pairs = Rc::make_mut(&mut self.pairs);
-        pairs.retain(|(open, close)| {
-            open.chars().count() != 1 || close.chars().count() != 1
-        });
+        pairs.retain(|(open, close)| open.chars().count() != 1 || close.chars().count() != 1);
     }
 
     /// Check if `key` is a string delimiter start key (no FFI — answered from snapshot).
@@ -245,7 +243,12 @@ impl TextEditorPort for CodeEditPort<'_> {
         self.0.deselect();
     }
 
-    fn select_for_caret(&mut self, from: crate::types::CharLineCol, to: crate::types::CharLineCol, caret_index: i32) {
+    fn select_for_caret(
+        &mut self,
+        from: crate::types::CharLineCol,
+        to: crate::types::CharLineCol,
+        caret_index: i32,
+    ) {
         self.0
             .select_ex(from.line, from.col, to.line, to.col)
             .caret_index(caret_index)
@@ -297,7 +300,8 @@ impl TextEditorPort for CodeEditPort<'_> {
     }
 
     fn get_next_visible_line_offset_from(&self, line: i32, visible_amount: i32) -> i32 {
-        self.0.get_next_visible_line_offset_from(line, visible_amount)
+        self.0
+            .get_next_visible_line_offset_from(line, visible_amount)
     }
 }
 
@@ -337,11 +341,7 @@ impl NavigationCapable for CodeEditPort<'_> {
     fn emit_symbol_lookup(&mut self, symbol: &str, line: i32, col: i32) {
         self.0.emit_signal(
             "symbol_lookup",
-            &[
-                symbol.to_variant(),
-                line.to_variant(),
-                col.to_variant(),
-            ],
+            &[symbol.to_variant(), line.to_variant(), col.to_variant()],
         );
     }
 
@@ -366,10 +366,7 @@ impl NavigationCapable for CodeEditPort<'_> {
                 {
                     let mut event: Gd<InputEventShortcut> = InputEventShortcut::new_gd();
                     event.set_shortcut(&shortcut);
-                    viewport.call_deferred(
-                        "push_input",
-                        &[event.to_variant(), false.to_variant()],
-                    );
+                    viewport.call_deferred("push_input", &[event.to_variant(), false.to_variant()]);
                     log::debug!("show_documentation_tooltip: shortcut synthesis for '{symbol}'");
                     return;
                 }
@@ -386,18 +383,15 @@ impl NavigationCapable for CodeEditPort<'_> {
             log::trace!("show_documentation_tooltip: off-screen sentinel, no warp_pos");
             None
         } else {
-            let pos_local = Vector2::new(
-                rect_local.position.x as f32,
-                rect_local.position.y as f32,
-            );
+            let pos_local =
+                Vector2::new(rect_local.position.x as f32, rect_local.position.y as f32);
             let transform = self.0.get_global_transform();
             let pos_global = transform * pos_local;
 
             if !pos_global.x.is_nan() && !pos_global.y.is_nan() {
                 let warp_x = super::codec::f32_to_i32_sat(pos_global.x);
-                let warp_y = super::codec::f32_to_i32_sat(
-                    pos_global.y + rect_local.size.y as f32 / 2.0,
-                );
+                let warp_y =
+                    super::codec::f32_to_i32_sat(pos_global.y + rect_local.size.y as f32 / 2.0);
                 Some(Vector2i::new(warp_x, warp_y))
             } else {
                 None
