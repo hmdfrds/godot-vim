@@ -71,7 +71,7 @@ pub struct GodotVimCore {
     pending_tooltip: Option<PendingTooltip>,
     tracked_windows: Vec<TrackedWindow>,
     /// True while the engine is actively processing a keystroke.
-    /// Used to distinguish vim-core-initiated text changes from external ones (IME, completion).
+    /// Used by [`ProcessingKeyGuard`] for RAII-based keystroke processing tracking.
     processing_key: bool,
 }
 
@@ -574,30 +574,13 @@ impl GodotVimCore {
         }
     }
 
-    /// Catches external text changes (Find-and-Replace, plugins, auto-format)
-    /// that bypass the Vim keystroke pipeline's inline cache invalidation.
+    /// Signal handler for `text_changed`. Previously used for text-change
+    /// reconciliation; now a no-op since NativeInsert handles all insert-mode
+    /// keys engine-side and completion acceptance uses its own reconcile path.
     #[func]
     fn on_text_changed(&mut self) {
-        if self.controller.is_none() {
-            return;
-        }
-        let is_external = !self.processing_key;
-        panic_guard(
-            "on_text_changed",
-            || {
-                if let Some(controller) = &mut self.controller {
-                    // Reconcile BEFORE invalidating cache — the cache holds
-                    // pre-change text needed for diffing.
-                    if is_external {
-                        if let Some(ref editor) = self.attached_editor {
-                            controller.reconcile_external_text_change(editor);
-                        }
-                    }
-                    controller.invalidate_text_cache();
-                }
-            },
-            (),
-        );
+        // Intentionally empty — kept because Godot requires the connected
+        // signal handler to exist.
     }
 
     #[func]

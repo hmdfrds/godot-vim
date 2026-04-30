@@ -49,10 +49,6 @@ const PERF_BUDGET_US: perf::Microseconds = perf::Microseconds(2000);
 struct TransientShellState {
     /// Cross-drain runaway guard: catches `:norm` calling back into `drain_pending`.
     operations_this_cycle: u32,
-    /// Avoids re-fetching the full document text from Godot (FFI round-trip)
-    /// on successive keystrokes that don't mutate text. Tagged with
-    /// `InstanceId` to self-invalidate on buffer switch.
-    persistent_text: Option<(InstanceId, String)>,
     /// Deferred for the plugin layer (scene tree owner) after `process_cycle`.
     pending_ui_action: Option<PendingUiAction>,
     /// Effect inspector state (`:vimdebug watch/step`).
@@ -65,7 +61,6 @@ impl TransientShellState {
     fn new() -> Self {
         Self {
             operations_this_cycle: 0,
-            persistent_text: None,
             pending_ui_action: None,
             vimdebug: vimdebug::VimdebugState::default(),
             pending_step_effects: None,
@@ -79,13 +74,11 @@ impl TransientShellState {
     fn reset(&mut self) {
         let Self {
             operations_this_cycle,
-            persistent_text,
             pending_ui_action,
             vimdebug,
             pending_step_effects,
         } = self;
         *operations_this_cycle = 0;
-        *persistent_text = None;
         *pending_ui_action = None;
         vimdebug.set_mode(vimdebug::VimdebugMode::Off);
         *pending_step_effects = None;
@@ -428,50 +421,6 @@ impl VimController {
     #[must_use]
     pub(crate) fn mode(&self) -> vim_core::primitives::Mode {
         self.engine().mode()
-    }
-
-    /// Called on `text_changed` signal so the next keystroke fetches fresh
-    /// editor text instead of using a stale cache.
-    pub(crate) fn invalidate_text_cache(&mut self) {
-        self.transient.persistent_text = None;
-    }
-
-    /// Reconcile an external text change (IME commit, Find-and-Replace, etc.)
-    /// with the engine's undo/dot-repeat tracking.
-    ///
-    /// Must be called BEFORE [`invalidate_text_cache`] — the persistent text
-    /// cache holds the pre-change text needed for diffing.
-    ///
-    /// No-ops when the mode is not insert-like (undo tracking only matters
-    /// during active editing sessions) or when no cached text is available
-    /// (first change after attach).
-    pub(crate) fn reconcile_external_text_change(&mut self, editor: &Gd<CodeEdit>) {
-        use vim_core::primitives::Mode;
-
-        let mode = self.engine().mode();
-        if !matches!(mode, Mode::Insert | Mode::Replace | Mode::VirtualReplace) {
-            return;
-        }
-
-        let Some((_, before_text)) = self.transient.persistent_text.take() else {
-            log::trace!("reconcile_external: no cached text available, skipping");
-            return;
-        };
-
-        let after_text = editor.get_text().to_string();
-        let after_index = crate::bridge::codec::LineIndex::new(&after_text);
-        let cursor_byte = after_index.line_col_to_byte(
-            &after_text,
-            editor.get_caret_line(),
-            editor.get_caret_column(),
-        );
-
-        reconcile::reconcile_external_text_change(
-            self.engine_mut(),
-            &before_text,
-            &after_text,
-            cursor_byte,
-        );
     }
 
     /// Canonical Tier 1 cleanup: comprehensive internal reset when no editor
