@@ -48,6 +48,14 @@ pub(crate) const SHORTCUT_CLOSE_FILE: &str = "script_editor/close_file";
 /// Registered by Godot via `ED_SHORTCUT("script_text_editor/show_tooltip", ...)`.
 pub(crate) const SHORTCUT_SHOW_TOOLTIP: &str = "script_text_editor/show_tooltip";
 
+/// Shortcut path for deleting files in the FileSystem dock.
+/// Registered by Godot via `ED_SHORTCUT("filesystem_dock/delete", ..., Key::DELETE)`.
+pub(crate) const SHORTCUT_FS_DELETE: &str = "filesystem_dock/delete";
+
+/// Shortcut path for renaming files in the FileSystem dock.
+/// Registered by Godot via `ED_SHORTCUT("filesystem_dock/rename", ..., Key::F2)`.
+pub(crate) const SHORTCUT_FS_RENAME: &str = "filesystem_dock/rename";
+
 // ── Section 2: Typed wrapper functions ──────────────────────────────────
 
 /// Set the search text on a `CodeEdit` for built-in search highlighting.

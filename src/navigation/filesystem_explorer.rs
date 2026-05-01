@@ -6,11 +6,13 @@
 //! the generic dock navigation in `dock.rs`.
 
 use godot::classes::{
-    Control, DirAccess, DisplayServer, EditorInterface, FileAccess, HBoxContainer, Input,
-    InputEventKey, ItemList, Label, LineEdit, Node, Tree, VBoxContainer,
+    Control, DirAccess, DisplayServer, EditorInterface, FileAccess, HBoxContainer,
+    InputEventKey, InputEventShortcut, ItemList, Label, LineEdit, Node, Tree, VBoxContainer,
 };
 use godot::global::Key;
 use godot::prelude::*;
+
+use crate::bridge::godot_calls;
 
 use crate::scene_tree::find_child_of_type;
 
@@ -138,30 +140,12 @@ impl FileSystemExplorer {
     }
 
     fn begin_delete(&mut self, _control: &Gd<Control>, _kind: DockKind) -> DockInputResult {
-        // Synthesize a Delete keypress and inject it into Godot's input
-        // pipeline. The FileSystem dock's native _tree_gui_input handler
-        // picks it up and triggers DependencyRemoveDialog — which checks
-        // for resource dependencies, handles UID cleanup, and provides
-        // consistent editor UX. Our _input() handler won't consume Delete
-        // (it's not in the fs-explorer or dock-nav key tables), so it
-        // passes through to the Tree's native gui_input.
-        let mut event = InputEventKey::new_gd();
-        event.set_keycode(Key::DELETE);
-        event.set_pressed(true);
-        Input::singleton().parse_input_event(&event);
+        trigger_dock_shortcut(godot_calls::SHORTCUT_FS_DELETE);
         DockInputResult::Handled
     }
 
     fn begin_rename(&mut self, _control: &Gd<Control>, _kind: DockKind) -> DockInputResult {
-        // Synthesize F2 to trigger Godot's native rename flow.
-        // FileSystemDock's _tree_gui_input matches the filesystem_dock/rename
-        // shortcut (default F2), which sets to_rename and calls
-        // tree->edit_selected() for inline TreeItem editing. This handles
-        // UID reference updates across the project automatically.
-        let mut event = InputEventKey::new_gd();
-        event.set_keycode(Key::F2);
-        event.set_pressed(true);
-        Input::singleton().parse_input_event(&event);
+        trigger_dock_shortcut(godot_calls::SHORTCUT_FS_RENAME);
         DockInputResult::Handled
     }
 
@@ -435,6 +419,35 @@ fn parent_dir(path: &str) -> String {
         Some(pos) => trimmed[..=pos].to_string(),
         None => "res://".to_string(),
     }
+}
+
+/// Trigger a Godot editor shortcut by its registered path.
+///
+/// Looks up the `Shortcut` from `EditorSettings`, wraps it in an
+/// `InputEventShortcut`, and pushes it into the editor viewport's input
+/// pipeline. `Shortcut::matches_event()` uses pointer identity for
+/// `InputEventShortcut`, so this works regardless of the user's keybinding.
+fn trigger_dock_shortcut(path: &str) {
+    let editor_iface = EditorInterface::singleton();
+    let Some(mut settings) = editor_iface.get_editor_settings() else {
+        return;
+    };
+    let Some(shortcut) = godot_calls::get_shortcut(&mut settings, path) else {
+        log::warn!("filesystem_explorer: shortcut '{}' not found", path);
+        return;
+    };
+
+    let mut event: Gd<InputEventShortcut> = InputEventShortcut::new_gd();
+    event.set_shortcut(&shortcut);
+
+    let Some(mut viewport) = editor_iface
+        .get_base_control()
+        .and_then(|ctrl| ctrl.get_viewport())
+    else {
+        return;
+    };
+
+    viewport.call_deferred("push_input", &[event.to_variant(), false.to_variant()]);
 }
 
 fn get_selected_path(control: &Gd<Control>, kind: DockKind) -> Option<String> {
