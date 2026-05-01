@@ -82,6 +82,7 @@ Not just Vim in an editor — Vim that speaks Godot:
 - **`:GodotBreakpoint`** — toggle breakpoints, step through with `:next` / `:stepin`
 - **`Ctrl+h/j/k/l`** — spatial panel navigation (script editor, scene tree, inspector, filesystem)
 - **`j/k/h/l` in docks** — browse the scene tree, filesystem, and output with Vim keys; `/` to search
+- **File explorer** — `a` create file/dir, `d` delete, `r` rename, `y` yank path, `R` refresh (nvim-tree style)
 - **`gd`** — go-to-definition; **`K`** — hover docs
 - **Code completion** — `Ctrl-N`/`Ctrl-P`/`Ctrl-Space` trigger and navigate completions
 - **Cross-buffer jump list** — `Ctrl-O`/`Ctrl-I` switch tabs when the jump is in another buffer
@@ -126,7 +127,7 @@ Record with `qa`, replay with `@a`. Named registers `"a`-`"z`, system clipboard 
 | `addons/` folder missing after Asset Library install | "Ignore asset root" was unchecked. Re-install from AssetLib with the box **checked**, or manually copy `addons/godot_vim/` from the release zip. |
 | Key not working | Check `passthrough_keys` setting — the key may be bypassing Vim. Check `:mappings` for conflicts. |
 | `.godot-vimrc` not loading | Verify the file is at `res://.godot-vimrc` or `user://.godot-vimrc`. Run `:source` to force reload. |
-| Clipboard not working | Enable `editor/clipboard_enabled` in EditorSettings, or use `"+y` / `"+p`. |
+| Clipboard not working | Enable `editor/clipboard_enabled` in EditorSettings. Both `y`/`p` and `"+y`/`"+p` sync with the system clipboard when enabled. |
 | Cursor not rendering | The custom cursor uses a GLSL shader. Set `cursor/enabled = false` to fall back to native caret. |
 
 **For bug reports:** Set **Log Level** to `Debug` in Editor Settings > GodotVim, reproduce the issue, then copy the Output panel into GitHub issue. The debug log shows every keystroke and what command was executed.
