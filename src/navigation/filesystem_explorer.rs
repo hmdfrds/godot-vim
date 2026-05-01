@@ -21,7 +21,6 @@ use super::focus::DockKind;
 enum PromptMode {
     Inactive,
     Create { target_dir: String },
-    Rename { old_path: String },
 }
 
 pub(crate) struct FileSystemExplorer {
@@ -159,25 +158,16 @@ impl FileSystemExplorer {
         DockInputResult::Handled
     }
 
-    fn begin_rename(&mut self, control: &Gd<Control>, kind: DockKind) -> DockInputResult {
-        let Some(path) = get_selected_path(control, kind) else {
-            return DockInputResult::Handled;
-        };
-        if path == "res://" {
-            return DockInputResult::Handled;
-        }
-        let filename = path
-            .trim_end_matches('/')
-            .rsplit('/')
-            .next()
-            .unwrap_or("")
-            .to_string();
-        self.active_control = Some(control.clone());
-        self.show_prompt(
-            "Rename: ",
-            Some(&filename),
-            PromptMode::Rename { old_path: path },
-        );
+    fn begin_rename(&mut self, _control: &Gd<Control>, _kind: DockKind) -> DockInputResult {
+        // Synthesize F2 to trigger Godot's native rename flow.
+        // FileSystemDock's _tree_gui_input matches the filesystem_dock/rename
+        // shortcut (default F2), which sets to_rename and calls
+        // tree->edit_selected() for inline TreeItem editing. This handles
+        // UID reference updates across the project automatically.
+        let mut event = InputEventKey::new_gd();
+        event.set_keycode(Key::F2);
+        event.set_pressed(true);
+        Input::singleton().parse_input_event(&event);
         DockInputResult::Handled
     }
 
@@ -314,17 +304,11 @@ impl FileSystemExplorer {
             return;
         }
 
-        // Restore label from any previous error state before re-validation.
-        match &self.prompt_mode {
-            PromptMode::Create { .. } => self.set_label("New: "),
-            PromptMode::Rename { .. } => self.set_label("Rename: "),
-            PromptMode::Inactive => {}
-        }
+        self.set_label("New: ");
 
         let mode = std::mem::replace(&mut self.prompt_mode, PromptMode::Inactive);
         let success = match mode {
             PromptMode::Create { target_dir } => self.execute_create(&text, &target_dir),
-            PromptMode::Rename { old_path } => self.execute_rename(&text, &old_path),
             PromptMode::Inactive => true,
         };
 
@@ -380,45 +364,6 @@ impl FileSystemExplorer {
 
         log::info!("filesystem_explorer: created '{}'", full_path);
         scan_and_navigate(&full_path);
-        true
-    }
-
-    fn execute_rename(&mut self, new_name: &str, old_path: &str) -> bool {
-        if let Err(msg) = validate_path(new_name) {
-            self.prompt_mode = PromptMode::Rename { old_path: old_path.to_string() };
-            self.show_prompt_error(&msg);
-            return false;
-        }
-
-        let new_path = format!("{}{}", parent_dir(old_path), new_name);
-
-        if new_path.trim_end_matches('/') == old_path.trim_end_matches('/') {
-            return true;
-        }
-
-        if FileAccess::file_exists(&new_path) || DirAccess::dir_exists_absolute(&new_path) {
-            self.prompt_mode = PromptMode::Rename { old_path: old_path.to_string() };
-            self.show_prompt_error("Already exists");
-            return false;
-        }
-
-        let mut dir = match DirAccess::open(&parent_dir(old_path)) {
-            Some(d) => d,
-            None => {
-                self.prompt_mode = PromptMode::Rename { old_path: old_path.to_string() };
-                self.show_prompt_error("Cannot access directory");
-                return false;
-            }
-        };
-
-        if dir.rename(old_path, &new_path) != godot::global::Error::OK {
-            self.prompt_mode = PromptMode::Rename { old_path: old_path.to_string() };
-            self.show_prompt_error("Rename failed");
-            return false;
-        }
-
-        log::info!("filesystem_explorer: renamed '{}' -> '{}'", old_path, new_path);
-        scan_and_navigate(&new_path);
         true
     }
 
