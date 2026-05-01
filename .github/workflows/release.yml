@@ -30,15 +30,16 @@ jobs:
 
       - run: cargo build --release --locked --target x86_64-unknown-linux-gnu
 
-      - name: Generate checksum
-        run: sha256sum target/x86_64-unknown-linux-gnu/release/libgodot_vim.so | awk '{print $1 "  libgodot_vim.so"}' > libgodot_vim.so.sha256
+      - name: Stage artifact
+        run: |
+          mkdir -p staging
+          cp target/x86_64-unknown-linux-gnu/release/libgodot_vim.so staging/
+          sha256sum staging/libgodot_vim.so | awk '{print $1 "  libgodot_vim.so"}' > staging/libgodot_vim.so.sha256
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: libgodot_vim.so
-          path: |
-            target/x86_64-unknown-linux-gnu/release/libgodot_vim.so
-            libgodot_vim.so.sha256
+          path: staging/*
 
   build-windows:
     runs-on: windows-latest
@@ -61,18 +62,17 @@ jobs:
 
       - run: cargo build --release --locked --target x86_64-pc-windows-msvc
 
-      - name: Generate checksum
-        shell: pwsh
+      - name: Stage artifact
+        shell: bash
         run: |
-          $hash = (Get-FileHash target\x86_64-pc-windows-msvc\release\godot_vim.dll -Algorithm SHA256).Hash.ToLower()
-          "$hash  godot_vim.dll" | Out-File godot_vim.dll.sha256 -Encoding ascii
+          mkdir -p staging
+          cp target/x86_64-pc-windows-msvc/release/godot_vim.dll staging/
+          sha256sum staging/godot_vim.dll | awk '{print $1 "  godot_vim.dll"}' > staging/godot_vim.dll.sha256
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: godot_vim.dll
-          path: |
-            target/x86_64-pc-windows-msvc/release/godot_vim.dll
-            godot_vim.dll.sha256
+          path: staging/*
 
   build-macos:
     runs-on: macos-latest
@@ -106,15 +106,16 @@ jobs:
             target/x86_64-apple-darwin/release/libgodot_vim.dylib \
             -output libgodot_vim.dylib
 
-      - name: Generate checksum
-        run: shasum -a 256 libgodot_vim.dylib > libgodot_vim.dylib.sha256
+      - name: Stage artifact
+        run: |
+          mkdir -p staging
+          cp libgodot_vim.dylib staging/
+          shasum -a 256 staging/libgodot_vim.dylib > staging/libgodot_vim.dylib.sha256
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: libgodot_vim.dylib
-          path: |
-            libgodot_vim.dylib
-            libgodot_vim.dylib.sha256
+          path: staging/*
 
   release:
     needs: [build-linux, build-windows, build-macos]
