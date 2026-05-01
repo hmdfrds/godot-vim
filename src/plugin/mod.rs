@@ -20,8 +20,10 @@ mod processing_guard;
 mod signals;
 
 use godot::classes::{
-    CodeEdit, Control, DisplayServer, EditorInterface, INode, Input, InputEvent, Time, Timer,
+    CodeEdit, Control, DisplayServer, EditorInterface, INode, Input, InputEvent, InputEventKey,
+    Time, Timer,
 };
+use godot::global::Key;
 use godot::prelude::*;
 
 use crate::controller::VimController;
@@ -73,6 +75,7 @@ pub struct GodotVimCore {
     /// True while the engine is actively processing a keystroke.
     /// Used by [`ProcessingKeyGuard`] for RAII-based keystroke processing tracking.
     processing_key: bool,
+    fs_explorer: crate::navigation::FileSystemExplorer,
 }
 
 #[godot_api]
@@ -92,6 +95,7 @@ impl INode for GodotVimCore {
             pending_tooltip: None,
             tracked_windows: Vec::new(),
             processing_key: false,
+            fs_explorer: crate::navigation::FileSystemExplorer::new(),
         }
     }
 
@@ -118,6 +122,7 @@ impl INode for GodotVimCore {
                 self.base_mut().set_process_input(true);
                 self.connect_editor_signals();
                 self.init_floating_window_tracking();
+                self.init_fs_explorer_callables();
                 self.base_mut()
                     .call_deferred("on_script_changed", &[Variant::nil()]);
 
@@ -149,6 +154,11 @@ impl INode for GodotVimCore {
                     dialog.queue_free();
                 }
             },
+            (),
+        );
+        panic_guard(
+            "exit_tree:fs_explorer",
+            || self.fs_explorer.cleanup(),
             (),
         );
         // Unconditional: even if a guard above caught a panic, null the
@@ -604,6 +614,52 @@ impl GodotVimCore {
     }
 
     #[func]
+    fn on_fs_prompt_submitted(&mut self, text: GString) {
+        panic_guard(
+            "on_fs_prompt_submitted",
+            || self.fs_explorer.on_prompt_submitted(text.to_string()),
+            (),
+        );
+    }
+
+    #[func]
+    fn on_fs_prompt_gui_input(&mut self, event: Gd<InputEvent>) {
+        panic_guard(
+            "on_fs_prompt_gui_input",
+            || {
+                let Ok(key_event) = event.try_cast::<InputEventKey>() else {
+                    return;
+                };
+                if !key_event.is_pressed() {
+                    return;
+                }
+                if key_event.get_keycode() == Key::ESCAPE {
+                    self.fs_explorer.dismiss_prompt();
+                }
+            },
+            (),
+        );
+    }
+
+    #[func]
+    fn on_fs_delete_confirmed(&mut self) {
+        panic_guard(
+            "on_fs_delete_confirmed",
+            || self.fs_explorer.execute_delete(),
+            (),
+        );
+    }
+
+    #[func]
+    fn on_fs_delete_canceled(&mut self) {
+        panic_guard(
+            "on_fs_delete_canceled",
+            || self.fs_explorer.on_delete_canceled(),
+            (),
+        );
+    }
+
+    #[func]
     fn on_config_saved(&mut self) {
         if self.controller.is_none() {
             return;
@@ -668,6 +724,16 @@ impl GodotVimCore {
 }
 
 impl GodotVimCore {
+    fn init_fs_explorer_callables(&mut self) {
+        let base = self.base().clone();
+        self.fs_explorer.set_callables(
+            base.callable("on_fs_prompt_submitted"),
+            base.callable("on_fs_prompt_gui_input"),
+            base.callable("on_fs_delete_confirmed"),
+            base.callable("on_fs_delete_canceled"),
+        );
+    }
+
     /// Execute a pending UI action that requires plugin-level access (scene tree,
     /// settings snapshot) which the controller cannot reach directly.
     ///

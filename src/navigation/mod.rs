@@ -14,10 +14,12 @@ mod cycle;
 mod dock;
 mod dock_nav;
 mod dock_search;
+pub(crate) mod filesystem_explorer;
 mod focus;
 pub(crate) mod window;
 
 pub(crate) use cycle::handle_window_nav_action;
 pub(crate) use dock::{handle_dock_input, handle_search_input};
+pub(crate) use filesystem_explorer::{is_in_filesystem_dock, FileSystemExplorer};
 pub(crate) use focus::{classify_focus, FocusContext};
 pub(crate) use window::handle_window_nav;

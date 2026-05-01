@@ -118,18 +118,36 @@ impl GodotVimCore {
         let consumed = match context {
             FocusContext::Editor | FocusContext::Foreign | FocusContext::Unknown => false,
             FocusContext::Dock(kind, control) => {
-                let result = navigation::handle_dock_input(control, &key_event, kind);
+                let result = if navigation::is_in_filesystem_dock(&control) {
+                    let fs_result =
+                        self.fs_explorer.handle_key(&key_event, &control, kind);
+                    if fs_result.is_consumed() {
+                        log::trace!(
+                            "input: filesystem explorer consumed key={:?}",
+                            keycode
+                        );
+                        fs_result
+                    } else {
+                        navigation::handle_dock_input(control, &key_event, kind)
+                    }
+                } else {
+                    navigation::handle_dock_input(control, &key_event, kind)
+                };
                 if result.is_consumed() {
                     log::trace!("input: dock navigation consumed key={:?}", keycode);
                 }
                 result.is_consumed()
             }
             FocusContext::SearchBox(line_edit) => {
-                let result = navigation::handle_search_input(&line_edit, &key_event);
-                if result.is_consumed() {
-                    log::trace!("input: search box consumed key={:?}", keycode);
+                if self.fs_explorer.is_prompt_active(&line_edit) {
+                    false
+                } else {
+                    let result = navigation::handle_search_input(&line_edit, &key_event);
+                    if result.is_consumed() {
+                        log::trace!("input: search box consumed key={:?}", keycode);
+                    }
+                    result.is_consumed()
                 }
-                result.is_consumed()
             }
         };
 
