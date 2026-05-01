@@ -6,9 +6,8 @@
 //! the generic dock navigation in `dock.rs`.
 
 use godot::classes::{
-    ConfirmationDialog, Control, DirAccess, DisplayServer, EditorInterface, FileAccess,
-    HBoxContainer, InputEventKey, ItemList, Label, LineEdit, Node, Os, ProjectSettings, Tree,
-    VBoxContainer,
+    Control, DirAccess, DisplayServer, EditorInterface, FileAccess, HBoxContainer, Input,
+    InputEventKey, ItemList, Label, LineEdit, Node, Tree, VBoxContainer,
 };
 use godot::global::Key;
 use godot::prelude::*;
@@ -30,15 +29,11 @@ pub(crate) struct FileSystemExplorer {
     prompt_label: Option<Gd<Label>>,
     prompt_container: Option<Gd<Node>>,
     prompt_mode: PromptMode,
-    delete_dialog: Option<Gd<ConfirmationDialog>>,
-    pending_delete_path: Option<String>,
     cached_tree: Option<Gd<Tree>>,
     cached_file_list: Option<Gd<ItemList>>,
     active_control: Option<Gd<Control>>,
     callable_submitted: Option<Callable>,
     callable_gui_input: Option<Callable>,
-    callable_delete_confirmed: Option<Callable>,
-    callable_delete_canceled: Option<Callable>,
 }
 
 impl FileSystemExplorer {
@@ -48,15 +43,11 @@ impl FileSystemExplorer {
             prompt_label: None,
             prompt_container: None,
             prompt_mode: PromptMode::Inactive,
-            delete_dialog: None,
-            pending_delete_path: None,
             cached_tree: None,
             cached_file_list: None,
             active_control: None,
             callable_submitted: None,
             callable_gui_input: None,
-            callable_delete_confirmed: None,
-            callable_delete_canceled: None,
         }
     }
 
@@ -64,13 +55,9 @@ impl FileSystemExplorer {
         &mut self,
         submitted: Callable,
         gui_input: Callable,
-        delete_confirmed: Callable,
-        delete_canceled: Callable,
     ) {
         self.callable_submitted = Some(submitted);
         self.callable_gui_input = Some(gui_input);
-        self.callable_delete_confirmed = Some(delete_confirmed);
-        self.callable_delete_canceled = Some(delete_canceled);
     }
 
     pub(crate) fn cleanup(&mut self) {
@@ -82,12 +69,6 @@ impl FileSystemExplorer {
         self.prompt.take();
         self.prompt_label.take();
         self.prompt_mode = PromptMode::Inactive;
-        if let Some(mut dialog) = self.delete_dialog.take() {
-            if dialog.is_instance_valid() {
-                dialog.queue_free();
-            }
-        }
-        self.pending_delete_path = None;
         self.cached_tree = None;
         self.cached_file_list = None;
         self.active_control = None;
@@ -163,34 +144,18 @@ impl FileSystemExplorer {
         DockInputResult::Handled
     }
 
-    fn begin_delete(&mut self, control: &Gd<Control>, kind: DockKind) -> DockInputResult {
-        let Some(path) = get_selected_path(control, kind) else {
-            return DockInputResult::Handled;
-        };
-        if path == "res://" {
-            return DockInputResult::Handled;
-        }
-
-        let is_dir = path.ends_with('/');
-        let name = path.trim_end_matches('/').rsplit('/').next().unwrap_or(&path);
-        let msg = if is_dir {
-            format!("Delete directory \"{}\"?", name)
-        } else {
-            format!("Delete \"{}\"?", name)
-        };
-
-        self.active_control = Some(control.clone());
-        self.pending_delete_path = Some(path);
-        self.ensure_delete_dialog();
-
-        if let Some(ref mut dialog) = self.delete_dialog {
-            if dialog.is_instance_valid() {
-                dialog.set_text(&msg);
-                dialog.set_title("Confirm Delete");
-                dialog.popup_centered();
-            }
-        }
-
+    fn begin_delete(&mut self, _control: &Gd<Control>, _kind: DockKind) -> DockInputResult {
+        // Synthesize a Delete keypress and inject it into Godot's input
+        // pipeline. The FileSystem dock's native _tree_gui_input handler
+        // picks it up and triggers DependencyRemoveDialog — which checks
+        // for resource dependencies, handles UID cleanup, and provides
+        // consistent editor UX. Our _input() handler won't consume Delete
+        // (it's not in the fs-explorer or dock-nav key tables), so it
+        // passes through to the Tree's native gui_input.
+        let mut event = InputEventKey::new_gd();
+        event.set_keycode(Key::DELETE);
+        event.set_pressed(true);
+        Input::singleton().parse_input_event(&event);
         DockInputResult::Handled
     }
 
@@ -457,68 +422,6 @@ impl FileSystemExplorer {
         true
     }
 
-    fn ensure_delete_dialog(&mut self) {
-        if let Some(ref d) = self.delete_dialog {
-            if d.is_instance_valid() {
-                return;
-            }
-        }
-
-        let (Some(callable_confirmed), Some(callable_canceled)) =
-            (&self.callable_delete_confirmed, &self.callable_delete_canceled)
-        else {
-            log::warn!("filesystem_explorer: delete callables not set");
-            return;
-        };
-
-        let mut dialog = ConfirmationDialog::new_alloc();
-        dialog.set_ok_button_text("Delete");
-
-        let mut dialog_obj = dialog.clone().upcast::<Object>();
-        let _ = dialog_obj.connect("confirmed", callable_confirmed);
-        let _ = dialog_obj.connect("canceled", callable_canceled);
-
-        if let Some(mut base) = EditorInterface::singleton().get_base_control() {
-            base.add_child(&dialog);
-        }
-
-        self.delete_dialog = Some(dialog);
-    }
-
-    pub(crate) fn execute_delete(&mut self) {
-        let Some(path) = self.pending_delete_path.take() else {
-            return;
-        };
-
-        let global_path = ProjectSettings::singleton()
-            .globalize_path(&path)
-            .to_string();
-
-        let err = Os::singleton().move_to_trash(&global_path);
-        if err != godot::global::Error::OK {
-            log::error!(
-                "filesystem_explorer: move_to_trash failed for '{}': {:?}",
-                path,
-                err
-            );
-            self.return_focus_to_dock();
-            self.active_control = None;
-            return;
-        }
-
-        log::info!("filesystem_explorer: deleted '{}'", path);
-        let parent = parent_dir(&path);
-        scan_and_navigate(&parent);
-        self.return_focus_to_dock();
-        self.active_control = None;
-    }
-
-    pub(crate) fn on_delete_canceled(&mut self) {
-        self.pending_delete_path = None;
-        self.return_focus_to_dock();
-        self.active_control = None;
-    }
-
     fn validate_cache(&mut self) {
         if let Some(ref tree) = self.cached_tree {
             if !tree.is_instance_valid() || !tree.is_inside_tree() {
@@ -537,16 +440,6 @@ impl FileSystemExplorer {
         }
     }
 
-    fn return_focus_to_dock(&self) {
-        if let Some(ref control) = self.active_control {
-            if control.is_instance_valid() {
-                control
-                    .clone()
-                    .upcast::<Node>()
-                    .call_deferred("grab_focus", &[]);
-            }
-        }
-    }
 }
 
 /// Check logical keycode first, fall back to physical for non-Latin layouts.

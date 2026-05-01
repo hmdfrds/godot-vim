@@ -642,24 +642,6 @@ impl GodotVimCore {
     }
 
     #[func]
-    fn on_fs_delete_confirmed(&mut self) {
-        panic_guard(
-            "on_fs_delete_confirmed",
-            || self.fs_explorer.execute_delete(),
-            (),
-        );
-    }
-
-    #[func]
-    fn on_fs_delete_canceled(&mut self) {
-        panic_guard(
-            "on_fs_delete_canceled",
-            || self.fs_explorer.on_delete_canceled(),
-            (),
-        );
-    }
-
-    #[func]
     fn on_config_saved(&mut self) {
         if self.controller.is_none() {
             return;
@@ -729,8 +711,6 @@ impl GodotVimCore {
         self.fs_explorer.set_callables(
             base.callable("on_fs_prompt_submitted"),
             base.callable("on_fs_prompt_gui_input"),
-            base.callable("on_fs_delete_confirmed"),
-            base.callable("on_fs_delete_canceled"),
         );
     }
 
