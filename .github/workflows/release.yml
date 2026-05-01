@@ -169,101 +169,14 @@ jobs:
         run: |
           set -eu
 
-          # Find previous release tag (most recent v* tag, excluding current)
           PREV_TAG=$(git tag --list "v*" --sort=-version:refname | grep -vFx "$VERSION" | head -1 || true)
           if [ -z "$PREV_TAG" ]; then
             PREV_TAG=$(git rev-list --max-parents=0 HEAD)
-            echo "No previous tag found, using root commit: $PREV_TAG"
-          else
-            echo "Previous tag: $PREV_TAG"
           fi
 
-          # Accumulator files (safer than bash string concat with newlines)
-          FEATURES_FILE=$(mktemp)
-          FIXES_FILE=$(mktemp)
-          PERF_FILE=$(mktemp)
-          BREAKING_FILE=$(mktemp)
-
-          # Parse commits between PREV_TAG and HEAD
-          while IFS= read -r line; do
-            [ -z "$line" ] && continue
-            hash="${line%% *}"
-            subject="${line#* }"
-
-            # BREAKING CHANGE detection in commit body
-            body=$(git show --no-patch --format="%B" "$hash")
-            if echo "$body" | grep -qE "^BREAKING CHANGE:|^BREAKING:"; then
-              breaking_line=$(echo "$body" | grep -E "^BREAKING CHANGE:|^BREAKING:" | head -1 | sed -E 's/^BREAKING( CHANGE)?:[[:space:]]*//')
-              echo "- ${breaking_line}" >> "$BREAKING_FILE"
-            fi
-
-            # Parse conventional commit type and format entry
-            case "$subject" in
-              feat\(*\):*)
-                scope=$(printf '%s' "$subject" | sed -E 's/^feat\(([^)]+)\):.*/\1/')
-                msg=$(printf '%s' "$subject" | sed -E 's/^feat\([^)]+\):[[:space:]]*//')
-                echo "- **${scope}:** ${msg}" >> "$FEATURES_FILE"
-                ;;
-              feat:*)
-                msg=$(printf '%s' "$subject" | sed -E 's/^feat:[[:space:]]*//')
-                echo "- ${msg}" >> "$FEATURES_FILE"
-                ;;
-              fix\(*\):*)
-                scope=$(printf '%s' "$subject" | sed -E 's/^fix\(([^)]+)\):.*/\1/')
-                msg=$(printf '%s' "$subject" | sed -E 's/^fix\([^)]+\):[[:space:]]*//')
-                echo "- **${scope}:** ${msg}" >> "$FIXES_FILE"
-                ;;
-              fix:*)
-                msg=$(printf '%s' "$subject" | sed -E 's/^fix:[[:space:]]*//')
-                echo "- ${msg}" >> "$FIXES_FILE"
-                ;;
-              perf\(*\):*)
-                scope=$(printf '%s' "$subject" | sed -E 's/^perf\(([^)]+)\):.*/\1/')
-                msg=$(printf '%s' "$subject" | sed -E 's/^perf\([^)]+\):[[:space:]]*//')
-                echo "- **${scope}:** ${msg}" >> "$PERF_FILE"
-                ;;
-              perf:*)
-                msg=$(printf '%s' "$subject" | sed -E 's/^perf:[[:space:]]*//')
-                echo "- ${msg}" >> "$PERF_FILE"
-                ;;
-              # Silently drop: docs, ci, chore, test, refactor, style, build,
-              # Merge commits, Bump version commits, and plain commits.
-            esac
-          done < <(git log "${PREV_TAG}..HEAD" --format="%H %s")
-
-          # Assemble the body
           {
             echo 'RELEASE_BODY<<BODYEOF'
 
-            if [ -s "$BREAKING_FILE" ]; then
-              echo "## Breaking Changes"
-              echo ""
-              cat "$BREAKING_FILE"
-              echo ""
-            fi
-
-            if [ -s "$FEATURES_FILE" ]; then
-              echo "## Features"
-              echo ""
-              cat "$FEATURES_FILE"
-              echo ""
-            fi
-
-            if [ -s "$FIXES_FILE" ]; then
-              echo "## Bug Fixes"
-              echo ""
-              cat "$FIXES_FILE"
-              echo ""
-            fi
-
-            if [ -s "$PERF_FILE" ]; then
-              echo "## Performance"
-              echo ""
-              cat "$PERF_FILE"
-              echo ""
-            fi
-
-            # VirusTotal section (always present — binaries are always scanned)
             if [ -n "${VT_ANALYSIS:-}" ]; then
               echo "## VirusTotal Scan"
               echo ""
@@ -279,9 +192,6 @@ jobs:
             echo "**Full Changelog**: https://github.com/hmdfrds/godot-vim/compare/${PREV_TAG}...${VERSION}"
             echo 'BODYEOF'
           } >> "$GITHUB_OUTPUT"
-
-          # Cleanup
-          rm -f "$FEATURES_FILE" "$FIXES_FILE" "$PERF_FILE" "$BREAKING_FILE"
 
       - name: Create addon zip
         env:
@@ -300,6 +210,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3.0.0
         with:
+          draft: true
           tag_name: ${{ inputs.version }}
           name: GodotVim ${{ inputs.version }}
           body: ${{ steps.body.outputs.RELEASE_BODY }}
