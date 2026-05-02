@@ -81,6 +81,7 @@ impl ShellState {
 
     // ── Highlight yank ─────────────────────────────────────────────────
 
+    #[allow(dead_code)] // Setter for yank highlight — currently unused after vim-core removed HighlightYank effect
     pub(crate) fn set_highlight_yank(&mut self, yank: HighlightYank) {
         self.highlight_yank = Some(yank);
     }

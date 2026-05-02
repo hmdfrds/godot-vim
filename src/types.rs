@@ -162,6 +162,7 @@ pub(crate) struct HighlightYank {
 
 impl HighlightYank {
     #[must_use]
+    #[allow(dead_code)] // Constructor for yank highlight — currently unused after vim-core removed HighlightYank effect
     pub(crate) const fn new(start: CharLineCol, end: CharLineCol, duration_ms: u32) -> Self {
         Self {
             start,

@@ -746,10 +746,8 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 [[package]]
 name = "vim-core"
 version = "0.5.0"
-source = "git+https://github.com/hmdfrds/vim-core.git?tag=v0.5.0#00a51832ba456bc6f671445595bb0dd69eeaf0ea"
 dependencies = [
  "ahash",
- "aho-corasick",
  "arrayvec",
  "bitflags",
  "cfg-if",
@@ -764,13 +762,24 @@ dependencies = [
  "thiserror",
  "unicode-segmentation",
  "unicode-width",
+ "vim-regex",
  "vim-text",
+]
+
+[[package]]
+name = "vim-regex"
+version = "0.1.0"
+dependencies = [
+ "ahash",
+ "aho-corasick",
+ "compact_str",
+ "memchr",
+ "smallvec",
 ]
 
 [[package]]
 name = "vim-text"
 version = "0.1.0"
-source = "git+https://github.com/hmdfrds/vim-core.git?tag=v0.5.0#00a51832ba456bc6f671445595bb0dd69eeaf0ea"
 dependencies = [
  "arrayvec",
  "bitflags",
@@ -972,7 +981,3 @@ name = "zmij"
 version = "1.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
-
-[[patch.unused]]
-name = "vim-core"
-version = "0.1.0"

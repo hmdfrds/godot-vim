@@ -18,7 +18,7 @@ use crate::bridge::codec::{usize_to_i32, DocumentView, LineIndex};
 use crate::bridge::port::{FoldCapable, IdeCapable, NavigationCapable, TextEditorPort};
 use crate::bridge::{AutoBraceSnapshot, SyntaxRegion};
 use crate::state::ShellState;
-use crate::types::{HighlightYank, MatchRange, RemapPolicy};
+use crate::types::{MatchRange, RemapPolicy};
 
 /// Cap for substitute preview matches to avoid UI lag on large files.
 const MAX_SUBSTITUTE_PREVIEW_MATCHES: usize = 100;
@@ -351,7 +351,7 @@ pub(crate) fn dispatch_pass2_effect(
     doc: &DocumentView,
     compound_actions: &mut Vec<CompoundAction>,
     scrolloff: i32,
-    highlight_yank_duration_ms: u32,
+    _highlight_yank_duration_ms: u32,
     clipboard: &mut dyn crate::bridge::clipboard::ClipboardPort,
 ) {
     match effect {
@@ -513,8 +513,8 @@ pub(crate) fn dispatch_pass2_effect(
         | Effect::SetStickyColumn { .. }
         | Effect::SetCursorStyle { .. }
         | Effect::SetSubstitutePattern { .. }
-        | Effect::SetExchangeHighlight { .. }
-        | Effect::ClearExchangeHighlight
+        | Effect::SetPluginHighlight { .. }
+        | Effect::ClearPluginHighlight { .. }
         | Effect::ClearNamedRegister { .. }
         | Effect::ClearMark { .. }
         | Effect::JumpToBuffer { .. }
@@ -566,32 +566,10 @@ pub(crate) fn dispatch_pass2_effect(
             let report = crate::state::undo_tree::format_undo_tree_snapshot(&snapshot);
             log::info!("UndoTreeSnapshot:\n{}", report);
         }
-        Effect::HighlightYank {
-            range,
-            duration_ms: _,
-        } => {
-            // Override the engine's duration with the user's setting.
-            // 0 = disabled (skip the highlight entirely).
-            if highlight_yank_duration_ms > 0 {
-                let start_pos = doc
-                    .line_index
-                    .byte_to_line_col(doc.text, range.start().get());
-                let end_pos = doc.line_index.byte_to_line_col(doc.text, range.end().get());
-                log::trace!(
-                    "HighlightYank: ({},{})..({},{}) duration={}ms",
-                    start_pos.line,
-                    start_pos.col,
-                    end_pos.line,
-                    end_pos.col,
-                    highlight_yank_duration_ms,
-                );
-                state.set_highlight_yank(HighlightYank::new(
-                    start_pos,
-                    end_pos,
-                    highlight_yank_duration_ms,
-                ));
-            }
-        }
+        // Note: HighlightYank was removed from vim-core (replaced by
+        // HighlightRows for a different purpose). Yank highlighting is now
+        // handled via the host event pipeline. HighlightRows is matched
+        // in the multi-selection block below.
         Effect::OpenCommandWindow { .. } => {
             log::warn!("q: / q/ command window not supported in CodeEdit");
             state
@@ -613,9 +591,9 @@ pub(crate) fn dispatch_pass2_effect(
         // Produced by the compose middleware when Insert+Delete annihilate.
         Effect::Noop => {}
 
-        // ── Engine-internal: exchange state (processed by effect_processor) ──
-        Effect::SetExchangeState { .. } | Effect::ClearExchangeState => {
-            log::trace!("[internal] exchange state update");
+        // ── Engine-internal: plugin state (processed by effect_processor) ──
+        Effect::SetPluginState { .. } | Effect::ClearPluginState { .. } => {
+            log::trace!("[internal] plugin state update");
         }
 
         // ── Engine-internal: substitute confirm (processed by effect_processor) ──

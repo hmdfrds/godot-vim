@@ -3,9 +3,11 @@
 //! policy enforcement.
 
 use compact_str::CompactString;
-use godot::classes::CodeEdit;
+use godot::classes::{CodeEdit, EditorInterface, InputEventShortcut};
 use godot::prelude::*;
-use vim_core::execution::{HostRequest, HostRequestId, HostResult};
+use vim_core::execution::{
+    CmdlineCompletionEntry, CmdlineCompletionKind, HostRequest, HostRequestId, HostResult,
+};
 
 use super::{host_failure, host_success};
 use crate::settings::{FileAccessScope, ProjectVimrc, ShellExecution};
@@ -284,15 +286,44 @@ pub(crate) fn execute(
         ),
 
         HostRequest::ListActions { meta: _, filter } => {
-            let all_commands = super::custom_commands::list_all_commands();
-            let filtered: Vec<&&str> = match filter {
-                Some(f) if !f.is_empty() => all_commands
-                    .iter()
-                    .filter(|c| c.starts_with(f.as_str()))
-                    .collect(),
-                _ => all_commands.iter().collect(),
+            let mut actions: Vec<String> = Vec::new();
+
+            // Add editor shortcuts from EditorSettings.
+            let editor_iface = EditorInterface::singleton();
+            if let Some(mut settings) = editor_iface.get_editor_settings() {
+                let shortcut_list = settings.call("get_shortcut_list", &[]);
+                if let Ok(arr) = shortcut_list.try_to::<Array<Variant>>() {
+                    for item in arr.iter_shared() {
+                        if let Ok(s) = item.try_to::<GString>() {
+                            let name = s.to_string();
+                            if !name.is_empty() {
+                                actions.push(name);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Add custom commands.
+            for cmd in super::custom_commands::list_all_commands() {
+                actions.push(cmd.to_string());
+            }
+
+            actions.sort();
+            actions.dedup();
+
+            // Filter.
+            let text: String = match filter {
+                Some(f) if !f.is_empty() => {
+                    let filtered: Vec<&str> = actions
+                        .iter()
+                        .filter(|a| a.contains(f.as_str()))
+                        .map(|s| s.as_str())
+                        .collect();
+                    filtered.join("\n")
+                }
+                _ => actions.join("\n"),
             };
-            let text = filtered.iter().map(|s| **s).collect::<Vec<_>>().join("\n");
             HostResult::Success {
                 id: request.id(),
                 message: Some(CompactString::from(text)),
@@ -403,23 +434,114 @@ pub(crate) fn execute(
             jump_offset.get(),
             buffer_id,
         ),
-        HostRequest::RunAction { meta: _, ref name } => {
-            log::debug!("RunAction: {}", name);
-            host_failure(
+        HostRequest::RunAction {
+            ref name,
+            count,
+            ..
+        } => {
+            log::debug!("RunAction: {} (count={:?})", name, count);
+            let repeat = count.unwrap_or(1).max(1);
+
+            // Try editor shortcut synthesis first.
+            let editor_iface = EditorInterface::singleton();
+            let settings = editor_iface.get_editor_settings();
+            if let Some(mut settings) = settings {
+                if let Some(shortcut) =
+                    crate::bridge::godot_calls::get_shortcut(&mut settings, name.as_str())
+                {
+                    let viewport = editor_iface
+                        .get_base_control()
+                        .and_then(|ctrl| ctrl.get_viewport());
+                    if let Some(mut viewport) = viewport {
+                        for _ in 0..repeat {
+                            let mut event: Gd<InputEventShortcut> = InputEventShortcut::new_gd();
+                            event.set_shortcut(&shortcut);
+                            viewport.call_deferred(
+                                "push_input",
+                                &[event.to_variant(), false.to_variant()],
+                            );
+                        }
+                        return host_success(request.id());
+                    }
+                    log::warn!("RunAction: shortcut found but no viewport for '{}'", name);
+                }
+            }
+
+            // Fall back to custom command dispatch.
+            let result = super::custom_commands::handle_custom_ex_command(
                 request.id(),
-                format!(
-                    "Host action '{}' is not available in the Godot editor",
-                    name
-                ),
-            )
-        }
-        HostRequest::RequestCmdlineCompletion { .. } => {
-            // Return empty candidates — Godot doesn't provide cmdline completion.
-            HostResult::CmdlineCompletionCandidates {
-                id: request.id(),
-                candidates: Vec::new(),
+                name.as_str(),
+                editor,
+            );
+            // If the custom command handler returned success, use it.
+            // Otherwise, report the action as unavailable.
+            if matches!(result, HostResult::Failure { .. }) {
+                host_failure(
+                    request.id(),
+                    format!(
+                        "Host action '{}' is not available in the Godot editor",
+                        name
+                    ),
+                )
+            } else {
+                result
             }
         }
+        HostRequest::RequestCmdlineCompletion {
+            kind,
+            ref prefix,
+            ..
+        } => match kind {
+            CmdlineCompletionKind::Action => {
+                // Collect action names matching the prefix.
+                let mut candidates: Vec<CmdlineCompletionEntry> = Vec::new();
+
+                // Editor shortcuts.
+                let editor_iface = EditorInterface::singleton();
+                if let Some(mut settings) = editor_iface.get_editor_settings() {
+                    let shortcut_list = settings.call("get_shortcut_list", &[]);
+                    if let Ok(arr) = shortcut_list.try_to::<Array<Variant>>() {
+                        for item in arr.iter_shared() {
+                            if let Ok(s) = item.try_to::<GString>() {
+                                let name = s.to_string();
+                                if !name.is_empty() && name.starts_with(prefix.as_str()) {
+                                    candidates.push(CmdlineCompletionEntry {
+                                        text: CompactString::from(name),
+                                        description: None,
+                                        detail: None,
+                                    });
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Custom commands.
+                for cmd in super::custom_commands::list_all_commands() {
+                    if cmd.starts_with(prefix.as_str()) {
+                        candidates.push(CmdlineCompletionEntry {
+                            text: CompactString::from(*cmd),
+                            description: None,
+                            detail: None,
+                        });
+                    }
+                }
+
+                candidates.sort_by(|a, b| a.text.cmp(&b.text));
+                candidates.dedup_by(|a, b| a.text == b.text);
+                HostResult::CmdlineCompletionCandidates {
+                    id: request.id(),
+                    candidates,
+                }
+            }
+            _ => {
+                // File path / buffer completion — not yet implemented.
+                HostResult::CmdlineCompletionCandidates {
+                    id: request.id(),
+                    candidates: Vec::new(),
+                }
+            }
+        },
 
         // ── Forward compatibility for #[non_exhaustive] ─────────────────
         _ => {
