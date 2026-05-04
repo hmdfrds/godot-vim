@@ -65,6 +65,12 @@ impl VimController {
                     key,
                     consumed
                 );
+                // When completion confirmed (consumed=true), the editor text changed
+                // but the host's text_cache is stale. Invalidate it so the next
+                // on_text_changed sees matching texts and skips double-reconciliation.
+                if consumed {
+                    session.host_mut().invalidate_cache();
+                }
                 let mode = session.engine().mode();
                 session.host_mut().ensure_undo_balanced(mode);
                 return consumed;
