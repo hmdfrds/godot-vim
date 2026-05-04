@@ -367,6 +367,30 @@ pub(crate) fn translate_key(
     }
 
     if unicode == 0 {
+        // macOS: Godot's TextEdit unconditionally re-enables im_active on every
+        // redraw (text_edit.cpp _update_ime_window_position). With im_active=true,
+        // the macOS keyDown handler sets unicode=0 and relies on interpretKeyEvents
+        // → insertText for the character. On key repeat, the Press-and-Hold accent
+        // system (ApplePressAndHoldEnabled, default since OS X Lion) can suppress
+        // insertText, losing the unicode value entirely.
+        //
+        // Fall back to the physical keycode's US-QWERTY character. This is the same
+        // fallback used for non-Latin layouts at line ~397 below.
+        // See: https://github.com/hmdfrds/godot-vim/issues/33
+        if let Some(ch) = physical_to_ascii(physical_keycode, shift) {
+            log::trace!(
+                "parse_godot_key: zero unicode for {:?}, physical fallback '{}'",
+                keycode,
+                ch
+            );
+            let mut mods = modifiers;
+            if !is_altgr
+                && !mods.intersects(Modifiers::CTRL | Modifiers::ALT | Modifiers::META)
+            {
+                mods &= !Modifiers::SHIFT;
+            }
+            return Some(KeyEvent::new(Key::Char(ch), mods));
+        }
         log::trace!("parse_godot_key: zero unicode for {:?}", keycode);
         return None;
     }
@@ -1169,6 +1193,69 @@ mod tests {
     }
 
     #[test]
+    fn zero_unicode_printable_key_falls_back_to_physical() {
+        // macOS key repeat with im_active=true: unicode=0 but physical keycode
+        // is a valid printable key. Should fall back to physical_to_ascii.
+        // https://github.com/hmdfrds/godot-vim/issues/33
+        let result = translate_key(GodotKey::J, GodotKey::J, 0, false, false, false, false);
+        assert_eq!(
+            result,
+            Some(KeyEvent::new(Key::Char('j'), Modifiers::NONE)),
+            "zero unicode with printable physical key should use physical fallback"
+        );
+    }
+
+    #[test]
+    fn zero_unicode_physical_fallback_all_motion_keys() {
+        // Verify h, j, k, l all recover via physical fallback.
+        for (key, ch) in [
+            (GodotKey::H, 'h'),
+            (GodotKey::J, 'j'),
+            (GodotKey::K, 'k'),
+            (GodotKey::L, 'l'),
+        ] {
+            let result = translate_key(key, key, 0, false, false, false, false);
+            assert_eq!(
+                result,
+                Some(KeyEvent::new(Key::Char(ch), Modifiers::NONE)),
+                "zero unicode for {:?} should produce '{}'",
+                key,
+                ch
+            );
+        }
+    }
+
+    #[test]
+    fn zero_unicode_physical_fallback_shifted() {
+        // Shift+J with unicode=0: physical fallback produces 'J'.
+        let result = translate_key(GodotKey::J, GodotKey::J, 0, false, false, true, false);
+        assert_eq!(
+            result,
+            Some(KeyEvent::new(Key::Char('J'), Modifiers::NONE)),
+            "zero unicode shifted J should produce 'J' without Shift modifier (shift is in the char)"
+        );
+    }
+
+    #[test]
+    fn zero_unicode_physical_fallback_digit() {
+        // Digit keys also recover.
+        let result = translate_key(
+            GodotKey::KEY_5,
+            GodotKey::KEY_5,
+            0,
+            false,
+            false,
+            false,
+            false,
+        );
+        assert_eq!(
+            result,
+            Some(KeyEvent::new(Key::Char('5'), Modifiers::NONE)),
+            "zero unicode for digit key should use physical fallback"
+        );
+    }
+
+    #[test]
     fn f13_through_f24_translated() {
         let cases = [
             (GodotKey::F13, 13),
@@ -1489,9 +1576,13 @@ mod tests {
 
     #[test]
     fn linux_altgr_preserves_alt_when_unicode_is_zero() {
-        // Alt+key with no unicode: not AltGr
+        // Alt+key with no unicode: not AltGr. Physical fallback recovers 'q'.
         let result = translate_key(GodotKey::Q, GodotKey::Q, 0, false, true, false, false);
-        assert_eq!(result, None); // zero unicode → None
+        assert_eq!(
+            result,
+            Some(KeyEvent::new(Key::Char('q'), Modifiers::ALT)),
+            "Alt + zero unicode should use physical fallback and preserve Alt"
+        );
     }
 
     #[test]

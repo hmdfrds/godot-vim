@@ -194,23 +194,34 @@ impl VimController {
         let total_elapsed = total_start.elapsed();
 
         // ── IME lifecycle ────────────────────────────────────────────────
+        // Godot's TextEdit unconditionally re-enables im_active on every redraw
+        // (text_edit.cpp: _update_ime_window_position → window_set_ime_active(true)).
+        // Any cursor movement triggers queue_redraw(), so by the next frame im_active
+        // is true again even though we set it false on mode exit.
+        //
+        // On macOS, im_active=true causes the keyDown handler to route through
+        // interpretKeyEvents, where the Press-and-Hold accent system can suppress
+        // insertText on key repeat — losing the unicode value entirely.
+        //
+        // Fix: re-assert deactivate_ime after every keystroke in non-insert modes,
+        // not just on mode transitions. This counteracts TextEdit's re-enablement.
+        // See: https://github.com/hmdfrds/godot-vim/issues/33
         let mode_after = self.engine().mode();
-        if mode_after != mode_before {
-            let was_insert_like = mode_before.is_insert()
-                || mode_before.is_replace()
-                || mode_before.is_command_line();
-            let is_insert_like =
-                mode_after.is_insert() || mode_after.is_replace() || mode_after.is_command_line();
-            if !was_insert_like && is_insert_like {
-                activate_ime(editor);
-            } else if was_insert_like && !is_insert_like {
-                deactivate_ime(editor);
-            }
-        }
+        let is_insert_like =
+            mode_after.is_insert() || mode_after.is_replace() || mode_after.is_command_line();
 
-        // ── IME position tracking ────────────────────────────────────────
-        if mode_after.is_insert() || mode_after.is_replace() || mode_after.is_command_line() {
+        if is_insert_like {
+            if mode_after != mode_before {
+                let was_insert_like = mode_before.is_insert()
+                    || mode_before.is_replace()
+                    || mode_before.is_command_line();
+                if !was_insert_like {
+                    activate_ime(editor);
+                }
+            }
             update_ime_position(editor);
+        } else {
+            deactivate_ime(editor);
         }
 
         // ── Perf metrics recording ──────────────────────────────────────

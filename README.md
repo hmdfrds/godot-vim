@@ -153,6 +153,7 @@ Record with `qa`, replay with `@a`. Named registers `"a`-`"z`, system clipboard 
 | `.godot-vimrc` not loading | Verify the file is at `res://.godot-vimrc` or `user://.godot-vimrc`. Run `:source` to force reload. |
 | Clipboard not working | Enable `editor/clipboard_enabled` in EditorSettings. Both `y`/`p` and `"+y`/`"+p` sync with the system clipboard when enabled. |
 | Cursor not rendering | The custom cursor uses a GLSL shader. Set `cursor/enabled = false` to fall back to native caret. |
+| macOS: held keys don't repeat | macOS's "Press and Hold" accent picker can interfere with key repeat. Run `defaults write com.godotengine.godot ApplePressAndHoldEnabled -bool false` in Terminal and restart Godot. GodotVim includes a built-in fallback, but disabling Press and Hold gives the most reliable experience. |
 
 **For bug reports:** Set **Log Level** to `Debug` in Editor Settings > GodotVim, reproduce the issue, then copy the Output panel into GitHub issue. The debug log shows every keystroke and what command was executed.
 
