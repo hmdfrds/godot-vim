@@ -17,6 +17,7 @@ const SIG_DRAW: &str = "draw";
 const SIG_VISIBILITY_CHANGED: &str = "visibility_changed";
 const SIG_MINIMUM_SIZE_CHANGED: &str = "minimum_size_changed";
 const SIG_TEXT_CHANGED: &str = "text_changed";
+const SIG_TEXT_SET: &str = "text_set";
 
 impl GodotVimCore {
     pub(super) fn attach(&mut self, editor: Gd<CodeEdit>) {
@@ -71,6 +72,12 @@ impl GodotVimCore {
         // no-op (engine-handled insert keeps state in sync via effects).
         let text_changed_callable = self.base().callable("on_text_changed");
         connect_deferred(&mut editor, SIG_TEXT_CHANGED, &text_changed_callable);
+
+        // text_set fires when CodeEdit.set_text() is called programmatically
+        // (e.g. external script reload). Reuses the same handler -- it diffs
+        // cached vs current text, which is correct for both signals.
+        let text_set_callable = self.base().callable("on_text_changed");
+        connect_deferred(&mut editor, SIG_TEXT_SET, &text_set_callable);
 
         if let Some(controller) = &mut self.controller {
             controller.restore_buffer_engine_state(new_id);
@@ -210,6 +217,9 @@ impl GodotVimCore {
 
         let text_changed_callable = self.base().callable("on_text_changed");
         safe_disconnect(&mut editor, SIG_TEXT_CHANGED, &text_changed_callable);
+
+        let text_set_callable = self.base().callable("on_text_changed");
+        safe_disconnect(&mut editor, SIG_TEXT_SET, &text_set_callable);
 
         let scrollbar_callable = self.base().callable("on_scrollbar_changed");
         if let Some(mut vscroll) = editor.get_v_scroll_bar() {

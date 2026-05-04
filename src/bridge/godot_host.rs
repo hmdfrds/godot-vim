@@ -125,6 +125,10 @@ impl Document for GodotHost {
         )?;
         Some(Offset::new(offset))
     }
+
+    fn text_generation(&self) -> Option<u64> {
+        Some(self.editor.get_version() as u64)
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
