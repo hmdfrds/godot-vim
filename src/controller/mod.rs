@@ -27,6 +27,7 @@ use std::collections::HashSet;
 use compact_str::CompactString;
 use godot::classes::CodeEdit;
 use godot::prelude::*;
+use vim_core::document::Document;
 use vim_core::execution::{VimEngine, VimSession};
 use vim_core::keymap::KeyEvent;
 use vim_core::primitives::Direction;
@@ -190,7 +191,10 @@ impl VimController {
         let mut host = GodotHost::new(editor);
         host.set_security_policy(self.security_policy.clone());
         host.set_highlight_yank_duration_ms(self.highlight_yank_duration_ms);
-        self.session = Some(VimSession::from_parts(engine, host));
+        let mut session = VimSession::from_parts(engine, host);
+        let initial_text = session.host().text().to_owned();
+        session.engine_mut().set_shadow_text(initial_text);
+        self.session = Some(session);
     }
 
     /// Decompose the active session: drop the host, reclaim the engine.
