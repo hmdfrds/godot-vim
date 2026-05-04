@@ -584,13 +584,38 @@ impl GodotVimCore {
         }
     }
 
-    /// Signal handler for `text_changed`. Previously used for text-change
-    /// reconciliation; now a no-op since NativeInsert handles all insert-mode
-    /// keys engine-side and completion acceptance uses its own reconcile path.
+    /// Signal handler for `text_changed`. Detects external text changes
+    /// (Find-and-Replace, refactoring, external formatters) and reconciles
+    /// them with the engine for undo/dot-repeat tracking.
     #[func]
     fn on_text_changed(&mut self) {
-        // Intentionally empty — kept because Godot requires the connected
-        // signal handler to exist.
+        // Text changes caused by Vim's own effects are already tracked.
+        if self.processing_key {
+            return;
+        }
+        if self.controller.is_none() {
+            return;
+        }
+        let ok = panic_guard(
+            "on_text_changed",
+            || {
+                let Some(editor) = &self.attached_editor else {
+                    return true;
+                };
+                if !editor.is_instance_valid() {
+                    return true;
+                }
+                let controller = self.controller.as_mut().unwrap();
+                if controller.reconcile_external_edit(editor) {
+                    log::debug!("on_text_changed: reconciled external text change");
+                }
+                true
+            },
+            false,
+        );
+        if !ok {
+            self.recover_controller_from_panic();
+        }
     }
 
     #[func]
