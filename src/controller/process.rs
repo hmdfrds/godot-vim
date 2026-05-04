@@ -221,7 +221,12 @@ impl VimController {
             }
             update_ime_position(editor);
         } else {
+            // Immediate deactivation — effective within this frame's input phase.
             deactivate_ime(editor);
+            // Deferred deactivation — runs AFTER the draw phase where TextEdit
+            // unconditionally re-enables im_active via _update_ime_window_position.
+            // This ensures im_active=false when the next frame's input arrives.
+            deactivate_ime_deferred(editor);
         }
 
         // ── Perf metrics recording ──────────────────────────────────────
@@ -645,6 +650,24 @@ fn deactivate_ime(editor: &mut Gd<CodeEdit>) {
         .window_id(window_id)
         .done();
     log::trace!("IME deactivated (window_id={})", window_id);
+}
+
+/// Schedule IME deactivation to run AFTER the current frame's draw phase.
+///
+/// Godot's TextEdit unconditionally calls `window_set_ime_active(true)` during
+/// `NOTIFICATION_DRAW` (via `_update_ime_window_position`). The immediate
+/// `deactivate_ime` call runs during the input phase — before draw — so TextEdit
+/// re-enables IME before the next frame's input arrives. This deferred call
+/// runs after draw, ensuring `im_active=false` survives into the next frame.
+fn deactivate_ime_deferred(editor: &Gd<CodeEdit>) {
+    let window_id = editor
+        .get_window()
+        .map(|w| w.get_window_id())
+        .unwrap_or(DisplayServer::MAIN_WINDOW_ID);
+    DisplayServer::singleton().call_deferred(
+        "window_set_ime_active",
+        &[false.to_variant(), window_id.to_variant()],
+    );
 }
 
 /// Update the IME candidate window position to track the text cursor.
