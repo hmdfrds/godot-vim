@@ -475,7 +475,7 @@ Place a `.godot-vimrc` file at your project root (`res://.godot-vimrc`) or user 
 | `<C-x>` | Ctrl + x |
 | `<S-x>` | Shift + x |
 | `<A-x>` / `<M-x>` | Alt / Meta + x |
-| `<Action>(editor setting)` | Execute a Godot editor action by editor setting path |
+| `<Action>(shortcut path)` | Execute a Godot editor action by editor shortcut path |
 
 ### Godot Actions
 
