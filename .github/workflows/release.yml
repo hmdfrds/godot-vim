@@ -191,7 +191,7 @@ jobs:
               IFS=',' read -ra ENTRIES <<< "$VT_ANALYSIS"
               for entry in "${ENTRIES[@]}"; do
                 filename="${entry%%=*}"
-                url="${entry##*=}"
+                url="${entry#*=}"
                 echo "- [\`${filename}\`](${url})"
               done
               echo ""
