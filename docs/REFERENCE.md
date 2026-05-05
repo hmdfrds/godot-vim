@@ -475,7 +475,7 @@ Place a `.godot-vimrc` file at your project root (`res://.godot-vimrc`) or user 
 | `<C-x>` | Ctrl + x |
 | `<S-x>` | Shift + x |
 | `<A-x>` / `<M-x>` | Alt / Meta + x |
-| `<Action>name<CR>` | Execute a Godot editor action by name |
+| `<Action>(editor setting)` | Execute a Godot editor action by editor setting path |
 
 ### Godot Actions
 
@@ -483,7 +483,7 @@ Invoke any Godot editor shortcut by name using `<Action>` in mappings or `:actio
 
 ```vim
 " In .godot-vimrc — map Leader+s to save
-nnoremap <Leader>s <Action>editor/save_scene<CR>
+nnoremap <Leader>s <Action>(editor/save_scene)
 
 " From command line
 :action editor/save_scene

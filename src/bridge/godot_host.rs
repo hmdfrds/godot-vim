@@ -545,6 +545,14 @@ impl GodotHost {
         &mut self.state
     }
 
+    pub(crate) fn take_state(&mut self) -> ShellState {
+        std::mem::take(&mut self.state)
+    }
+
+    pub(crate) fn set_state(&mut self, state: ShellState) {
+        self.state = state;
+    }
+
     pub(crate) fn undo_depth_mut(&mut self) -> &mut UndoDepth {
         &mut self.undo_depth
     }

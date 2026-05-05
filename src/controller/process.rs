@@ -563,7 +563,6 @@ fn apply_step_effect_to_host(
             let mut compound_actions = Vec::new();
             let highlight_yank_ms = host.highlight_yank_duration_ms();
             {
-                // Destructure host to get disjoint borrows for state and clipboard.
                 let state = host.state_mut();
                 let mut port = crate::bridge::port_impl::CodeEditPort(editor);
                 crate::effects::dispatch::dispatch_pass2_effect(

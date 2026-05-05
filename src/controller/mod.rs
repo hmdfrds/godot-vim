@@ -104,6 +104,10 @@ pub(crate) struct VimController {
     /// Bare engine stored between detach and the next attach.
     /// `Some` when no editor is attached.
     detached_engine: Option<VimEngine>,
+    /// Per-buffer persistent state (marks, undo trees, visual selections) and
+    /// global shell state (messages, hlsearch). Held here between sessions;
+    /// transferred into GodotHost on attach, taken back on detach.
+    detached_state: Option<ShellState>,
     /// Per-cycle / per-keystroke state that must be reset on every cleanup path.
     /// See [`TransientShellState::reset()`] for the canonical reset logic.
     transient: TransientShellState,
@@ -125,6 +129,7 @@ impl VimController {
         Self {
             session: None,
             detached_engine: Some(engine),
+            detached_state: Some(ShellState::default()),
             transient: TransientShellState::new(),
             passthrough_keys: HashSet::new(),
             security_policy: SecurityPolicy {
@@ -189,6 +194,9 @@ impl VimController {
             .take()
             .expect("attach_session: must be in detached state");
         let mut host = GodotHost::new(editor);
+        if let Some(state) = self.detached_state.take() {
+            host.set_state(state);
+        }
         host.set_security_policy(self.security_policy.clone());
         host.set_highlight_yank_duration_ms(self.highlight_yank_duration_ms);
         let mut session = VimSession::from_parts(engine, host);
@@ -203,8 +211,9 @@ impl VimController {
     /// No-ops if already detached.
     pub(crate) fn detach_session(&mut self) -> Option<GodotHost> {
         let session = self.session.take()?;
-        let (engine, host) = session.into_parts();
+        let (engine, mut host) = session.into_parts();
         self.detached_engine = Some(engine);
+        self.detached_state = Some(host.take_state());
         Some(host)
     }
 
@@ -857,6 +866,7 @@ mod tests {
             let VimController {
                 session: _,                    // engine+host: emergency_reset() + host cleanup
                 detached_engine: _,            // engine: emergency_reset() when detached
+                detached_state: _,             // persistent: transferred to/from host on attach/detach
                 transient: _,                  // transient: .reset()
                 passthrough_keys: _,           // config
                 security_policy: _,            // config
