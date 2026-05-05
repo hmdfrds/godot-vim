@@ -11,7 +11,8 @@ use godot::prelude::*;
 use vim_core::document::{Document, Providers};
 use vim_core::effects::Effect;
 use vim_core::execution::{
-    HostCapability, HostCapabilitySet, HostRequest, HostResult, ViewportInfo, VimHost,
+    HostCapability, HostCapabilitySet, HostRequest, HostResult, RequestDisposition, ViewportInfo,
+    VimHost,
 };
 use vim_core::primitives::{Mode, Offset, Position, SelectionRange, VisualType};
 
@@ -60,6 +61,7 @@ pub(crate) struct GodotHost {
     text_cache: String,
     line_index: LineIndex,
     cache_editor_id: InstanceId,
+    cached_generation: u64,
 
     // ── VimHost state ───────────────────────────────────────────────────
     cursor_offset: usize,
@@ -215,6 +217,7 @@ impl VimHost for GodotHost {
             clipboard,
             text_cache,
             line_index,
+            cached_generation,
             cursor_offset,
             visual_selection,
             ..
@@ -250,6 +253,7 @@ impl VimHost for GodotHost {
         if has_text_mutation {
             *text_cache = editor.get_text().to_string();
             *line_index = LineIndex::new(text_cache);
+            *cached_generation = editor.get_version() as u64;
         }
 
         // Update cursor offset from editor.
@@ -267,11 +271,11 @@ impl VimHost for GodotHost {
             .and_then(|b| b.visual().cloned());
     }
 
-    fn handle_request(&mut self, request: &HostRequest) -> Option<HostResult> {
+    fn handle_request(&mut self, request: &HostRequest) -> RequestDisposition {
         self.host_request_depth += 1;
         let result = self.handle_request_inner(request);
         self.host_request_depth -= 1;
-        Some(result)
+        RequestDisposition::Completed(result)
     }
 }
 
@@ -388,6 +392,7 @@ impl GodotHost {
         let cursor_offset =
             line_index.line_col_to_byte(&text, editor.get_caret_line(), editor.get_caret_column());
         let editor_id = editor.instance_id();
+        let generation = editor.get_version() as u64;
         Self {
             fold_provider: OwnedGodotFoldProvider::new(editor.clone()),
             indent_provider: OwnedGodotIndentProvider::new(editor.clone()),
@@ -395,6 +400,7 @@ impl GodotHost {
             text_cache: text,
             line_index,
             cache_editor_id: editor_id,
+            cached_generation: generation,
             cursor_offset,
             visual_selection: None,
             viewport: ViewportInfo {
@@ -429,11 +435,18 @@ impl GodotHost {
     /// document snapshot matches the editor's authoritative state.
     pub(crate) fn refresh_from_editor(&mut self) {
         let editor_id = self.editor.instance_id();
+        let live_generation = self.editor.get_version() as u64;
         if editor_id != self.cache_editor_id {
             // Buffer switch — full refresh.
             self.text_cache = self.editor.get_text().to_string();
             self.line_index = LineIndex::new(&self.text_cache);
             self.cache_editor_id = editor_id;
+            self.cached_generation = live_generation;
+        } else if live_generation != self.cached_generation {
+            // Text mutated externally (completion, IME, formatter, etc.)
+            self.text_cache = self.editor.get_text().to_string();
+            self.line_index = LineIndex::new(&self.text_cache);
+            self.cached_generation = live_generation;
         }
         self.cursor_offset = self.line_index.line_col_to_byte(
             &self.text_cache,
@@ -452,6 +465,7 @@ impl GodotHost {
     pub(crate) fn invalidate_cache(&mut self) {
         self.text_cache = self.editor.get_text().to_string();
         self.line_index = LineIndex::new(&self.text_cache);
+        self.cached_generation = self.editor.get_version() as u64;
     }
 
     // ── Configuration setters ───────────────────────────────────────────
