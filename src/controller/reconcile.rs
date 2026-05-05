@@ -89,6 +89,7 @@ pub(crate) fn reconcile_external_text_change(
     before_text: &str,
     after_text: &str,
     cursor_byte: usize,
+    kind: ExternalEditKind,
 ) {
     let Some(diff) = diff_texts(before_text, after_text, cursor_byte) else {
         log::trace!("reconcile: no text change, skipping");
@@ -108,7 +109,7 @@ pub(crate) fn reconcile_external_text_change(
         ),
         diff.inserted_text,
         Offset::new(cursor_byte),
-        ExternalEditKind::PasteOrIme,
+        kind,
     );
     // Response discarded: the host (CodeEdit) already applied the text change.
     // Processing effects here would double-apply them.
@@ -142,19 +143,19 @@ mod tests {
     #[test]
     fn reconcile_simple_insertion() {
         let mut engine = VimEngine::new();
-        reconcile_external_text_change(&mut engine, "hello\n", "hello world\n", 11);
+        reconcile_external_text_change(&mut engine, "hello\n", "hello world\n", 11, ExternalEditKind::HostNotified);
     }
 
     #[test]
     fn reconcile_no_change_is_noop() {
         let mut engine = VimEngine::new();
-        reconcile_external_text_change(&mut engine, "hello\n", "hello\n", 5);
+        reconcile_external_text_change(&mut engine, "hello\n", "hello\n", 5, ExternalEditKind::HostNotified);
     }
 
     #[test]
     fn reconcile_cjk_insertion() {
         let mut engine = VimEngine::new();
-        reconcile_external_text_change(&mut engine, "abc\n", "ab你好c\n", 8);
+        reconcile_external_text_change(&mut engine, "abc\n", "ab你好c\n", 8, ExternalEditKind::HostNotified);
     }
 
     // ── diff_texts pure assertions ──────────────────────────────────────

@@ -757,6 +757,7 @@ impl VimController {
             &old_text_owned,
             &new_text,
             cursor_byte,
+            vim_core::execution::ExternalEditKind::HostNotified,
         );
 
         // Update the host's cache so the next call doesn't re-detect.

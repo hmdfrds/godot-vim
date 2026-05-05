@@ -197,5 +197,11 @@ fn confirm_and_reconcile_completion(engine: &mut VimEngine, editor: &mut Gd<Code
         editor.get_caret_column(),
     );
 
-    super::reconcile::reconcile_external_text_change(engine, &before_text, &after_text, after_byte);
+    super::reconcile::reconcile_external_text_change(
+        engine,
+        &before_text,
+        &after_text,
+        after_byte,
+        vim_core::execution::ExternalEditKind::Completion,
+    );
 }
