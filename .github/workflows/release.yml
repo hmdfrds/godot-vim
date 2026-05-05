@@ -166,7 +166,8 @@ jobs:
 
       - name: Generate SBOM
         run: |
-          cargo install cargo-cyclonedx --version 0.5.9 --locked          cargo cyclonedx --format json --override-filename godot-vim-sbom.cdx
+          cargo install cargo-cyclonedx --version 0.5.9 --locked
+          cargo cyclonedx --format json --override-filename godot-vim-sbom.cdx
 
       - name: Generate release body
         id: body
