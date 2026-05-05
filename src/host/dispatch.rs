@@ -292,13 +292,11 @@ pub(crate) fn execute(
             let editor_iface = EditorInterface::singleton();
             if let Some(mut settings) = editor_iface.get_editor_settings() {
                 let shortcut_list = settings.call("get_shortcut_list", &[]);
-                if let Ok(arr) = shortcut_list.try_to::<Array<Variant>>() {
-                    for item in arr.iter_shared() {
-                        if let Ok(s) = item.try_to::<GString>() {
-                            let name = s.to_string();
-                            if !name.is_empty() {
-                                actions.push(name);
-                            }
+                if let Ok(arr) = shortcut_list.try_to::<PackedStringArray>() {
+                    for s in arr.as_slice() {
+                        let name = s.to_string();
+                        if !name.is_empty() {
+                            actions.push(name);
                         }
                     }
                 }

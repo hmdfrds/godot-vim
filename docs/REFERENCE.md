@@ -490,7 +490,7 @@ nnoremap <Leader>s <Action>(editor/save_scene)
 :actionlist script_text_editor    " list actions matching a filter
 ```
 
-Use `:actionlist` to browse all available action names.
+Use `:actionlist` to browse all available shortcut paths, or see [Godot's default key mapping](https://docs.godotengine.org/en/stable/tutorials/editor/default_key_mapping.html) for the full reference with descriptions.
 
 **Limitation:** Actions in `scene_tree/`, `spatial_editor/`, `canvas_item_editor/`, and `filesystem_dock/` categories will not fire while the text editor is focused. Godot's own code blocks these shortcuts when a text field has focus. Actions in `script_text_editor/`, `script_editor/`, and `editor/` categories work reliably from within the code editor.
 
