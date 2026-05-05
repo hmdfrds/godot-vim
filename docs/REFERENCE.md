@@ -351,7 +351,7 @@ All settings are in **Editor > Editor Settings > Plugins > GodotVim**.
 | Smart Case | `bool` | `false` | Uppercase in pattern overrides Ignore Case. |
 | Line Numbers | `enum` | `Hybrid` | `None`, `Absolute`, `Relative`, `Hybrid`. |
 | Inccommand | `enum` | `nosplit` | Live `:s` preview. `nosplit` = enabled, `off` = disabled. |
-| Highlight Yank | `int` | `150` | Yank highlight duration in ms (0 = disabled). |
+| ~~Highlight Yank~~ | ~~`int`~~ | ~~`150`~~ | ~~Yank highlight duration in ms (0 = disabled).~~ |
 
 ### Cursor
 
