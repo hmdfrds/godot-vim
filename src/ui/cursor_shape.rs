@@ -98,7 +98,6 @@ pub(crate) fn compute_cursor_geometry(
     // Empty-document sentinel: all-zeros Rect2i. The cursor belongs at
     // line 0 col 0, so use get_caret_draw_pos().x for correct gutter offset.
     if is_empty_doc_rect(rect) {
-        log::trace!("cursor_geom: empty document, using fallback geometry");
         return Some(CursorGeometry {
             pos: Vector2::new(editor.get_caret_draw_pos().x, 0.0),
             height: line_height,
