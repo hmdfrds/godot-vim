@@ -6,7 +6,7 @@
 
 use godot::classes::CodeEdit;
 use godot::prelude::*;
-use vim_core::document::{FoldProvider, IndentProvider};
+use vim_core::document::{FoldProvider, IndentProvider, IndentResult};
 use vim_core::primitives::{Direction, LineNumber};
 
 use super::code_edit_ext::CodeEditExt;
@@ -84,13 +84,16 @@ impl OwnedGodotIndentProvider {
 }
 
 impl IndentProvider for OwnedGodotIndentProvider {
-    fn indent_for_new_line(&self, line: LineNumber) -> compact_str::CompactString {
+    fn indent_for_new_line(&self, line: LineNumber) -> IndentResult {
         use compact_str::CompactString;
 
         let line_i32 = codec::usize_to_i32(usize::from(line));
         let line_count = self.editor.get_line_count();
         if line_i32 >= line_count {
-            return CompactString::default();
+            return IndentResult::Simple {
+                indent: CompactString::default(),
+                append: None,
+            };
         }
 
         let line_text = self.editor.get_line(line_i32).to_string();
@@ -114,7 +117,7 @@ impl IndentProvider for OwnedGodotIndentProvider {
                 .done()
                 == -1;
 
-        if should_indent {
+        let indent = if should_indent {
             let use_spaces = self.editor.is_indent_using_spaces();
             let indent_size = self.editor.safe_indent_size();
             if use_spaces {
@@ -124,6 +127,11 @@ impl IndentProvider for OwnedGodotIndentProvider {
             }
         } else {
             indent
+        };
+
+        IndentResult::Simple {
+            indent,
+            append: None,
         }
     }
 }
