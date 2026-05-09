@@ -306,8 +306,15 @@ pub(crate) fn dispatch(
                 pairing = pairing.on_set_selection();
             }
             Effect::ClearSelection => {
+                // Capture canonical head before clearing — Godot's caret is at
+                // head_col+1 from inclusive→exclusive rendering in SetSelection.
+                let restore_pos = state.buffer(editor_id).visual().map(|vs| vs.head_pos);
                 cursor::handle_clear_selection(editor);
                 state.buffer(editor_id).clear_visual_selection();
+                if let Some(pos) = restore_pos {
+                    editor.set_caret_line(pos.line);
+                    editor.set_caret_column(pos.col);
+                }
                 pairing = pairing.on_consume_cursor();
             }
             Effect::SetCursor { offset: _ } if pairing.should_suppress_cursor() => {
