@@ -21,6 +21,9 @@ pub(crate) struct OwnedGodotFoldProvider {
     editor: Gd<CodeEdit>,
 }
 
+// SAFETY: same rationale as OwnedGodotIndentProvider — single-threaded Godot main thread.
+unsafe impl Send for OwnedGodotFoldProvider {}
+
 impl OwnedGodotFoldProvider {
     #[must_use]
     pub(crate) fn new(editor: Gd<CodeEdit>) -> Self {

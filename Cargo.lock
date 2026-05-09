@@ -251,7 +251,7 @@ dependencies = [
 
 [[package]]
 name = "godot-vim"
-version = "1.4.3"
+version = "1.4.4"
 dependencies = [
  "bitflags",
  "compact_str",
