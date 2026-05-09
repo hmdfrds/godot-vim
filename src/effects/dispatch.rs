@@ -129,6 +129,11 @@ pub(crate) fn dispatch(
     log::trace!("dispatch: {} effects", effects.len());
     let mut pass2 = Vec::with_capacity(effects.len());
 
+    // Block visual selection creates secondary carets that persist across dispatches.
+    // Godot's caret-relative APIs operate on ALL carets, so clear before pass 1.
+    editor.remove_secondary_carets();
+    editor.deselect();
+
     // Pass 1: text mutations and undo. The Cow starts as a zero-copy borrow;
     // any mutation transitions it to Owned via editor.get_text() or in-place splice.
     let mut text: Cow<str> = Cow::Borrowed(text_ref);

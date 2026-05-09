@@ -113,6 +113,12 @@ pub(crate) fn handle_set_selection(
     let (anchor_line, anchor_col) = (anchor_pos.line, anchor_pos.col);
     let (head_line, head_col) = (head_pos.line, head_pos.col);
 
+    // Block mode creates secondary carets; clear on shape transitions so
+    // char/line modes operate on the primary caret only.
+    if !matches!(shape, SelectionShape::Block) {
+        editor.remove_secondary_carets();
+    }
+
     match shape {
         SelectionShape::Char => {
             if head >= anchor {
@@ -262,6 +268,7 @@ fn render_block_selection(
 
     if any_failed {
         editor.remove_secondary_carets();
+        editor.deselect();
         log::error!("Block visual selection rolled back due to caret failure");
     }
 }

@@ -78,9 +78,9 @@ pub(crate) fn handle_undo(editor: &mut impl TextEditorPort, count: u32) {
     for _ in 0..count {
         editor.undo();
     }
-    // Godot's undo restores caret/selection state from begin_complex_operation
-    // time, which may include a visual selection the engine has already cleared.
-    // Deselect unconditionally to prevent ghost selections.
+    // Godot's undo restores the caret snapshot from begin_complex_operation,
+    // which may include secondary carets and selections the engine already cleared.
+    editor.remove_secondary_carets();
     editor.deselect();
 }
 
@@ -89,7 +89,7 @@ pub(crate) fn handle_redo(editor: &mut impl TextEditorPort, count: u32) {
     for _ in 0..count {
         editor.redo();
     }
-    // Same ghost-selection rationale as handle_undo.
+    editor.remove_secondary_carets();
     editor.deselect();
 }
 

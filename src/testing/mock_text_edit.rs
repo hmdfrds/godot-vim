@@ -406,6 +406,20 @@ impl TextEditorPort for MockTextEdit {
         self.lines[line as usize].clone()
     }
 
+    fn insert_text(&mut self, text: &str, line: i32, col: i32) {
+        self.begin_complex_operation();
+        let (new_line, new_col) = self.insert_text_record(line, col, text);
+        self.offset_carets_after(line, col, new_line, new_col);
+        self.end_complex_operation();
+    }
+
+    fn remove_text(&mut self, from_line: i32, from_col: i32, to_line: i32, to_col: i32) {
+        self.begin_complex_operation();
+        self.remove_text_record(from_line, from_col, to_line, to_col);
+        self.offset_carets_after(to_line, to_col, from_line, from_col);
+        self.end_complex_operation();
+    }
+
     /// Matches Godot's multi-caret insert: iterates all carets, deletes any
     /// active selection first, inserts text, then offsets subsequent carets.
     fn insert_text_at_caret(&mut self, text: &str) {
