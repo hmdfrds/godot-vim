@@ -199,6 +199,14 @@ impl TextEditorPort for CodeEditPort<'_> {
         self.0.get_line(line).to_string()
     }
 
+    fn insert_text(&mut self, text: &str, line: i32, col: i32) {
+        self.0.insert_text(&GString::from(text), line, col);
+    }
+
+    fn remove_text(&mut self, from_line: i32, from_col: i32, to_line: i32, to_col: i32) {
+        self.0.remove_text(from_line, from_col, to_line, to_col);
+    }
+
     fn insert_text_at_caret(&mut self, text: &str) {
         self.0.insert_text_at_caret(&GString::from(text));
     }

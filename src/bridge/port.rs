@@ -2,7 +2,7 @@
 //!
 //! Trait hierarchy:
 //!
-//! - **`TextEditorPort`** (22 methods) — core text editing (required).
+//! - **`TextEditorPort`** (24 methods) — core text editing (required).
 //! - **`FoldCapable`** (5 methods, default no-ops) — code folding.
 //! - **`IdeCapable`** (2 methods, default no-ops) — autocomplete/hints.
 //! - **`NavigationCapable`** (2 methods, default no-ops) — go-to-definition, hover docs.
@@ -30,8 +30,15 @@ pub(crate) trait TextEditorPort {
     fn get_text(&self) -> String;
     fn get_line(&self, line: i32) -> String;
 
-    /// If a selection is active, replaces the selected text with `text`.
+    /// Coordinate-addressed insert — no caret/selection involvement.
+    fn insert_text(&mut self, text: &str, line: i32, col: i32);
+    /// Coordinate-addressed removal — no caret/selection involvement.
+    fn remove_text(&mut self, from_line: i32, from_col: i32, to_line: i32, to_col: i32);
+
+    /// Caret-relative insert. Test-only; production uses `insert_text`.
+    #[allow(dead_code)]
     fn insert_text_at_caret(&mut self, text: &str);
+    #[allow(dead_code)]
     fn delete_selection(&mut self);
 
     fn set_caret_line(&mut self, line: i32);

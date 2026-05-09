@@ -6,17 +6,10 @@
 
 use crate::bridge::codec::DocumentView;
 use crate::bridge::port::TextEditorPort;
-use crate::types::CharLineCol;
 
-/// Canonical single-point insert. Collapses any existing selection first
-/// (via `select(pos, pos)`) so that `insert_text_at_caret` does a pure
-/// insert rather than a replace. Used by both `handle_insert` and `auto_brace`.
+/// Coordinate-addressed insert — no caret/selection side effects.
 pub(super) fn insert_at(editor: &mut impl TextEditorPort, line: i32, col: i32, content: &str) {
-    let pos = CharLineCol::new(line, col);
-    editor.set_caret_line(line);
-    editor.set_caret_column(col);
-    editor.select(pos, pos);
-    editor.insert_text_at_caret(content);
+    editor.insert_text(content, line, col);
 }
 
 pub(crate) fn handle_insert(
@@ -53,12 +46,11 @@ pub(crate) fn handle_delete(
         end_pos.line,
         end_pos.col
     );
-    editor.select(start_pos, end_pos);
-    editor.delete_selection();
+    editor.remove_text(start_pos.line, start_pos.col, end_pos.line, end_pos.col);
 }
 
-/// Replace `[start, end)` with `content`. Leverages Godot's behavior where
-/// `insert_text_at_caret` replaces any active selection.
+/// Replace `[start, end)` with `content`. Wrapped in a single complex
+/// operation so both steps form one undo entry.
 pub(crate) fn handle_replace(
     editor: &mut impl TextEditorPort,
     doc: &DocumentView,
@@ -79,6 +71,8 @@ pub(crate) fn handle_replace(
         content.len()
     );
 
-    editor.select(start_pos, end_pos);
-    editor.insert_text_at_caret(content);
+    editor.begin_complex_operation();
+    editor.remove_text(start_pos.line, start_pos.col, end_pos.line, end_pos.col);
+    editor.insert_text(content, start_pos.line, start_pos.col);
+    editor.end_complex_operation();
 }

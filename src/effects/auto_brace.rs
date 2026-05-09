@@ -15,7 +15,6 @@ use crate::bridge::codec::{i32_to_usize, usize_to_i32, DocumentView};
 use crate::bridge::port::TextEditorPort;
 use crate::bridge::{AutoBraceSnapshot, SyntaxRegion};
 use crate::effects::text::insert_at;
-use crate::types::CharLineCol;
 
 /// Result of an auto-brace insert operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -116,12 +115,12 @@ pub(super) fn handle_insert_with_auto_brace(
     insert_at(editor, line, col, ch_str);
 
     // Re-fetch line text after insert, then auto-close if an open pair ends
-    // at the new caret position. The close key is inserted after the open key,
-    // and the caret is repositioned between them (e.g., typing `(` yields `(|)`).
+    // at the new caret position. The close key is inserted after the open key
+    // (e.g., typing `(` yields `(|)`).
     let updated_line_text = editor.get_line(line);
     if let Some(pair_idx) = find_open_pair_at_pos_str(&pairs, &updated_line_text, char_col + 1) {
         let close_key = &pairs[pair_idx].1;
-        editor.insert_text_at_caret(close_key);
+        editor.insert_text(close_key, line, col + 1);
     }
 
     editor.set_caret_column(col + 1);
@@ -190,11 +189,7 @@ pub(super) fn handle_delete_with_auto_brace(
                     start_col
                 );
                 let close_end_col = start_col + usize_to_i32(close_char_len);
-                editor.select(
-                    CharLineCol::new(start_line, start_col),
-                    CharLineCol::new(start_line, close_end_col),
-                );
-                editor.delete_selection();
+                editor.remove_text(start_line, start_col, start_line, close_end_col);
             }
         }
     }

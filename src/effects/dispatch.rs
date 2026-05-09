@@ -129,6 +129,11 @@ pub(crate) fn dispatch(
     log::trace!("dispatch: {} effects", effects.len());
     let mut pass2 = Vec::with_capacity(effects.len());
 
+    // Block visual selection creates secondary carets that persist across dispatches.
+    // Godot's caret-relative APIs operate on ALL carets, so clear before pass 1.
+    editor.remove_secondary_carets();
+    editor.deselect();
+
     // Pass 1: text mutations and undo. The Cow starts as a zero-copy borrow;
     // any mutation transitions it to Owned via editor.get_text() or in-place splice.
     let mut text: Cow<str> = Cow::Borrowed(text_ref);
@@ -301,8 +306,15 @@ pub(crate) fn dispatch(
                 pairing = pairing.on_set_selection();
             }
             Effect::ClearSelection => {
+                // Capture canonical head before clearing — Godot's caret is at
+                // head_col+1 from inclusive→exclusive rendering in SetSelection.
+                let restore_pos = state.buffer(editor_id).visual().map(|vs| vs.head_pos);
                 cursor::handle_clear_selection(editor);
                 state.buffer(editor_id).clear_visual_selection();
+                if let Some(pos) = restore_pos {
+                    editor.set_caret_line(pos.line);
+                    editor.set_caret_column(pos.col);
+                }
                 pairing = pairing.on_consume_cursor();
             }
             Effect::SetCursor { offset: _ } if pairing.should_suppress_cursor() => {
