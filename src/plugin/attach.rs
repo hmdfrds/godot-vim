@@ -155,10 +155,6 @@ impl GodotVimCore {
 
         self.cancel_pending_tooltip();
 
-        // Brace pair cache is per-language; stale pairs from the old editor's
-        // language would produce wrong results in the new editor.
-        crate::bridge::port_impl::invalidate_brace_pair_cache();
-
         // Reset so outstanding expectations from this editor don't suppress
         // legitimate caret_changed events on the next editor.
         self.caret_reconciler.reset();

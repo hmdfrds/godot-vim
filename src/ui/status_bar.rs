@@ -580,3 +580,41 @@ mod tests {
         assert_eq!(prompt_char_for(&CommandLinePrompt::SearchBackward), "?");
     }
 }
+
+#[cfg(test)]
+const HANDLED_COMMAND_LINE_PROMPTS: &[vim_core::primitives::CommandLinePrompt] = &[
+    vim_core::primitives::CommandLinePrompt::Ex,
+    vim_core::primitives::CommandLinePrompt::SearchForward,
+    vim_core::primitives::CommandLinePrompt::SearchBackward,
+    vim_core::primitives::CommandLinePrompt::ExVisual,
+];
+
+#[cfg(test)]
+mod command_line_prompt_coverage_tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn command_line_prompt_dispatch_covers_all_variants() {
+        let handled: HashSet<_> = HANDLED_COMMAND_LINE_PROMPTS.iter().copied().collect();
+        let all: HashSet<_> = CommandLinePrompt::ALL.iter().copied().collect();
+        let missing: Vec<_> = all.difference(&handled).collect();
+        assert!(
+            missing.is_empty(),
+            "Unhandled CommandLinePrompt variants: {:?}",
+            missing
+        );
+    }
+
+    #[test]
+    fn handled_command_line_prompts_has_no_duplicates() {
+        let mut seen = HashSet::new();
+        for kind in HANDLED_COMMAND_LINE_PROMPTS {
+            assert!(
+                seen.insert(kind),
+                "Duplicate in HANDLED_COMMAND_LINE_PROMPTS: {:?}",
+                kind
+            );
+        }
+    }
+}

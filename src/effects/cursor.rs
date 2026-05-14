@@ -235,3 +235,40 @@ pub(crate) fn handle_clear_selection(editor: &mut impl TextEditorPort) {
     editor.remove_secondary_carets();
     editor.deselect();
 }
+
+#[cfg(test)]
+const HANDLED_SELECTION_SHAPES: &[vim_core::primitives::SelectionShape] = &[
+    vim_core::primitives::SelectionShape::Char,
+    vim_core::primitives::SelectionShape::Line,
+    vim_core::primitives::SelectionShape::Block,
+];
+
+#[cfg(test)]
+mod selection_shape_coverage_tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn selection_shape_dispatch_covers_all_variants() {
+        let handled: HashSet<_> = HANDLED_SELECTION_SHAPES.iter().copied().collect();
+        let all: HashSet<_> = SelectionShape::ALL.iter().copied().collect();
+        let missing: Vec<_> = all.difference(&handled).collect();
+        assert!(
+            missing.is_empty(),
+            "Unhandled SelectionShape variants: {:?}",
+            missing
+        );
+    }
+
+    #[test]
+    fn handled_selection_shapes_has_no_duplicates() {
+        let mut seen = HashSet::new();
+        for kind in HANDLED_SELECTION_SHAPES {
+            assert!(
+                seen.insert(kind),
+                "Duplicate in HANDLED_SELECTION_SHAPES: {:?}",
+                kind
+            );
+        }
+    }
+}

@@ -414,3 +414,45 @@ mod tests {
         assert_eq!(set, ModeSet::NVO);
     }
 }
+
+#[cfg(test)]
+const HANDLED_MAP_MODE_PREFIXES: &[vim_core::primitives::MapModePrefix] = &[
+    vim_core::primitives::MapModePrefix::All,
+    vim_core::primitives::MapModePrefix::Normal,
+    vim_core::primitives::MapModePrefix::Visual,
+    vim_core::primitives::MapModePrefix::Insert,
+    vim_core::primitives::MapModePrefix::Operator,
+    vim_core::primitives::MapModePrefix::Command,
+    vim_core::primitives::MapModePrefix::VisualOnly,
+    vim_core::primitives::MapModePrefix::SelectOnly,
+];
+
+#[cfg(test)]
+mod map_mode_prefix_coverage_tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn map_mode_prefix_dispatch_covers_all_variants() {
+        let handled: HashSet<_> = HANDLED_MAP_MODE_PREFIXES.iter().copied().collect();
+        let all: HashSet<_> = MapModePrefix::ALL.iter().copied().collect();
+        let missing: Vec<_> = all.difference(&handled).collect();
+        assert!(
+            missing.is_empty(),
+            "Unhandled MapModePrefix variants: {:?}",
+            missing
+        );
+    }
+
+    #[test]
+    fn handled_map_mode_prefixes_has_no_duplicates() {
+        let mut seen = HashSet::new();
+        for kind in HANDLED_MAP_MODE_PREFIXES {
+            assert!(
+                seen.insert(kind),
+                "Duplicate in HANDLED_MAP_MODE_PREFIXES: {:?}",
+                kind
+            );
+        }
+    }
+}

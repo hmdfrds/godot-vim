@@ -120,6 +120,7 @@ pub(crate) struct UiCoordinator {
     virtual_text: Option<Gd<VirtualTextOverlay>>,
     highlight_yank: Option<Gd<HighlightYankOverlay>>,
     block_visual: Option<Gd<BlockVisualOverlay>>,
+    shaped_cache: super::cursor_shape::ShapedTextCache,
 }
 
 impl UiCoordinator {
@@ -139,6 +140,7 @@ impl UiCoordinator {
             virtual_text: None,
             highlight_yank: None,
             block_visual: None,
+            shaped_cache: super::cursor_shape::ShapedTextCache::new(),
         }
     }
 
@@ -160,7 +162,7 @@ impl UiCoordinator {
         let mut cursor = VimCursor::new_alloc();
         editor.add_child(&cursor.clone().upcast::<Node>());
         // Snap immediately -- without this the cursor lerps from (0,0).
-        if let Some(geom) = compute_cursor_geometry(editor, None) {
+        if let Some(geom) = compute_cursor_geometry(&mut self.shaped_cache, editor, None) {
             let mut vim_cursor = cursor.bind_mut();
             vim_cursor.set_target(geom.pos, geom.height, geom.width);
             vim_cursor.force_snap();
@@ -287,7 +289,7 @@ impl UiCoordinator {
         // Force re-shaping so character widths reflect any text changes.
         // Cost: ~4 FFI calls per keystroke (free + create + add_string +
         // tab_align on one line). Negligible.
-        super::cursor_shape::invalidate_shaped_cache();
+        self.shaped_cache.invalidate();
 
         // ── 1. Status bar ────────────────────────────────────────────────
         // Always repaint while command line is active (every character typed
@@ -327,7 +329,7 @@ impl UiCoordinator {
             vim_cursor.set_style(snap.cursor_style, snap.mode);
             // visual_head: in visual mode, Godot's caret is at the exclusive
             // selection end, but Vim's cursor should render at the head.
-            if let Some(geom) = compute_cursor_geometry(editor, snap.visual_head) {
+            if let Some(geom) = compute_cursor_geometry(&mut self.shaped_cache, editor, snap.visual_head) {
                 vim_cursor.set_target(geom.pos, geom.height, geom.width);
                 drop(vim_cursor);
                 cursor.set_visible(self.cursor_enabled);
@@ -452,7 +454,7 @@ impl UiCoordinator {
     /// Keeps the overlay in sync with the viewport between keystrokes.
     pub(crate) fn update_cursor_position(&mut self, editor: &Gd<CodeEdit>) {
         if let Some(ref mut cursor) = self.cursor {
-            if let Some(geom) = compute_cursor_geometry(editor, self.cache.cached_visual_head) {
+            if let Some(geom) = compute_cursor_geometry(&mut self.shaped_cache, editor, self.cache.cached_visual_head) {
                 {
                     cursor
                         .bind_mut()

@@ -43,6 +43,12 @@ pub(crate) enum PendingUiAction {
     Vimdebug(compact_str::CompactString),
     PerfReport,
     PerfReset,
+    ShowTooltip {
+        symbol: String,
+        line: i32,
+        col: i32,
+        warp_pos: Option<Vector2i>,
+    },
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -64,7 +70,6 @@ pub(crate) struct GodotHost {
 
     // ── VimHost state ───────────────────────────────────────────────────
     cursor_offset: usize,
-    visual_selection: Option<crate::state::buffer::VisualSelectionState>,
     viewport: ViewportInfo,
 
     // ── Effect dispatch state ───────────────────────────────────────────
@@ -85,6 +90,8 @@ pub(crate) struct GodotHost {
     highlight_yank_duration_ms: u32,
     auto_brace_eligible: bool,
     engine_auto_pairs_active: bool,
+    #[allow(clippy::type_complexity)]
+    brace_pair_cache: Option<(InstanceId, std::rc::Rc<Vec<(String, String)>>)>,
 
     // ── Deferred actions for controller ─────────────────────────────────
     pending_ui_actions: Vec<PendingUiAction>,
@@ -149,7 +156,10 @@ impl VimHost for GodotHost {
     }
 
     fn selection(&self) -> Option<SelectionRange> {
-        self.visual_selection
+        let editor_id = self.editor.instance_id();
+        self.state
+            .buffer_ref(editor_id)
+            .and_then(|b| b.visual())
             .map(|vs| SelectionRange::new(vs.anchor, vs.head))
     }
 
@@ -189,7 +199,7 @@ impl VimHost for GodotHost {
         };
 
         let mut auto_brace_snapshot = if self.auto_brace_eligible {
-            AutoBraceSnapshot::from_editor(&self.editor)
+            AutoBraceSnapshot::from_editor(&self.editor, &mut self.brace_pair_cache)
         } else {
             AutoBraceSnapshot::disabled()
         };
@@ -217,11 +227,11 @@ impl VimHost for GodotHost {
             line_index,
             cached_generation,
             cursor_offset,
-            visual_selection,
+            pending_ui_actions,
             ..
         } = self;
 
-        let mut port = crate::bridge::port_impl::CodeEditPort(editor);
+        let mut port = crate::bridge::port_impl::CodeEditPort(editor, pending_ui_actions);
 
         let _compound_actions = crate::effects::dispatch::dispatch(
             effects_vec,
@@ -261,12 +271,6 @@ impl VimHost for GodotHost {
             editor.get_caret_column(),
         );
 
-        // Sync visual selection from ShellState buffer to host field.
-        // VimSession::build_context calls host.selection() on every keystroke
-        // and drain iteration — this must reflect the live selection state.
-        *visual_selection = state
-            .buffer_ref(editor_id)
-            .and_then(|b| b.visual().cloned());
     }
 
     fn record_internal_undo_node(
@@ -368,6 +372,7 @@ impl GodotHost {
             &self.security_policy,
             mode_str,
             &self.clipboard,
+            &mut self.pending_ui_actions,
         );
 
         // Sandbox ReadConfigFile results to filter dangerous commands.
@@ -411,7 +416,6 @@ impl GodotHost {
             cache_editor_id: editor_id,
             cached_generation: generation,
             cursor_offset,
-            visual_selection: None,
             viewport: ViewportInfo {
                 first_line: 0,
                 height: 0,
@@ -430,6 +434,7 @@ impl GodotHost {
             highlight_yank_duration_ms: 150,
             auto_brace_eligible: false,
             engine_auto_pairs_active: false,
+            brace_pair_cache: None,
             pending_ui_actions: Vec::new(),
             vimdebug_enabled: false,
         }
@@ -557,6 +562,15 @@ impl GodotHost {
         &mut self.state
     }
 
+    /// Split borrow: simultaneous mutable access to state and pending UI
+    /// actions, needed when a `CodeEditPort` is constructed from a separate
+    /// `&mut Gd<CodeEdit>` (e.g. in step-mode effect application).
+    pub(crate) fn state_and_pending_ui_actions_mut(
+        &mut self,
+    ) -> (&mut ShellState, &mut Vec<PendingUiAction>) {
+        (&mut self.state, &mut self.pending_ui_actions)
+    }
+
     pub(crate) fn take_state(&mut self) -> ShellState {
         std::mem::take(&mut self.state)
     }
@@ -592,12 +606,16 @@ impl GodotHost {
         &self.editor
     }
 
-    /// Split borrow: simultaneous mutable access to editor and state.
+    /// Split borrow: simultaneous mutable access to editor, state, and
+    /// pending UI actions.
     ///
     /// Required by multi-cursor sync which needs `CodeEditPort` (from editor)
-    /// and `BufferState` (from shell state) simultaneously.
-    pub(crate) fn editor_and_state_mut(&mut self) -> (&mut Gd<CodeEdit>, &mut ShellState) {
-        (&mut self.editor, &mut self.state)
+    /// and `BufferState` (from shell state) simultaneously, and by any path
+    /// that constructs a `CodeEditPort` (which carries `&mut Vec<PendingUiAction>`).
+    pub(crate) fn editor_and_state_mut(
+        &mut self,
+    ) -> (&mut Gd<CodeEdit>, &mut ShellState, &mut Vec<PendingUiAction>) {
+        (&mut self.editor, &mut self.state, &mut self.pending_ui_actions)
     }
 }
 
@@ -662,6 +680,44 @@ fn mode_to_vim_string(mode: Mode) -> &'static str {
                 mode
             );
             "n"
+        }
+    }
+}
+
+#[cfg(test)]
+const HANDLED_MODES: &[vim_core::primitives::ModeKind] = &[
+    vim_core::primitives::ModeKind::Normal,
+    vim_core::primitives::ModeKind::Insert,
+    vim_core::primitives::ModeKind::Visual,
+    vim_core::primitives::ModeKind::Select,
+    vim_core::primitives::ModeKind::Replace,
+    vim_core::primitives::ModeKind::VirtualReplace,
+    vim_core::primitives::ModeKind::CommandLine,
+    vim_core::primitives::ModeKind::OperatorPending,
+];
+
+#[cfg(test)]
+mod mode_coverage_tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn mode_dispatch_covers_all_variants() {
+        let handled: HashSet<_> = HANDLED_MODES.iter().copied().collect();
+        let all: HashSet<_> = vim_core::primitives::ModeKind::ALL.iter().copied().collect();
+        let missing: Vec<_> = all.difference(&handled).collect();
+        assert!(
+            missing.is_empty(),
+            "Unhandled ModeKind variants: {:?}",
+            missing
+        );
+    }
+
+    #[test]
+    fn handled_modes_has_no_duplicates() {
+        let mut seen = HashSet::new();
+        for kind in HANDLED_MODES {
+            assert!(seen.insert(kind), "Duplicate in HANDLED_MODES: {:?}", kind);
         }
     }
 }

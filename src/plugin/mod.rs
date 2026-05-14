@@ -741,9 +741,9 @@ impl GodotVimCore {
     /// Execute a pending UI action that requires plugin-level access (scene tree,
     /// settings snapshot) which the controller cannot reach directly.
     ///
-    /// Only `OpenMappingDialog` and `SourceConfigFile` reach the plugin layer;
-    /// the controller handles all other variants inline before storing. The
-    /// catch-all arm is defense-in-depth.
+    /// `OpenMappingDialog`, `SourceConfigFile`, and `ShowTooltip` reach the
+    /// plugin layer; the controller handles all other variants inline before
+    /// storing. The catch-all arm is defense-in-depth.
     pub(super) fn handle_pending_ui_action(
         &mut self,
         action: crate::bridge::godot_host::PendingUiAction,
@@ -770,6 +770,31 @@ impl GodotVimCore {
                 if !self.source_config_from_disk("pending_ui_action") {
                     let path = self.resolve_config_path().path;
                     log::warn!("pending_ui_action: SourceConfigFile — file not found at '{path}'",);
+                }
+            }
+            PendingUiAction::ShowTooltip {
+                symbol,
+                line,
+                col,
+                warp_pos,
+            } => {
+                if let Some(editor) = &self.attached_editor {
+                    let editor_id = editor.instance_id();
+                    let now = godot::classes::Time::singleton().get_ticks_usec();
+                    self.pending_tooltip = Some(PendingTooltip {
+                        symbol,
+                        line,
+                        col,
+                        warp_pos,
+                        editor_id,
+                        created_at_usec: now,
+                        phase: TooltipPhase::WaitingForRelease,
+                    });
+                    self.base_mut().set_process(true);
+                    log::debug!(
+                        "handle_pending_ui_action: queued deferred tooltip for '{}'",
+                        self.pending_tooltip.as_ref().unwrap().symbol
+                    );
                 }
             }
             other => {
@@ -803,11 +828,6 @@ impl GodotVimCore {
                     if has_valid_editor {
                         let mut editor = self.attached_editor.as_ref().unwrap().clone();
                         controller.recover_from_panic(&mut editor);
-
-                        // Invalidate thread-local caches that may hold stale
-                        // pre-panic data (shaped glyphs, auto-brace pairs).
-                        crate::ui::cursor_shape::invalidate_shaped_cache();
-                        crate::bridge::port_impl::invalidate_brace_pair_cache();
 
                         // Refresh UI so the user sees Normal mode + error message
                         // immediately, not stale pre-panic state.

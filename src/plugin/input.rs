@@ -273,28 +273,6 @@ impl GodotVimCore {
             }
         }
 
-        // Drain deferred tooltip request from Tier 2 of show_documentation_tooltip.
-        if let Some(data) = crate::bridge::port_impl::take_pending_tooltip_data() {
-            if let Some(editor) = &self.attached_editor {
-                let editor_id = editor.instance_id();
-                let now = godot::classes::Time::singleton().get_ticks_usec();
-                self.pending_tooltip = Some(super::PendingTooltip {
-                    symbol: data.symbol,
-                    line: data.line,
-                    col: data.col,
-                    warp_pos: data.warp_pos,
-                    editor_id,
-                    created_at_usec: now,
-                    phase: super::TooltipPhase::WaitingForRelease,
-                });
-                self.base_mut().set_process(true);
-                log::debug!(
-                    "handle_gui_input: queued deferred tooltip for '{}'",
-                    self.pending_tooltip.as_ref().unwrap().symbol
-                );
-            }
-        }
-
         // Start/restart the mapping timer if keys are buffered, stop if not.
         if let Some(controller) = &self.controller {
             if controller.has_pending_mapping() {

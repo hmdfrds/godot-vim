@@ -168,15 +168,6 @@ impl VimController {
         }
     }
 
-    // ── Session accessors (only valid when attached) ─────────────────
-
-    fn session_mut(&mut self) -> &mut VimSession<GodotHost> {
-        match &mut self.phase {
-            ControllerPhase::Attached { session } => session,
-            ControllerPhase::Detached { .. } => panic!("VimController: not attached"),
-        }
-    }
-
     /// Number of active cursors (1 = single cursor, >1 = multi-cursor active).
     pub(crate) fn cursor_count(&self) -> usize {
         self.engine().state().multi_cursor().selections().len()
@@ -189,9 +180,12 @@ impl VimController {
 
     /// Mutable access to the host's shell state.
     ///
-    /// Only valid when a session is active (editor attached).
-    fn host_state_mut(&mut self) -> &mut ShellState {
-        self.session_mut().host_mut().state_mut()
+    /// Returns `None` when detached (no active session).
+    fn host_state_mut(&mut self) -> Option<&mut ShellState> {
+        let ControllerPhase::Attached { ref mut session } = self.phase else {
+            return None;
+        };
+        Some(session.host_mut().state_mut())
     }
 
     // ── Attach / detach lifecycle ────────────────────────────────────
@@ -316,30 +310,38 @@ impl VimController {
         let cursor_count = self.cursor_count();
 
         // Now borrow host state mutably for shell-state fields.
-        let state = self.host_state_mut();
-        let message = state.globals().message_status().clone();
-        let hlsearch_enabled = state.globals().hlsearch_enabled();
-        let cursor_style = state.cursor_style();
-        let visual_head = state
-            .buffer_ref(editor_id)
-            .and_then(|b| b.visual().map(|v| v.head_pos));
-        let block_visual = if matches!(
-            mode,
-            vim_core::primitives::Mode::Visual(vim_core::primitives::VisualType::Block)
-        ) {
-            state.buffer_ref(editor_id).and_then(|b| {
-                b.visual().map(|v| crate::types::BlockVisualGeometry {
-                    anchor_line: v.anchor_pos.line,
-                    anchor_col: v.anchor_pos.col,
-                    head_line: v.head_pos.line,
-                    head_col: v.head_pos.col,
-                })
-            })
-        } else {
-            None
-        };
-        let substitute_preview = state.take_substitute_preview();
-        let highlight_yank = state.take_highlight_yank();
+        let (message, hlsearch_enabled, cursor_style, visual_head, block_visual, substitute_preview, highlight_yank) =
+            if let ControllerPhase::Attached { ref mut session } = self.phase {
+                let state = session.host_mut().state_mut();
+                let message = state.globals().message_status().clone();
+                let hlsearch_enabled = state.globals().hlsearch_enabled();
+                let cursor_style = state.cursor_style();
+                let visual_head = state
+                    .buffer_ref(editor_id)
+                    .and_then(|b| b.visual().map(|v| v.head_pos));
+                let block_visual = if matches!(
+                    mode,
+                    vim_core::primitives::Mode::Visual(vim_core::primitives::VisualType::Block)
+                ) {
+                    state.buffer_ref(editor_id).and_then(|b| {
+                        b.visual().map(|v| crate::types::BlockVisualGeometry {
+                            anchor_line: v.anchor_pos.line,
+                            anchor_col: v.anchor_pos.col,
+                            head_line: v.head_pos.line,
+                            head_col: v.head_pos.col,
+                        })
+                    })
+                } else {
+                    None
+                };
+                let substitute_preview = state.take_substitute_preview();
+                let highlight_yank = state.take_highlight_yank();
+                (message, hlsearch_enabled, cursor_style, visual_head, block_visual, substitute_preview, highlight_yank)
+            } else {
+                use crate::types::StatusMessage;
+                use vim_core::primitives::CursorStyle;
+                (StatusMessage::default(), false, CursorStyle::for_mode(mode), None, None, None, None)
+            };
 
         let vimdebug = match (
             self.ctx.transient.vimdebug.provenance().cloned(),
@@ -445,12 +447,11 @@ impl VimController {
     /// to restore marks, changelist, last_visual, sticky_column, buffer_overrides,
     /// buffer_mappings, and exchange.
     pub(crate) fn restore_buffer_engine_state(&mut self, editor_id: InstanceId) {
-        let state = self
+        let engine_state = self
             .host_state_mut()
-            .buffer(editor_id)
-            .take_engine_state()
+            .and_then(|s| s.buffer(editor_id).take_engine_state())
             .unwrap_or_default();
-        self.engine_mut().on_buffer_enter(state);
+        self.engine_mut().on_buffer_enter(engine_state);
     }
 
     /// Evict buffer state for editors freed since the last sweep.
@@ -571,9 +572,9 @@ impl VimController {
         let line_index = crate::bridge::codec::LineIndex::new(&text);
         let offset = line_index.line_col_to_byte(&text, line, col);
         let engine_state = self.engine_mut().on_buffer_leave(offset);
-        self.host_state_mut()
-            .buffer(editor_id)
-            .set_engine_state(engine_state);
+        if let Some(state) = self.host_state_mut() {
+            state.buffer(editor_id).set_engine_state(engine_state);
+        }
     }
 
     /// Exit non-Normal mode by sending synthetic Escapes through the session
@@ -641,9 +642,9 @@ impl VimController {
         editor_id: InstanceId,
         editor: &mut Gd<CodeEdit>,
     ) {
-        self.host_state_mut()
-            .buffer(editor_id)
-            .clear_visual_selection();
+        if let Some(state) = self.host_state_mut() {
+            state.buffer(editor_id).clear_visual_selection();
+        }
         editor.remove_secondary_carets();
         editor.deselect();
     }
@@ -712,14 +713,13 @@ impl VimController {
         // When detached (no session), config effects are logged but cannot
         // be routed to shell state. This happens during initial enter_tree
         // before any editor is attached.
-        let has_session = self.is_attached();
         for effect in effects {
             match effect {
                 vim_core::effects::Effect::ShowInfo { info } => {
                     let msg = format!("{}", info);
-                    if has_session {
+                    if let Some(state) = self.host_state_mut() {
                         crate::effects::messages::handle_show_message(
-                            self.host_state_mut().globals_mut(),
+                            state.globals_mut(),
                             &msg,
                         );
                     } else {
@@ -727,9 +727,9 @@ impl VimController {
                     }
                 }
                 vim_core::effects::Effect::ShowError { error, .. } => {
-                    if has_session {
+                    if let Some(state) = self.host_state_mut() {
                         crate::effects::messages::handle_show_error(
-                            self.host_state_mut().globals_mut(),
+                            state.globals_mut(),
                             &error,
                         );
                     } else {
@@ -737,9 +737,9 @@ impl VimController {
                     }
                 }
                 vim_core::effects::Effect::ClearHighlights => {
-                    if has_session {
+                    if let Some(state) = self.host_state_mut() {
                         crate::effects::search::handle_clear_highlights(
-                            self.host_state_mut().globals_mut(),
+                            state.globals_mut(),
                         );
                     }
                 }
@@ -911,12 +911,20 @@ impl VimController {
         key: KeyEvent,
         editor: &mut Gd<CodeEdit>,
     ) -> PipelineOutcome {
-        self.process_cycle_impl(key, editor)
+        let ControllerPhase::Attached { ref mut session } = self.phase else {
+            log::warn!("process_cycle: not attached");
+            return PipelineOutcome::Passthrough;
+        };
+        process::process_cycle_impl(session, &mut self.ctx, key, editor)
     }
 
     /// Force-resolve a pending mapping after timeout, then drain expanded keys.
     pub(crate) fn resolve_mapping_timeout(&mut self, editor: &mut Gd<CodeEdit>) {
-        self.resolve_mapping_timeout_impl(editor)
+        let ControllerPhase::Attached { ref mut session } = self.phase else {
+            log::warn!("resolve_mapping_timeout: not attached");
+            return;
+        };
+        process::resolve_mapping_timeout_impl(session, &mut self.ctx, editor);
     }
 
     /// Process a mouse drag selection detected by `on_caret_changed`.
@@ -931,7 +939,7 @@ impl VimController {
         shape: vim_core::primitives::SelectionShape,
     ) -> bool {
         let ControllerPhase::Attached { ref mut session } = self.phase else {
-            panic!("process_mouse_selection: requires active session");
+            return false; // Not attached — nothing to process
         };
 
         // Compute byte offsets from line/col using the host's document.

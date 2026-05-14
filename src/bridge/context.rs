@@ -138,3 +138,39 @@ impl IndentProvider for OwnedGodotIndentProvider {
         }
     }
 }
+
+#[cfg(test)]
+const HANDLED_DIRECTIONS: &[vim_core::primitives::Direction] = &[
+    vim_core::primitives::Direction::Forward,
+    vim_core::primitives::Direction::Backward,
+];
+
+#[cfg(test)]
+mod direction_coverage_tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn direction_dispatch_covers_all_variants() {
+        let handled: HashSet<_> = HANDLED_DIRECTIONS.iter().copied().collect();
+        let all: HashSet<_> = Direction::ALL.iter().copied().collect();
+        let missing: Vec<_> = all.difference(&handled).collect();
+        assert!(
+            missing.is_empty(),
+            "Unhandled Direction variants: {:?}",
+            missing
+        );
+    }
+
+    #[test]
+    fn handled_directions_has_no_duplicates() {
+        let mut seen = HashSet::new();
+        for kind in HANDLED_DIRECTIONS {
+            assert!(
+                seen.insert(kind),
+                "Duplicate in HANDLED_DIRECTIONS: {:?}",
+                kind
+            );
+        }
+    }
+}

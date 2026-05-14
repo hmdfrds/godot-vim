@@ -59,6 +59,7 @@ pub(crate) struct CursorGeometry {
 /// non-first lines), which happens during editor initialization or when the
 /// target line is folded/off-screen.
 pub(crate) fn compute_cursor_geometry(
+    shaped_cache: &mut ShapedTextCache,
     editor: &Gd<CodeEdit>,
     override_pos: Option<CharLineCol>,
 ) -> Option<CursorGeometry> {
@@ -114,6 +115,7 @@ pub(crate) fn compute_cursor_geometry(
     let (target_x, width) = if override_pos.is_some() {
         // Override path: shapes the line once for both x and width.
         compute_override_x_and_width(
+            shaped_cache,
             editor,
             &font,
             font_size,
@@ -127,6 +129,7 @@ pub(crate) fn compute_cursor_geometry(
         // width from a shaped-text measurement (cached per line).
         let x = editor.get_caret_draw_pos().x;
         let w = compute_char_width_ts(
+            shaped_cache,
             editor,
             &font,
             font_size,
@@ -157,6 +160,7 @@ pub(crate) fn compute_cursor_geometry(
 ///   base + shaped offset from col 0. Less accurate but the only option when
 ///   the native caret is on another line.
 fn compute_override_x_and_width(
+    shaped_cache: &mut ShapedTextCache,
     editor: &Gd<CodeEdit>,
     font: &Gd<Font>,
     font_size: i32,
@@ -172,6 +176,7 @@ fn compute_override_x_and_width(
     // Fast path: override matches native caret, so draw_pos is exact.
     if caret_line == line && caret_col == col {
         let w = compute_char_width_ts(
+            shaped_cache,
             editor,
             font,
             font_size,
@@ -183,36 +188,18 @@ fn compute_override_x_and_width(
         return (draw_pos.x, w);
     }
 
-    let result = with_shaped_text(editor, font, font_size, line, |ts, rid| {
-        let x = if caret_line == line {
-            // Same line: shaped delta from native caret col to target col,
-            // anchored to draw_pos.x which already accounts for gutter/scroll.
-            let target_x = caret_x_from_dict(&ts.shaped_text_get_carets(rid, col as i64));
-            let caret_x = caret_x_from_dict(&ts.shaped_text_get_carets(rid, caret_col as i64));
-            match (target_x, caret_x) {
-                (Some(tx), Some(cx)) => {
-                    let result = draw_pos.x + (tx - cx);
-                    if is_sane_coord(result) {
-                        Some(result)
-                    } else {
-                        None
-                    }
-                }
-                _ => None,
-            }
-        } else {
-            // Different line: col-0 rect provides the pixel base, then
-            // shaped offset from col 0 to target col gives the x delta.
-            let base_rect = editor.get_rect_at_line_column(line, 0);
-            if is_invalid_rect(base_rect) || is_empty_doc_rect(base_rect) {
-                None
-            } else {
-                let base_x = base_rect.position.x as f32;
-                let col_x = caret_x_from_dict(&ts.shaped_text_get_carets(rid, col as i64));
-                let col0_x = caret_x_from_dict(&ts.shaped_text_get_carets(rid, 0));
-                match (col_x, col0_x) {
-                    (Some(cx), Some(c0)) => {
-                        let result = base_x + (cx - c0);
+    let result = shaped_cache
+        .get_or_shape(editor, font, font_size, line)
+        .map(|(rid, ts)| {
+            let x = if caret_line == line {
+                // Same line: shaped delta from native caret col to target col,
+                // anchored to draw_pos.x which already accounts for gutter/scroll.
+                let target_x = caret_x_from_dict(&ts.shaped_text_get_carets(rid, col as i64));
+                let caret_x =
+                    caret_x_from_dict(&ts.shaped_text_get_carets(rid, caret_col as i64));
+                match (target_x, caret_x) {
+                    (Some(tx), Some(cx)) => {
+                        let result = draw_pos.x + (tx - cx);
                         if is_sane_coord(result) {
                             Some(result)
                         } else {
@@ -221,30 +208,52 @@ fn compute_override_x_and_width(
                     }
                     _ => None,
                 }
-            }
-        };
-
-        // Width: shaped delta between col and col+1.
-        let width = if codec::i32_to_usize(col) < line_len {
-            let col_next = caret_x_from_dict(&ts.shaped_text_get_carets(rid, (col + 1) as i64));
-            let col_cur = caret_x_from_dict(&ts.shaped_text_get_carets(rid, col as i64));
-            match (col_next, col_cur) {
-                (Some(nx), Some(cx)) => {
-                    let w = (nx - cx).abs();
-                    if is_sane_coord(w) && w >= MIN_CURSOR_WIDTH {
-                        w
-                    } else {
-                        fallback_char_width
+            } else {
+                // Different line: col-0 rect provides the pixel base, then
+                // shaped offset from col 0 to target col gives the x delta.
+                let base_rect = editor.get_rect_at_line_column(line, 0);
+                if is_invalid_rect(base_rect) || is_empty_doc_rect(base_rect) {
+                    None
+                } else {
+                    let base_x = base_rect.position.x as f32;
+                    let col_x = caret_x_from_dict(&ts.shaped_text_get_carets(rid, col as i64));
+                    let col0_x = caret_x_from_dict(&ts.shaped_text_get_carets(rid, 0));
+                    match (col_x, col0_x) {
+                        (Some(cx), Some(c0)) => {
+                            let result = base_x + (cx - c0);
+                            if is_sane_coord(result) {
+                                Some(result)
+                            } else {
+                                None
+                            }
+                        }
+                        _ => None,
                     }
                 }
-                _ => fallback_char_width,
-            }
-        } else {
-            fallback_char_width
-        };
+            };
 
-        Some((x, width))
-    });
+            // Width: shaped delta between col and col+1.
+            let width = if codec::i32_to_usize(col) < line_len {
+                let col_next =
+                    caret_x_from_dict(&ts.shaped_text_get_carets(rid, (col + 1) as i64));
+                let col_cur = caret_x_from_dict(&ts.shaped_text_get_carets(rid, col as i64));
+                match (col_next, col_cur) {
+                    (Some(nx), Some(cx)) => {
+                        let w = (nx - cx).abs();
+                        if is_sane_coord(w) && w >= MIN_CURSOR_WIDTH {
+                            w
+                        } else {
+                            fallback_char_width
+                        }
+                    }
+                    _ => fallback_char_width,
+                }
+            } else {
+                fallback_char_width
+            };
+
+            (x, width)
+        });
 
     let fallback_x = || -> f32 {
         let rect = editor.get_rect_at_line_column(line, col);
@@ -268,7 +277,7 @@ fn compute_override_x_and_width(
 /// moves to a different line, the old RID is freed and a new one shaped.
 /// The TextServer `Gd` reference is kept alive to ensure the RID remains
 /// valid and can be freed on invalidation or drop.
-struct ShapedTextCache {
+pub(crate) struct ShapedTextCache {
     /// -1 = no cached line.
     line: i32,
     rid: Rid,
@@ -277,7 +286,7 @@ struct ShapedTextCache {
 }
 
 impl ShapedTextCache {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             line: -1,
             rid: Rid::new(0),
@@ -285,7 +294,7 @@ impl ShapedTextCache {
         }
     }
 
-    fn get_or_shape(
+    pub(crate) fn get_or_shape(
         &mut self,
         editor: &Gd<CodeEdit>,
         font: &Gd<Font>,
@@ -322,7 +331,7 @@ impl ShapedTextCache {
         Some((self.rid, ts_ref))
     }
 
-    fn invalidate(&mut self) {
+    pub(crate) fn invalidate(&mut self) {
         // Guard: only free when Godot is still running, otherwise the
         // TextServer singleton is already destroyed and the call would crash.
         if self.line >= 0 && godot::sys::is_initialized() {
@@ -342,35 +351,8 @@ impl Drop for ShapedTextCache {
     }
 }
 
-// Thread-local: Godot is single-threaded, and multiple `with_shaped_text`
-// calls in the same frame (x + width) reuse the cached RID.
-thread_local! {
-    static SHAPED_CACHE: std::cell::RefCell<ShapedTextCache> =
-        std::cell::RefCell::new(ShapedTextCache::new());
-}
-
-fn with_shaped_text<T>(
-    editor: &Gd<CodeEdit>,
-    font: &Gd<Font>,
-    font_size: i32,
-    line: i32,
-    f: impl FnOnce(&mut Gd<godot::classes::TextServer>, Rid) -> Option<T>,
-) -> Option<T> {
-    SHAPED_CACHE.with(|cache| {
-        let mut cache = cache.borrow_mut();
-        let (rid, ts) = cache.get_or_shape(editor, font, font_size, line)?;
-        f(ts, rid)
-    })
-}
-
-/// Must be called after any text mutation to prevent stale glyph measurements.
-pub(crate) fn invalidate_shaped_cache() {
-    SHAPED_CACHE.with(|cache| {
-        cache.borrow_mut().invalidate();
-    });
-}
-
 fn shaped_text_caret_delta(
+    shaped_cache: &mut ShapedTextCache,
     editor: &Gd<CodeEdit>,
     font: &Gd<Font>,
     font_size: i32,
@@ -378,11 +360,10 @@ fn shaped_text_caret_delta(
     target_col: i32,
     caret_col: i32,
 ) -> Option<f32> {
-    with_shaped_text(editor, font, font_size, line, |ts, rid| {
-        let target_x = caret_x_from_dict(&ts.shaped_text_get_carets(rid, target_col as i64));
-        let caret_x = caret_x_from_dict(&ts.shaped_text_get_carets(rid, caret_col as i64));
-        Some(target_x? - caret_x?)
-    })
+    let (rid, ts) = shaped_cache.get_or_shape(editor, font, font_size, line)?;
+    let target_x = caret_x_from_dict(&ts.shaped_text_get_carets(rid, target_col as i64));
+    let caret_x = caret_x_from_dict(&ts.shaped_text_get_carets(rid, caret_col as i64));
+    Some(target_x? - caret_x?)
 }
 
 /// Extract the leading caret x from `shaped_text_get_carets()`.
@@ -412,6 +393,7 @@ fn caret_x_from_dict(dict: &VarDictionary) -> Option<f32> {
 /// Only used on the non-override (native caret) path; the override path
 /// computes width inside `compute_override_x_and_width` to share the RID.
 fn compute_char_width_ts(
+    shaped_cache: &mut ShapedTextCache,
     editor: &Gd<CodeEdit>,
     font: &Gd<Font>,
     font_size: i32,
@@ -424,7 +406,7 @@ fn compute_char_width_ts(
         return fallback;
     }
 
-    if let Some(delta) = shaped_text_caret_delta(editor, font, font_size, line, col + 1, col) {
+    if let Some(delta) = shaped_text_caret_delta(shaped_cache, editor, font, font_size, line, col + 1, col) {
         let w = delta.abs();
         if is_sane_coord(w) && w >= MIN_CURSOR_WIDTH {
             return w;
@@ -1081,5 +1063,95 @@ mod tests {
         assert_eq!(result.g, base.g);
         assert_eq!(result.b, base.b);
         assert_eq!(result.a, base.a);
+    }
+}
+
+#[cfg(test)]
+const HANDLED_CURSOR_SHAPES: &[vim_core::primitives::CursorShape] = &[
+    vim_core::primitives::CursorShape::Block,
+    vim_core::primitives::CursorShape::VerticalBar,
+    vim_core::primitives::CursorShape::HorizontalBar,
+    vim_core::primitives::CursorShape::HalfBlock,
+];
+
+#[cfg(test)]
+mod cursor_shape_coverage_tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn cursor_shape_dispatch_covers_all_variants() {
+        let handled: HashSet<_> = HANDLED_CURSOR_SHAPES.iter().copied().collect();
+        let all: HashSet<_> = CursorShape::ALL.iter().copied().collect();
+        let missing: Vec<_> = all.difference(&handled).collect();
+        assert!(
+            missing.is_empty(),
+            "Unhandled CursorShape variants: {:?}",
+            missing
+        );
+    }
+
+    #[test]
+    fn handled_cursor_shapes_has_no_duplicates() {
+        let mut seen = HashSet::new();
+        for kind in HANDLED_CURSOR_SHAPES {
+            assert!(
+                seen.insert(kind),
+                "Duplicate in HANDLED_CURSOR_SHAPES: {:?}",
+                kind
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+const HANDLED_OPERATORS: &[vim_core::primitives::OperatorKind] = &[
+    vim_core::primitives::OperatorKind::Delete,
+    vim_core::primitives::OperatorKind::Change,
+    vim_core::primitives::OperatorKind::Yank,
+    vim_core::primitives::OperatorKind::Indent,
+    vim_core::primitives::OperatorKind::Outdent,
+    vim_core::primitives::OperatorKind::ToggleCase,
+    vim_core::primitives::OperatorKind::Uppercase,
+    vim_core::primitives::OperatorKind::Lowercase,
+    vim_core::primitives::OperatorKind::Format,
+    vim_core::primitives::OperatorKind::FormatKeepCursor,
+    vim_core::primitives::OperatorKind::CallOperatorFunc,
+    vim_core::primitives::OperatorKind::Filter,
+    vim_core::primitives::OperatorKind::Reindent,
+    vim_core::primitives::OperatorKind::Rot13,
+    vim_core::primitives::OperatorKind::Rot47,
+    vim_core::primitives::OperatorKind::Custom,
+    vim_core::primitives::OperatorKind::Composed,
+];
+
+#[cfg(test)]
+mod operator_coverage_tests {
+    use super::*;
+    use std::collections::HashSet;
+    use vim_core::primitives::OperatorKind;
+
+    #[test]
+    fn operator_dispatch_covers_all_variants() {
+        let handled: HashSet<_> = HANDLED_OPERATORS.iter().copied().collect();
+        let all: HashSet<_> = OperatorKind::ALL.iter().copied().collect();
+        let missing: Vec<_> = all.difference(&handled).collect();
+        assert!(
+            missing.is_empty(),
+            "Unhandled OperatorKind variants: {:?}",
+            missing
+        );
+    }
+
+    #[test]
+    fn handled_operators_has_no_duplicates() {
+        let mut seen = HashSet::new();
+        for kind in HANDLED_OPERATORS {
+            assert!(
+                seen.insert(kind),
+                "Duplicate in HANDLED_OPERATORS: {:?}",
+                kind
+            );
+        }
     }
 }
