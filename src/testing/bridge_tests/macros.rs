@@ -5,7 +5,7 @@
 //!   in a single call, producing clear mismatch messages per field.
 //! - `effects!` — DSL macro that builds `Vec<Effect>` from a concise
 //!   semicolon-separated list, hiding the verbose enum constructors.
-//! - `DispatchCtx` — owns the `ShellState` + `InstanceId` + `UndoDepth` that
+//! - `DispatchCtx` — owns the `ShellState` + `InstanceId` that
 //!   the full dispatch pipeline requires, isolating each test from global state.
 //! - `apply_*` helpers — thin wrappers that create a `DocumentView` from the
 //!   mock's current text and call a single effect handler. These bypass the
@@ -150,6 +150,11 @@ macro_rules! effects {
     (@one $v:ident, end_undo) => {
         $v.push(vim_core::effects::Effect::EndUndoGroup { node_id: None });
     };
+    (@one $v:ident, end_undo($id:expr)) => {
+        $v.push(vim_core::effects::Effect::EndUndoGroup {
+            node_id: Some(vim_core::primitives::NodeId::new($id)),
+        });
+    };
 
     // ── Text mutations ───────────────────────────────────────────
     (@one $v:ident, insert($offset:expr, $text:expr)) => {
@@ -193,6 +198,28 @@ macro_rules! effects {
     };
     (@one $v:ident, redo($count:expr)) => {
         $v.push(vim_core::effects::Effect::Redo { count: $count, steps: vec![] });
+    };
+    (@one $v:ident, undo_steps($node_id:expr, $cursor:expr)) => {
+        $v.push(vim_core::effects::Effect::Undo {
+            count: 1,
+            steps: vec![vim_core::primitives::UndoNavStep {
+                node_id: vim_core::primitives::NodeId::new($node_id),
+                cursors: <smallvec::SmallVec<[vim_core::primitives::Offset; 1]>>::from_buf(
+                    [vim_core::primitives::Offset::new($cursor)]
+                ),
+            }],
+        });
+    };
+    (@one $v:ident, redo_steps($node_id:expr, $cursor:expr)) => {
+        $v.push(vim_core::effects::Effect::Redo {
+            count: 1,
+            steps: vec![vim_core::primitives::UndoNavStep {
+                node_id: vim_core::primitives::NodeId::new($node_id),
+                cursors: <smallvec::SmallVec<[vim_core::primitives::Offset; 1]>>::from_buf(
+                    [vim_core::primitives::Offset::new($cursor)]
+                ),
+            }],
+        });
     };
 
     // ── Scroll ───────────────────────────────────────────────────
@@ -256,11 +283,10 @@ macro_rules! effects {
 // ── DispatchCtx ─────────────────────────────────────────────────────────────
 
 /// Owns the per-test dispatch state so each test is fully isolated. In production,
-/// ShellState and UndoDepth live in the controller; here they're scoped to one test.
+/// ShellState lives in the controller; here it's scoped to one test.
 pub(super) struct DispatchCtx {
     state: crate::state::ShellState,
     editor_id: godot::prelude::InstanceId,
-    undo_depth: crate::effects::UndoDepth,
     clipboard: crate::bridge::clipboard::MockClipboard,
 }
 
@@ -269,13 +295,12 @@ impl DispatchCtx {
         Self {
             state: crate::state::ShellState::default(),
             editor_id: godot::prelude::InstanceId::from_i64(1),
-            undo_depth: crate::effects::UndoDepth::new(),
             clipboard: crate::bridge::clipboard::MockClipboard::new(),
         }
     }
 
     /// Run effects through the full bridge dispatch pipeline, including text
-    /// cache invalidation, undo depth tracking, and selection/cursor interplay.
+    /// cache invalidation, undo/redo via UndoStore, and selection/cursor interplay.
     /// This is the closest to production behavior achievable without Godot.
     pub(super) fn dispatch(
         &mut self,
@@ -289,7 +314,6 @@ impl DispatchCtx {
             crate::effects::DispatchContext {
                 state: &mut self.state,
                 editor_id: self.editor_id,
-                undo_depth: &mut self.undo_depth,
                 auto_brace: crate::effects::dispatch::AutoBraceMode::Ineligible,
                 auto_brace_snapshot: crate::bridge::AutoBraceSnapshot::disabled(),
                 line_index_hint: None,
@@ -316,7 +340,6 @@ impl DispatchCtx {
             crate::effects::DispatchContext {
                 state: &mut self.state,
                 editor_id: self.editor_id,
-                undo_depth: &mut self.undo_depth,
                 auto_brace: crate::effects::dispatch::AutoBraceMode::Ineligible,
                 auto_brace_snapshot: crate::bridge::AutoBraceSnapshot::disabled(),
                 line_index_hint: None,

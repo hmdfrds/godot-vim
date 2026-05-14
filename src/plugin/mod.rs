@@ -506,7 +506,7 @@ impl GodotVimCore {
 
                 // Sweep stale buffer entries now that we've detached.
                 // Without this, closing all tabs leaves stale BufferState
-                // (including UndoTree with text snapshots) in the HashMap
+                // (including UndoStore with text snapshots) in the HashMap
                 // until the next attach() call.
                 if let Some(controller) = &mut self.controller {
                     controller.sweep_stale_buffers();

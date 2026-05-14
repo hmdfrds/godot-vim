@@ -1,10 +1,12 @@
 //! Per-buffer persistent state: canonical visual selection, engine-side
-//! per-buffer state, and undo tree.
+//! per-buffer state, and undo store.
 
 use vim_core::execution::BufferLocalState;
 use vim_core::primitives::Offset;
 
 use crate::types::CharLineCol;
+
+use super::undo_store::UndoStore;
 
 /// Active Ctrl+D session. Locks the search word at session start and tracks
 /// the Godot caret index of the last-added match. The caret position is read
@@ -42,7 +44,7 @@ pub(crate) struct BufferState {
     /// restored by `on_buffer_enter`. `None` for buffers not yet visited.
     engine_state: Option<BufferLocalState>,
 
-    undo_tree: Option<super::undo_tree::UndoTree>,
+    undo_store: UndoStore,
 
     /// How many Godot carets existed on the last frame. Used to detect
     /// mouse-added/removed carets.
@@ -65,7 +67,7 @@ impl Default for BufferState {
         Self {
             visual: None,
             engine_state: None,
-            undo_tree: None,
+            undo_store: UndoStore::new(),
             last_caret_count: 1,
             saved_selections: None,
             match_session: None,
@@ -89,14 +91,12 @@ impl BufferState {
         self.engine_state.take()
     }
 
-    #[must_use]
-    pub(crate) fn undo_tree(&self) -> Option<&super::undo_tree::UndoTree> {
-        self.undo_tree.as_ref()
+    pub(crate) fn undo_store(&self) -> &UndoStore {
+        &self.undo_store
     }
 
-    /// Captures the initial document text as the undo tree root snapshot.
-    pub(crate) fn init_undo_tree(&mut self, text: &str) {
-        self.undo_tree = Some(super::undo_tree::UndoTree::new(text));
+    pub(crate) fn undo_store_mut(&mut self) -> &mut UndoStore {
+        &mut self.undo_store
     }
 
     // ── Multi-cursor tracking ─────────────────────────────────────────
@@ -157,13 +157,5 @@ impl BufferState {
 
     pub(crate) fn clear_visual_selection(&mut self) {
         self.visual = None;
-    }
-
-    /// No-op if `init_undo_tree` was never called. `text` is the full document
-    /// for periodic snapshot storage.
-    pub(crate) fn record_undo_edit(&mut self, text: &str) {
-        if let Some(ref mut tree) = self.undo_tree {
-            tree.record_edit("edit", text);
-        }
     }
 }

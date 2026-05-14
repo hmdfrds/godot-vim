@@ -24,6 +24,7 @@ compact_str = "0.7"
 
 [dev-dependencies]
 proptest = "1.4"
+smallvec = "1"
 
 
 [profile.release]

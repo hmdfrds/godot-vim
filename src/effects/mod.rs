@@ -22,4 +22,3 @@ pub(crate) mod undo;
 pub(crate) use compound::WindowNavAction;
 #[allow(unused_imports)] // Used by testing/bridge_tests.
 pub(crate) use dispatch::{dispatch, DispatchContext};
-pub(crate) use undo::UndoDepth;

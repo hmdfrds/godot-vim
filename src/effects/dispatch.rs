@@ -38,7 +38,6 @@ pub(crate) enum AutoBraceMode {
 pub(crate) struct DispatchContext<'a> {
     pub(crate) state: &'a mut ShellState,
     pub(crate) editor_id: InstanceId,
-    pub(crate) undo_depth: &'a mut undo::UndoDepth,
     pub(crate) auto_brace: AutoBraceMode,
     /// Brace pairs, string delimiters, and enabled flag — captured once before
     /// dispatch to avoid repeated FFI calls per effect.
@@ -293,7 +292,6 @@ pub(crate) fn dispatch(
     let DispatchContext {
         state,
         editor_id,
-        undo_depth,
         auto_brace,
         auto_brace_snapshot,
         line_index_hint,
@@ -417,36 +415,78 @@ pub(crate) fn dispatch(
                 text_mutated = true;
             }
             Effect::BeginUndoGroup { .. } => {
-                undo::handle_begin_undo_group(editor, undo_depth);
+                let text_str: &str = &text;
+                state
+                    .buffer(editor_id)
+                    .undo_store_mut()
+                    .begin_group(text_str);
             }
-            Effect::EndUndoGroup { .. } => {
-                undo::handle_end_undo_group(editor, undo_depth);
-                // Record an undo tree snapshot at the outermost group boundary.
-                if undo_depth.is_zero() {
+            Effect::EndUndoGroup { node_id } => {
+                if let Some(node_id) = node_id {
                     let text_str: &str = &text;
-                    state.buffer(editor_id).record_undo_edit(text_str);
+                    state
+                        .buffer(editor_id)
+                        .undo_store_mut()
+                        .end_group(node_id, text_str);
+                } else {
+                    // Empty group (no edits) — discard pending text.
+                    state.buffer(editor_id).undo_store_mut().take_pending_text();
                 }
             }
-            Effect::Undo { count, .. } => {
-                undo::handle_undo(editor, count);
-                if cursor_count <= 1 {
-                    editor.remove_secondary_carets();
+            Effect::Undo { steps, .. } => {
+                let mut any_applied = false;
+                for step in &steps {
+                    let current_text: &str = &text;
+                    let result = state
+                        .buffer(editor_id)
+                        .undo_store_mut()
+                        .undo_step(step.node_id, current_text);
+                    if let Some(result) = result {
+                        let doc = DocumentView::new(&text, &line_index);
+                        undo::apply_changes_to_editor(editor, &doc, &result);
+                        undo::restore_cursors(editor, &result.text, &step.cursors);
+                        text = Cow::Owned(result.text);
+                        line_index = LineIndex::new(&text);
+                        any_applied = true;
+                    } else {
+                        log::warn!(
+                            "undo: no snapshot for node {} — skipping step",
+                            step.node_id
+                        );
+                    }
                 }
-                text = Cow::Owned(editor.get_text());
-                line_index = LineIndex::new(&text);
-                text_mutated = true;
+                if any_applied {
+                    text_mutated = true;
+                }
             }
             Effect::UndoLine { count } => {
                 undo::handle_undo_line(count);
             }
-            Effect::Redo { count, .. } => {
-                undo::handle_redo(editor, count);
-                if cursor_count <= 1 {
-                    editor.remove_secondary_carets();
+            Effect::Redo { steps, .. } => {
+                let mut any_applied = false;
+                for step in &steps {
+                    let current_text: &str = &text;
+                    let result = state
+                        .buffer(editor_id)
+                        .undo_store_mut()
+                        .redo_step(step.node_id, current_text);
+                    if let Some(result) = result {
+                        let doc = DocumentView::new(&text, &line_index);
+                        undo::apply_changes_to_editor(editor, &doc, &result);
+                        undo::restore_cursors(editor, &result.text, &step.cursors);
+                        text = Cow::Owned(result.text);
+                        line_index = LineIndex::new(&text);
+                        any_applied = true;
+                    } else {
+                        log::warn!(
+                            "redo: no snapshot for node {} — skipping step",
+                            step.node_id
+                        );
+                    }
                 }
-                text = Cow::Owned(editor.get_text());
-                line_index = LineIndex::new(&text);
-                text_mutated = true;
+                if any_applied {
+                    text_mutated = true;
+                }
             }
             other => pass2.push(other),
         }
@@ -900,8 +940,8 @@ pub(crate) fn dispatch_pass2_effect(
             log::trace!("ClearVirtualText: ns={}", namespace);
         }
         Effect::UndoTreeSnapshot { snapshot } => {
-            let report = crate::state::undo_tree::format_undo_tree_snapshot(&snapshot);
-            log::info!("UndoTreeSnapshot:\n{}", report);
+            let report = crate::state::undo_format::format_undo_tree_snapshot(&snapshot);
+            messages::handle_show_message(state.globals_mut(), &report);
         }
         Effect::OpenCommandWindow { .. } => {
             log::warn!("q: / q/ command window not supported in CodeEdit");

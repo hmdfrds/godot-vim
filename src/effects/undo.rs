@@ -1,92 +1,71 @@
-//! Undo/redo effect handlers and [`UndoDepth`] tracking for Godot's
-//! `begin_complex_operation` / `end_complex_operation` nesting.
+//! Undo/redo effect handlers using the changeset-based `UndoStore` pipeline.
+//!
+//! Applies `UndoApplyResult` changes to CodeEdit via targeted
+//! `insert_text`/`remove_text` calls and restores cursor positions
+//! from engine-computed offsets.
 
+use crate::bridge::codec::{DocumentView, LineIndex};
 use crate::bridge::port::TextEditorPort;
+use crate::state::undo_store::UndoApplyResult;
 
-/// Depth ceiling before suppressing Godot calls. Typical depth is 1-3;
-/// exceeding 64 indicates an engine bug, not normal operation.
-const MAX_UNDO_DEPTH: u32 = 64;
-
-/// Tracked nesting depth for Godot's `begin/end_complex_operation`.
+/// Apply changeset changes to CodeEdit in REVERSE order.
 ///
-/// Enforces a ceiling invariant: depths beyond `MAX_UNDO_DEPTH` are counted
-/// but not forwarded to Godot, keeping the Godot undo stack balanced even
-/// under runaway nesting from engine bugs.
-#[derive(Debug, Default)]
-pub(crate) struct UndoDepth(u32);
-
-impl UndoDepth {
-    pub(crate) const fn new() -> Self {
-        Self(0)
-    }
-
-    #[must_use]
-    pub(crate) fn is_zero(&self) -> bool {
-        self.0 == 0
-    }
-
-    #[must_use]
-    pub(crate) fn depth(&self) -> u32 {
-        self.0
-    }
-
-    /// Drain all depth, returning the count of Godot-side `end_complex_operation`
-    /// calls needed. Depths above `MAX_UNDO_DEPTH` were never sent to Godot.
-    pub(crate) fn drain(&mut self) -> u32 {
-        let godot_groups = self.0.min(MAX_UNDO_DEPTH);
-        self.0 = 0;
-        godot_groups
-    }
-}
-
-/// Begin an undo group. Depths beyond `MAX_UNDO_DEPTH` are tracked but not
-/// forwarded to Godot; the matching `handle_end_undo_group` suppresses the
-/// corresponding end call, keeping the Godot stack balanced.
-pub(crate) fn handle_begin_undo_group(
+/// Each `(from, to, replacement)` triple is processed back-to-front so that
+/// earlier byte offsets remain valid while later regions are modified.
+/// - `from < to` with `None` → pure deletion
+/// - `from == to` with `Some(text)` → pure insertion
+/// - `from < to` with `Some(text)` → replacement (delete then insert)
+pub(crate) fn apply_changes_to_editor(
     editor: &mut impl TextEditorPort,
-    undo_depth: &mut UndoDepth,
+    doc: &DocumentView,
+    result: &UndoApplyResult,
 ) {
-    undo_depth.0 += 1;
-    if undo_depth.0 <= MAX_UNDO_DEPTH {
-        editor.begin_complex_operation();
-    } else {
-        // Controller's ensure_undo_balanced will surface orphaned groups.
-        log::error!(
-            "BeginUndoGroup exceeded depth ceiling ({MAX_UNDO_DEPTH}), \
-             suppressing Godot call (depth={})",
-            undo_depth.0
-        );
+    // Iterate in reverse so that mutations at higher offsets don't
+    // invalidate the byte positions of earlier changes.
+    for &(from, to, ref replacement) in result.changes.iter().rev() {
+        if from < to {
+            let from_pos = doc.line_index.byte_to_line_col(doc.text, from);
+            let to_pos = doc.line_index.byte_to_line_col(doc.text, to);
+            editor.remove_text(from_pos.line, from_pos.col, to_pos.line, to_pos.col);
+        }
+        if let Some(ref text) = replacement {
+            let insert_pos = doc.line_index.byte_to_line_col(doc.text, from);
+            editor.insert_text(text, insert_pos.line, insert_pos.col);
+        }
     }
 }
 
-/// End the innermost undo group. Above-ceiling depths match suppressed
-/// begins — the counter decrements but Godot's `end_complex_operation`
-/// is NOT called.
-pub(crate) fn handle_end_undo_group(editor: &mut impl TextEditorPort, undo_depth: &mut UndoDepth) {
-    if undo_depth.0 > MAX_UNDO_DEPTH {
-        undo_depth.0 -= 1;
-    } else if undo_depth.0 > 0 {
-        editor.end_complex_operation();
-        undo_depth.0 -= 1;
-    } else {
-        log::warn!("EndUndoGroup without matching BeginUndoGroup (depth already 0)");
+/// Restore cursor positions from engine-computed byte offsets.
+///
+/// Removes secondary carets, then sets the primary cursor from `cursors[0]`
+/// and adds secondary carets from `cursors[1..]`. Byte offsets are clamped
+/// to the text length to handle edge cases.
+pub(crate) fn restore_cursors(
+    editor: &mut impl TextEditorPort,
+    new_text: &str,
+    cursors: &[vim_core::primitives::Offset],
+) {
+    if cursors.is_empty() {
+        return;
     }
-}
 
-pub(crate) fn handle_undo(editor: &mut impl TextEditorPort, count: u32) {
-    log::debug!("undo: count={}", count);
-    for _ in 0..count {
-        editor.undo();
-    }
-    editor.deselect();
-}
+    let line_index = LineIndex::new(new_text);
+    let text_len = new_text.len();
 
-pub(crate) fn handle_redo(editor: &mut impl TextEditorPort, count: u32) {
-    log::debug!("redo: count={}", count);
-    for _ in 0..count {
-        editor.redo();
+    editor.remove_secondary_carets();
+
+    // Primary cursor.
+    let primary_byte = cursors[0].get().min(text_len.saturating_sub(1));
+    let primary_pos = line_index.byte_to_line_col(new_text, primary_byte);
+    editor.set_caret_line(primary_pos.line);
+    editor.set_caret_column(primary_pos.col);
+
+    // Secondary cursors.
+    for cursor in &cursors[1..] {
+        let byte = cursor.get().min(text_len.saturating_sub(1));
+        let pos = line_index.byte_to_line_col(new_text, byte);
+        editor.add_caret(pos.line, pos.col);
     }
-    editor.deselect();
 }
 
 /// `U` (per-line undo) — not supported by Godot's CodeEdit.

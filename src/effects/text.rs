@@ -49,8 +49,8 @@ pub(crate) fn handle_delete(
     editor.remove_text(start_pos.line, start_pos.col, end_pos.line, end_pos.col);
 }
 
-/// Replace `[start, end)` with `content`. Wrapped in a single complex
-/// operation so both steps form one undo entry.
+/// Replace `[start, end)` with `content`. No complex operation wrapping —
+/// undo grouping is managed by the changeset-based `UndoStore` pipeline.
 pub(crate) fn handle_replace(
     editor: &mut impl TextEditorPort,
     doc: &DocumentView,
@@ -71,8 +71,6 @@ pub(crate) fn handle_replace(
         content.len()
     );
 
-    editor.begin_complex_operation();
     editor.remove_text(start_pos.line, start_pos.col, end_pos.line, end_pos.col);
     editor.insert_text(content, start_pos.line, start_pos.col);
-    editor.end_complex_operation();
 }

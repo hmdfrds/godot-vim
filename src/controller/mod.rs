@@ -31,7 +31,7 @@ use compact_str::CompactString;
 use godot::classes::CodeEdit;
 use godot::prelude::*;
 use vim_core::document::Document;
-use vim_core::execution::{VimEngine, VimSession};
+use vim_core::execution::{VimEngine, VimHost, VimSession};
 use vim_core::keymap::KeyEvent;
 use vim_core::primitives::Direction;
 
@@ -456,14 +456,6 @@ impl VimController {
         self.engine_mut().on_buffer_enter(state);
     }
 
-    /// Seed the undo tree on first attach (no-op if already initialized).
-    pub(crate) fn init_undo_tree(&mut self, editor_id: InstanceId, text: &str) {
-        let buf = self.host_state_mut().buffer(editor_id);
-        if buf.undo_tree().is_none() {
-            buf.init_undo_tree(text);
-        }
-    }
-
     /// Evict buffer state for editors freed since the last sweep.
     ///
     /// Called from `attach()` and `perform_detach()` — natural choke points
@@ -497,27 +489,24 @@ impl VimController {
     ///
     /// Delegates to [`VimEngine::emergency_reset`] which clears parser, mode,
     /// state, typeahead, host pending, recording, command-line session,
-    /// cmd_buffer, is_repeating, and changelist in one call. Then drains
-    /// orphaned undo groups, clears substitute preview, and resets all
-    /// transient shell state.
-    ///
-    /// Returns the number of Godot undo groups that were drained — callers
-    /// with a live editor should close that many `end_complex_operation`
-    /// calls and optionally `undo()` to roll back partial mutations.
-    pub(crate) fn force_cleanup_without_editor(&mut self) -> u32 {
+    /// cmd_buffer, is_repeating, and changelist in one call. Then discards
+    /// any orphaned undo group pending text, clears substitute preview, and
+    /// resets all transient shell state.
+    pub(crate) fn force_cleanup_without_editor(&mut self) {
         log::debug!("force_cleanup_without_editor: canonical Tier 1 reset");
         self.engine_mut().emergency_reset();
-        let godot_groups = if let ControllerPhase::Attached { ref mut session } = self.phase {
+        if let ControllerPhase::Attached { ref mut session } = self.phase {
             let host = session.host_mut();
-            let groups = host.undo_depth_mut().drain();
+            let editor_id = host.editor().instance_id();
+            // Discard any pending undo group text (orphaned begin_group).
+            host.state_mut()
+                .buffer(editor_id)
+                .undo_store_mut()
+                .take_pending_text();
             host.state_mut().clear_substitute_preview();
             host.state_mut().take_highlight_yank();
-            groups
-        } else {
-            0
-        };
+        }
         self.ctx.transient.reset();
-        godot_groups
     }
 
     /// Reset parser state — clears pending operator (e.g. `d` waiting for
@@ -671,20 +660,6 @@ impl VimController {
         editor.deselect();
     }
 
-    /// Drain any remaining undo depth as defense-in-depth after pipeline exit.
-    /// The pipeline's `EndUndo` effect handles the normal case; this catches
-    /// edge cases where undo groups are still open.
-    pub(crate) fn drain_remaining_undo_depth(&mut self, editor: &mut Gd<CodeEdit>) {
-        let remaining = if let ControllerPhase::Attached { ref mut session } = self.phase {
-            session.host_mut().undo_depth_mut().drain()
-        } else {
-            0
-        };
-        for _ in 0..remaining {
-            editor.end_complex_operation();
-        }
-    }
-
     /// Sync sticky column from a mouse click or external caret move.
     /// This is the only shell-side write path; the engine owns the column.
     pub(crate) fn set_engine_sticky_column(&mut self, col: usize) {
@@ -784,21 +759,33 @@ impl VimController {
     /// Panic recovery composed from the canonical Tier 1 cleanup.
     ///
     /// Delegates to [`force_cleanup_without_editor`](Self::force_cleanup_without_editor)
-    /// for engine + shell reset, then uses the returned undo group count to
-    /// close orphaned Godot undo groups, roll back partial text mutations,
-    /// and restore the editor to a clean visual state.
+    /// for engine + shell reset. If an undo group was pending (partial text
+    /// mutation), restores the editor text from the pending snapshot.
+    /// Restores the editor to a clean visual state.
     pub(crate) fn recover_from_panic(&mut self, editor: &mut Gd<CodeEdit>) {
-        let godot_groups = self.force_cleanup_without_editor();
-        for _ in 0..godot_groups {
-            editor.end_complex_operation();
-        }
-        if godot_groups > 0 {
+        // Capture pending text BEFORE force_cleanup discards it.
+        let pending_text = if let ControllerPhase::Attached { ref mut session } = self.phase {
+            let editor_id = session.host().editor().instance_id();
+            session
+                .host_mut()
+                .state_mut()
+                .buffer(editor_id)
+                .undo_store_mut()
+                .take_pending_text()
+        } else {
+            None
+        };
+
+        self.force_cleanup_without_editor();
+
+        // Restore pre-mutation text if we had a pending group.
+        if let Some(restore_text) = pending_text {
             log::warn!(
-                "recover_from_panic: rolling back {} closed undo group(s) via editor.undo()",
-                godot_groups,
+                "recover_from_panic: restoring editor text from pending undo group snapshot"
             );
-            editor.undo();
+            editor.set_text(&godot::prelude::GString::from(&restore_text));
         }
+
         editor.deselect();
         editor.remove_secondary_carets();
         let editor_id = editor.instance_id();
@@ -856,8 +843,36 @@ impl VimController {
             vim_core::execution::ExternalEditKind::HostNotified,
         );
 
-        // Update the host's cache so the next call doesn't re-detect.
+        // Refresh text_cache BEFORE syncing undo nodes — record_internal_undo_node
+        // reads text_cache for the post-edit text (T1). Without this, text_cache
+        // still holds the pre-edit text, producing an identity changeset.
         session.host_mut().invalidate_cache();
+
+        // Sync internal undo nodes immediately with the correct T0 (old_text).
+        // reconcile_external_text_change calls engine.apply_external_edit_with_recording()
+        // which may create undo tree nodes that bypass the effect pipeline. Record
+        // them in UndoStore now — deferring to the next process_key would lose the
+        // correct pre-edit text (T0).
+        {
+            use vim_core::effects::Effect;
+            let fc_node = session.engine_mut().take_last_force_committed_node();
+            let ext_node = session.engine_mut().take_last_external_edit_node();
+            if let Some(fc_id) = fc_node {
+                session.host_mut().apply_effects(&[Effect::EndUndoGroup {
+                    node_id: Some(fc_id),
+                }]);
+            }
+            if let Some(ext_id) = ext_node {
+                session
+                    .host_mut()
+                    .record_internal_undo_node(ext_id, &old_text_owned);
+            }
+            if fc_node.is_some() && session.engine().mode().is_insert() {
+                session.host_mut().apply_effects(&[Effect::BeginUndoGroup {
+                    cursor_strategy: vim_core::primitives::UndoCursorStrategy::FirstEdit,
+                }]);
+            }
+        }
 
         // H1: Clear secondary cursors on external edit. External text changes
         // (Find-Replace, formatter, etc.) invalidate secondary cursor positions
@@ -1276,7 +1291,6 @@ mod tests {
     /// Categories:
     ///   engine     — cleaned by `emergency_reset()` inside `force_cleanup_without_editor`
     ///   shell      — cleaned selectively by `force_cleanup_without_editor`
-    ///   undo       — cleaned by `undo_depth.drain()` inside `force_cleanup_without_editor`
     ///   transient  — in `TransientShellState`, cleaned by `transient.reset()`
     ///   config     — set via `apply_settings()`, never reset on cleanup
     ///   persistent — survives all cleanups

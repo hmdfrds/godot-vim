@@ -58,7 +58,7 @@ impl GodotVimCore {
 
         // Create the VimSession by pairing the detached engine with a new
         // GodotHost wrapping this editor. Must happen before any method
-        // that accesses host state (restore_buffer, init_undo_tree, etc.).
+        // that accesses host state (restore_buffer, etc.).
         if let Some(controller) = &mut self.controller {
             controller.attach_session(editor.clone());
         }
@@ -86,13 +86,6 @@ impl GodotVimCore {
 
         if let Some(controller) = &mut self.controller {
             controller.restore_buffer_engine_state(new_id);
-        }
-
-        // Seed the undo tree with the editor's current text so that the first
-        // undo operation has a base snapshot to diff against.
-        if let Some(controller) = &mut self.controller {
-            let text = editor.get_text().to_string();
-            controller.init_undo_tree(new_id, &text);
         }
 
         // Comment delimiters are language-specific (# for GDScript, // for C#/shaders).
@@ -195,7 +188,7 @@ impl GodotVimCore {
         // CRITICAL: Deferred signals (caret_changed, text_changed, draw,
         // scrollbar value_changed) must be disconnected BEFORE any operation
         // that could trigger them (exit_mode_via_pipeline, cleanup_visual_-
-        // artifacts, drain_remaining_undo_depth, etc.).
+        // artifacts, etc.).
         //
         // Godot's DEFERRED connection flag enqueues callbacks into the
         // frame's deferred-call queue when the signal is emitted. Crucially,
@@ -284,10 +277,6 @@ impl GodotVimCore {
             // Defense-in-depth: clear Godot-side visual artifacts in case
             // the pipeline exit left stale selection highlights.
             controller.cleanup_visual_artifacts(editor_id, &mut editor);
-
-            // Defense-in-depth: drain any remaining undo depth in case
-            // the pipeline's EndUndo didn't close all open groups.
-            controller.drain_remaining_undo_depth(&mut editor);
 
             // Clear parser state (pending operator like `d`) so it doesn't
             // leak to the next editor. Macro recording is NOT aborted here --

@@ -1,6 +1,6 @@
 //! [`GodotHost`]: Godot-side host adapter implementing `Document + VimHost`.
 //!
-//! Owns the `Gd<CodeEdit>`, text cache, cursor state, shell state, undo depth,
+//! Owns the `Gd<CodeEdit>`, text cache, cursor state, shell state,
 //! and providers. Delegates effect application to [`crate::effects::dispatch`]
 //! and host request handling to [`crate::host::execute`].
 //!
@@ -22,7 +22,6 @@ use super::codec::{self, LineIndex};
 use super::context::{OwnedGodotFoldProvider, OwnedGodotIndentProvider};
 use super::port_impl::{AutoBraceSnapshot, SyntaxRegion};
 use crate::effects::dispatch::{AutoBraceMode, DispatchContext};
-use crate::effects::UndoDepth;
 use crate::host::SecurityPolicy;
 use crate::settings::{FileAccessScope, ProjectVimrc, ShellExecution};
 use crate::state::ShellState;
@@ -53,7 +52,7 @@ pub(crate) enum PendingUiAction {
 /// Godot-side host adapter implementing [`Document`] + [`VimHost`].
 ///
 /// Wraps a `Gd<CodeEdit>` and provides the document cache, cursor state,
-/// selection, viewport, shell state, undo depth, and fold/indent providers
+/// selection, viewport, shell state, and fold/indent providers
 /// that `VimSession<GodotHost>` needs.
 pub(crate) struct GodotHost {
     // ── Document backing ────────────────────────────────────────────────
@@ -70,7 +69,6 @@ pub(crate) struct GodotHost {
 
     // ── Effect dispatch state ───────────────────────────────────────────
     state: ShellState,
-    undo_depth: UndoDepth,
 
     // ── Providers (own Gd<CodeEdit> clones) ─────────────────────────────
     fold_provider: OwnedGodotFoldProvider,
@@ -208,13 +206,12 @@ impl VimHost for GodotHost {
         let cursor_count = self.editor.get_caret_count().max(1) as usize;
 
         // Destructure to satisfy the borrow checker: we need &mut self.editor
-        // for CodeEditPort AND &mut self.state / &mut self.undo_depth for
-        // DispatchContext simultaneously. This works because Rust allows
-        // borrowing disjoint fields of a struct.
+        // for CodeEditPort AND &mut self.state for DispatchContext
+        // simultaneously. This works because Rust allows borrowing disjoint
+        // fields of a struct.
         let Self {
             editor,
             state,
-            undo_depth,
             clipboard,
             text_cache,
             line_index,
@@ -232,7 +229,6 @@ impl VimHost for GodotHost {
             DispatchContext {
                 state,
                 editor_id,
-                undo_depth,
                 auto_brace,
                 auto_brace_snapshot,
                 line_index_hint,
@@ -271,6 +267,17 @@ impl VimHost for GodotHost {
         *visual_selection = state
             .buffer_ref(editor_id)
             .and_then(|b| b.visual().cloned());
+    }
+
+    fn record_internal_undo_node(
+        &mut self,
+        node_id: vim_core::primitives::NodeId,
+        text_before: &str,
+    ) {
+        let editor_id = self.editor.instance_id();
+        let store = self.state.buffer(editor_id).undo_store_mut();
+        store.begin_group(text_before);
+        store.end_group(node_id, &self.text_cache);
     }
 
     fn handle_request(&mut self, request: &HostRequest) -> RequestDisposition {
@@ -411,7 +418,6 @@ impl GodotHost {
                 width: 0,
             },
             state: ShellState::default(),
-            undo_depth: UndoDepth::new(),
             security_policy: SecurityPolicy {
                 shell_execution: ShellExecution::Disabled,
                 file_access_scope: FileAccessScope::ProjectOnly,
@@ -506,32 +512,32 @@ impl GodotHost {
 
     // ── Undo safety ─────────────────────────────────────────────────────
 
-    /// Close any orphaned `begin_complex_operation` calls left open by
-    /// a bug or panic. Insert/Replace legitimately hold depth=1 across
-    /// keystrokes (opened on mode entry, closed on Esc); depth>1 is a bug.
+    /// Check for orphaned `begin_group` calls left open by a bug or panic.
+    /// Insert/Replace legitimately hold a pending group across keystrokes
+    /// (opened on mode entry, closed on Esc); in other modes a pending
+    /// group indicates a bug.
     pub(crate) fn ensure_undo_balanced(&mut self, mode: Mode) {
         if mode.is_insert() || mode.is_replace() {
-            let depth = self.undo_depth.depth();
-            if depth > 1 {
-                log::error!(
-                    "Abnormal undo depth {} in {} mode (expected 1) editor=#{} -- engine bug?",
-                    depth,
-                    mode,
-                    self.editor.instance_id().to_i64(),
-                );
-            }
+            // Pending group is expected during insert/replace — the engine
+            // opens a group on mode entry and closes it on Esc.
             return;
         }
 
-        let godot_groups = self.undo_depth.drain();
-        if godot_groups > 0 {
-            self.state.globals_mut().set_error(
-                "Internal: orphaned undo group(s) recovered -- undo may be inconsistent",
+        let editor_id = self.editor.instance_id();
+        let has_pending = self.state.buffer(editor_id).undo_store().has_pending();
+        if has_pending {
+            log::warn!(
+                "ensure_undo_balanced: orphaned undo group in {} mode, editor=#{} — discarding pending text",
+                mode,
+                editor_id.to_i64(),
             );
-        }
-        for i in 0..godot_groups {
-            log::warn!("Closing orphaned undo group ({}/{})", i + 1, godot_groups);
-            self.editor.end_complex_operation();
+            self.state
+                .buffer(editor_id)
+                .undo_store_mut()
+                .take_pending_text();
+            self.state.globals_mut().set_error(
+                "Internal: orphaned undo group recovered -- undo may be inconsistent",
+            );
         }
     }
 
@@ -557,10 +563,6 @@ impl GodotHost {
 
     pub(crate) fn set_state(&mut self, state: ShellState) {
         self.state = state;
-    }
-
-    pub(crate) fn undo_depth_mut(&mut self) -> &mut UndoDepth {
-        &mut self.undo_depth
     }
 
     pub(crate) fn highlight_yank_duration_ms(&self) -> u32 {

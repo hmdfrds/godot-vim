@@ -277,7 +277,7 @@ impl VimController {
     fn handle_host_pending_ui_action(
         &mut self,
         action: crate::bridge::godot_host::PendingUiAction,
-        editor: &Gd<CodeEdit>,
+        _editor: &Gd<CodeEdit>,
     ) {
         use crate::bridge::godot_host::PendingUiAction;
         match action {
@@ -285,22 +285,15 @@ impl VimController {
                 self.ctx.transient.pending_ui_action = Some(action);
             }
             PendingUiAction::ShowUndoTree => {
-                let editor_id = editor.instance_id();
                 let ControllerPhase::Attached { ref mut session } = self.phase else {
                     panic!("handle_host_pending_ui_action: requires active session");
                 };
-                let msg = session
-                    .host_mut()
-                    .state_mut()
-                    .buffer(editor_id)
-                    .undo_tree()
-                    .map_or_else(
-                        || "No undo tree for this buffer".to_owned(),
-                        |tree| tree.format_tree(),
-                    );
+                // The undo tree is now engine-owned. Use `:undotree` which
+                // triggers vim-core's Effect::UndoTreeSnapshot, handled by
+                // dispatch (formatted by undo_format::format_undo_tree_snapshot).
                 crate::effects::messages::handle_show_message(
                     session.host_mut().state_mut().globals_mut(),
-                    &msg,
+                    "Use :undotree to display the undo tree",
                 );
             }
             PendingUiAction::PerfReport => {

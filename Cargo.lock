@@ -258,6 +258,7 @@ dependencies = [
  "godot",
  "log",
  "proptest",
+ "smallvec",
  "unicode-segmentation",
  "vim-core",
 ]

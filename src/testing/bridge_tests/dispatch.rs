@@ -21,7 +21,7 @@ fn dispatch_delete_insert_round_trip() {
         delete(5, 6);
         insert(5, "_");
         set_cursor(6);
-        end_undo
+        end_undo(1)
     ];
     ctx.dispatch(&mut mock, fx);
     assert_editor!(mock, text: "hello_world", cursor: (0, 6));
@@ -36,7 +36,7 @@ fn dispatch_replace_round_trip() {
         begin_undo;
         replace(6, 11, "rust");
         set_cursor(9);
-        end_undo
+        end_undo(1)
     ];
     ctx.dispatch(&mut mock, fx);
     assert_editor!(mock, text: "hello rust", cursor: (0, 9));
@@ -51,7 +51,7 @@ fn dispatch_multiline_insert_round_trip() {
         begin_undo;
         insert(5, "\nworld");
         set_cursor(6);
-        end_undo
+        end_undo(1)
     ];
     ctx.dispatch(&mut mock, fx);
     assert_editor!(mock, text: "hello\nworld", cursor: (1, 0));
@@ -66,7 +66,7 @@ fn dispatch_delete_across_lines() {
         begin_undo;
         delete(2, 8);
         set_cursor(2);
-        end_undo
+        end_undo(1)
     ];
     ctx.dispatch(&mut mock, fx);
     assert_editor!(mock, text: "herld\nfoo", cursor: (0, 2));
@@ -85,7 +85,7 @@ fn dispatch_undo_redo_round_trip() {
         begin_undo;
         delete(5, 11);
         set_cursor(4);
-        end_undo
+        end_undo(1)
     ];
     ctx.dispatch(&mut mock, fx);
     assert_editor!(mock, text: "hello");
@@ -94,18 +94,21 @@ fn dispatch_undo_redo_round_trip() {
         begin_undo;
         insert(5, "!");
         set_cursor(5);
-        end_undo
+        end_undo(2)
     ];
     ctx.dispatch(&mut mock, fx);
     assert_editor!(mock, text: "hello!");
 
-    ctx.dispatch(&mut mock, effects![undo(1)]);
+    ctx.dispatch(&mut mock, effects![undo_steps(2, 0)]);
     assert_editor!(mock, text: "hello");
 
-    ctx.dispatch(&mut mock, effects![undo(1)]);
+    ctx.dispatch(&mut mock, effects![undo_steps(1, 0)]);
     assert_editor!(mock, text: "hello world");
 
-    ctx.dispatch(&mut mock, effects![redo(2)]);
+    ctx.dispatch(&mut mock, effects![redo_steps(1, 0)]);
+    assert_editor!(mock, text: "hello");
+
+    ctx.dispatch(&mut mock, effects![redo_steps(2, 0)]);
     assert_editor!(mock, text: "hello!");
 }
 
@@ -114,19 +117,19 @@ fn dispatch_consecutive_commands_independent_undo() {
     let mut mock = MockTextEdit::new("aaa bbb ccc");
     let mut ctx = DispatchCtx::new();
 
-    let fx = effects![begin_undo; delete(4, 8); set_cursor(4); end_undo];
+    let fx = effects![begin_undo; delete(4, 8); set_cursor(4); end_undo(1)];
     ctx.dispatch(&mut mock, fx);
     assert_editor!(mock, text: "aaa ccc");
 
-    let fx = effects![begin_undo; delete(4, 7); set_cursor(3); end_undo];
+    let fx = effects![begin_undo; delete(4, 7); set_cursor(3); end_undo(2)];
     ctx.dispatch(&mut mock, fx);
     assert_editor!(mock, text: "aaa ");
 
     // Each command is an independent undo step.
-    ctx.dispatch(&mut mock, effects![undo(1)]);
+    ctx.dispatch(&mut mock, effects![undo_steps(2, 0)]);
     assert_editor!(mock, text: "aaa ccc");
 
-    ctx.dispatch(&mut mock, effects![undo(1)]);
+    ctx.dispatch(&mut mock, effects![undo_steps(1, 0)]);
     assert_editor!(mock, text: "aaa bbb ccc");
 }
 
@@ -139,12 +142,12 @@ fn dispatch_replace_then_undo_preserves_original() {
         begin_undo;
         replace(4, 9, "slow");
         set_cursor(7);
-        end_undo
+        end_undo(1)
     ];
     ctx.dispatch(&mut mock, fx);
     assert_editor!(mock, text: "the slow brown fox");
 
-    ctx.dispatch(&mut mock, effects![undo(1)]);
+    ctx.dispatch(&mut mock, effects![undo_steps(1, 0)]);
     assert_editor!(mock, text: "the quick brown fox");
 }
 
@@ -153,11 +156,11 @@ fn dispatch_multiple_inserts_in_one_group() {
     let mut mock = MockTextEdit::new("ac");
     let mut ctx = DispatchCtx::new();
 
-    let fx = effects![begin_undo; insert(1, "b"); end_undo];
+    let fx = effects![begin_undo; insert(1, "b"); end_undo(1)];
     ctx.dispatch(&mut mock, fx);
     assert_editor!(mock, text: "abc");
 
-    ctx.dispatch(&mut mock, effects![undo(1)]);
+    ctx.dispatch(&mut mock, effects![undo_steps(1, 0)]);
     assert_editor!(mock, text: "ac");
 }
 
@@ -166,20 +169,25 @@ fn undo_with_count_via_dispatch() {
     let mut mock = MockTextEdit::new("");
     let mut ctx = DispatchCtx::new();
 
-    // Three separate insert commands
-    for ch in &["a", "b", "c"] {
+    // Three separate insert commands with unique node IDs.
+    let node_ids: [u32; 3] = [1, 2, 3];
+    for (i, ch) in ["a", "b", "c"].iter().enumerate() {
         let len = mock.get_text().len();
-        let fx = effects![begin_undo; insert(len, *ch); end_undo];
+        let nid = node_ids[i];
+        let fx = effects![begin_undo; insert(len, *ch); end_undo(nid)];
         ctx.dispatch(&mut mock, fx);
     }
     assert_editor!(mock, text: "abc");
 
-    // Undo 2 at once
-    ctx.dispatch(&mut mock, effects![undo(2)]);
+    // Undo nodes 3 and 2 individually (changeset model undoes by node, not count).
+    ctx.dispatch(&mut mock, effects![undo_steps(3, 0)]);
+    assert_editor!(mock, text: "ab");
+
+    ctx.dispatch(&mut mock, effects![undo_steps(2, 0)]);
     assert_editor!(mock, text: "a");
 
-    // Redo 1
-    ctx.dispatch(&mut mock, effects![redo(1)]);
+    // Redo node 2
+    ctx.dispatch(&mut mock, effects![redo_steps(2, 0)]);
     assert_editor!(mock, text: "ab");
 }
 
@@ -313,10 +321,10 @@ fn dispatch_text_cache_invalidation() {
     let fx = effects![
         begin_undo;
         insert(1, "X");
-        end_undo;
+        end_undo(1);
         begin_undo;
         insert(3, "Y");
-        end_undo
+        end_undo(2)
     ];
     ctx.dispatch(&mut mock, fx);
     assert_editor!(mock, text: "aXbYc");
@@ -349,21 +357,24 @@ fn scenario_insert_delete_replace_sequence() {
     let mut mock = MockTextEdit::new("fn main() {}");
     let mut ctx = DispatchCtx::new();
 
-    let fx = effects![begin_undo; replace(10, 12, "{\n    \n}"); set_cursor(15); end_undo];
+    let fx = effects![begin_undo; replace(10, 12, "{\n    \n}"); set_cursor(15); end_undo(1)];
     ctx.dispatch(&mut mock, fx);
     assert_editor!(mock, text: "fn main() {\n    \n}");
 
-    let fx = effects![begin_undo; insert(16, "println!(\"hello\");"); set_cursor(33); end_undo];
+    let fx = effects![begin_undo; insert(16, "println!(\"hello\");"); set_cursor(33); end_undo(2)];
     ctx.dispatch(&mut mock, fx);
     assert_editor!(mock, text: "fn main() {\n    println!(\"hello\");\n}");
 
-    ctx.dispatch(&mut mock, effects![undo(1)]);
+    ctx.dispatch(&mut mock, effects![undo_steps(2, 0)]);
     assert_editor!(mock, text: "fn main() {\n    \n}");
 
-    ctx.dispatch(&mut mock, effects![undo(1)]);
+    ctx.dispatch(&mut mock, effects![undo_steps(1, 0)]);
     assert_editor!(mock, text: "fn main() {}");
 
-    ctx.dispatch(&mut mock, effects![redo(2)]);
+    ctx.dispatch(&mut mock, effects![redo_steps(1, 0)]);
+    assert_editor!(mock, text: "fn main() {\n    \n}");
+
+    ctx.dispatch(&mut mock, effects![redo_steps(2, 0)]);
     assert_editor!(mock, text: "fn main() {\n    println!(\"hello\");\n}");
 }
 
@@ -384,12 +395,12 @@ fn scenario_visual_select_delete_undo() {
         begin_undo;
         delete(6, 12);
         set_cursor(6);
-        end_undo
+        end_undo(1)
     ];
     ctx.dispatch(&mut mock, fx);
     assert_editor!(mock, text: "hello foo");
 
-    ctx.dispatch(&mut mock, effects![undo(1)]);
+    ctx.dispatch(&mut mock, effects![undo_steps(1, 0)]);
     assert_editor!(mock, text: "hello world foo");
 }
 
@@ -444,7 +455,7 @@ fn single_cursor_dd_clears_secondaries() {
         begin_undo;
         delete(0, 6);
         set_cursor(0);
-        end_undo
+        end_undo(1)
     ];
     ctx.dispatch(&mut mock, fx);
 
@@ -472,7 +483,7 @@ fn multi_cursor_typing_preserves_secondaries() {
         set_cursor(1);
         set_cursor(6);
         set_cursor(11);
-        end_undo
+        end_undo(1)
     ];
     ctx.dispatch(&mut mock, fx);
 
@@ -784,7 +795,6 @@ fn primary_caret_enforces_scrolloff() {
         crate::effects::DispatchContext {
             state: &mut crate::state::ShellState::default(),
             editor_id: godot::prelude::InstanceId::from_i64(99),
-            undo_depth: &mut crate::effects::UndoDepth::new(),
             auto_brace: crate::effects::dispatch::AutoBraceMode::Ineligible,
             auto_brace_snapshot: crate::bridge::AutoBraceSnapshot::disabled(),
             line_index_hint: None,
@@ -812,7 +822,6 @@ fn primary_caret_enforces_scrolloff() {
         crate::effects::DispatchContext {
             state: &mut crate::state::ShellState::default(),
             editor_id: godot::prelude::InstanceId::from_i64(99),
-            undo_depth: &mut crate::effects::UndoDepth::new(),
             auto_brace: crate::effects::dispatch::AutoBraceMode::Ineligible,
             auto_brace_snapshot: crate::bridge::AutoBraceSnapshot::disabled(),
             line_index_hint: None,
@@ -868,7 +877,7 @@ fn multi_cursor_dw_deletes_word_on_three_lines() {
         set_cursor(0);
         set_cursor(4);
         set_cursor(8);
-        end_undo
+        end_undo(1)
     ];
     ctx.dispatch(&mut mock, fx);
 
@@ -901,7 +910,7 @@ fn multi_cursor_dw_deletes_at_mid_word_positions() {
         delete(13, 18);
         set_cursor(5);
         set_cursor(12);
-        end_undo
+        end_undo(1)
     ];
     ctx.dispatch(&mut mock, fx);
 
@@ -940,7 +949,7 @@ fn multi_cursor_insert_char_at_three_cursors() {
         set_cursor(1);
         set_cursor(6);
         set_cursor(11);
-        end_undo
+        end_undo(1)
     ];
     ctx.dispatch(&mut mock, fx);
 
@@ -978,7 +987,7 @@ fn multi_cursor_insert_multi_char_string() {
         set_cursor(5);
         set_cursor(11);
         set_cursor(17);
-        end_undo
+        end_undo(1)
     ];
     ctx.dispatch(&mut mock, fx);
 
@@ -1039,7 +1048,7 @@ fn descending_removal_after_multi_cursor_insert_then_escape() {
         set_cursor(1);
         set_cursor(6);
         set_cursor(11);
-        end_undo
+        end_undo(1)
     ];
     ctx.dispatch(&mut mock, fx);
     assert_editor!(mock, text: "Xaaa\nXbbb\nXccc", carets: 3);
@@ -1072,7 +1081,7 @@ fn multi_cursor_dispatch_skips_all_set_cursors() {
         set_cursor(5);
         delete(0, 1);
         set_cursor(0);
-        end_undo
+        end_undo(1)
     ];
     ctx.dispatch_multi(&mut mock, fx, 3);
 

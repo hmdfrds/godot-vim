@@ -1,4 +1,4 @@
-//! Shell-side persistent state: per-buffer state, global state, and undo tree.
+//! Shell-side persistent state: per-buffer state, global state, and undo store.
 //!
 //! The engine is stateless with respect to the host environment — it does not
 //! know about Godot `InstanceId`s, editor tabs, or the OS clipboard. This module
@@ -8,12 +8,13 @@
 //! - [`buffer`] — per-editor visual selection, scroll count, buffer-local mappings
 //! - [`globals`] — cross-buffer status messages, hlsearch flag, substitute preview
 //! - [`shell`] — `ShellState` container with `HashMap<InstanceId, BufferState>`
-//! - [`undo_tree`] — per-buffer branching undo tree with snapshot/pruning
+//! - [`undo_store`] — changeset-based undo storage keyed by vim-core NodeId
 
 pub(crate) mod buffer;
 pub(crate) mod globals;
 mod shell;
-pub(crate) mod undo_tree;
+pub(crate) mod undo_format;
+pub(crate) mod undo_store;
 
 pub(crate) use globals::GlobalState;
 pub(crate) use shell::ShellState;
