@@ -327,6 +327,7 @@ mod tests {
     #[test]
     fn reconcile_simple_insertion() {
         let mut engine = VimEngine::new();
+        engine.set_shadow_text("hello\n");
         reconcile_external_text_change(
             &mut engine,
             "hello\n",
@@ -339,6 +340,7 @@ mod tests {
     #[test]
     fn reconcile_no_change_is_noop() {
         let mut engine = VimEngine::new();
+        engine.set_shadow_text("hello\n");
         reconcile_external_text_change(
             &mut engine,
             "hello\n",
@@ -351,6 +353,7 @@ mod tests {
     #[test]
     fn reconcile_cjk_insertion() {
         let mut engine = VimEngine::new();
+        engine.set_shadow_text("abc\n");
         reconcile_external_text_change(
             &mut engine,
             "abc\n",

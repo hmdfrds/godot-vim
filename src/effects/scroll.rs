@@ -103,6 +103,42 @@ pub(crate) fn handle_scroll_right(editor: &mut impl TextEditorPort, count: u32) 
     editor.set_h_scroll(new_scroll);
 }
 
+/// `zH` — scroll viewport left by half screen width.
+pub(crate) fn handle_scroll_half_left(editor: &mut impl TextEditorPort, count: u32) {
+    let visible_cols = editor.get_visible_line_count(); // approximate screen width
+    let half = (visible_cols / 2).max(1);
+    let shift = half * count as i32;
+    log::trace!("scroll_half_left: count={} shift={}", count, shift);
+    let new_scroll = editor.get_h_scroll().saturating_sub(shift).max(0);
+    editor.set_h_scroll(new_scroll);
+}
+
+/// `zL` — scroll viewport right by half screen width.
+pub(crate) fn handle_scroll_half_right(editor: &mut impl TextEditorPort, count: u32) {
+    let visible_cols = editor.get_visible_line_count(); // approximate screen width
+    let half = (visible_cols / 2).max(1);
+    let shift = half * count as i32;
+    log::trace!("scroll_half_right: count={} shift={}", count, shift);
+    let new_scroll = editor.get_h_scroll().saturating_add(shift);
+    editor.set_h_scroll(new_scroll);
+}
+
+/// `zs` — scroll viewport so cursor column is at left edge.
+pub(crate) fn handle_cursor_to_left_edge(editor: &mut impl TextEditorPort) {
+    let col = editor.get_caret_column();
+    log::trace!("cursor_to_left_edge: col={}", col);
+    editor.set_h_scroll(col);
+}
+
+/// `ze` — scroll viewport so cursor column is at right edge.
+pub(crate) fn handle_cursor_to_right_edge(editor: &mut impl TextEditorPort) {
+    let col = editor.get_caret_column();
+    let visible_cols = editor.get_visible_line_count(); // approximate
+    let target = (col - visible_cols + 1).max(0);
+    log::trace!("cursor_to_right_edge: col={} target={}", col, target);
+    editor.set_h_scroll(target);
+}
+
 #[cfg(test)]
 mod tests {
     use crate::bridge::port::TextEditorPort;

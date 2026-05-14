@@ -114,13 +114,9 @@ enum CommitStrategy {
         end: usize,
         content: String,
     },
-    /// Undo/redo changes collected from `UndoApplyResult`.
-    UndoRedoChanges {
-        changes: Vec<(usize, usize, Option<String>)>,
-    },
-    /// Fallback: diff `text_ref` against the Cow mirror to produce changes.
-    /// Used when multiple mutations or complex auto-brace sequences make it
-    /// impossible to track a single operation.
+    /// Diff `text_ref` against the Cow mirror to produce changes. Used for
+    /// undo/redo (each step's changes are relative to different text states),
+    /// multiple mutations, or complex auto-brace sequences.
     Diff,
 }
 
@@ -216,6 +212,10 @@ const HANDLED_EFFECTS: &[EffectKind] = &[
     EffectKind::CursorToBottom,
     EffectKind::ScrollLeft,
     EffectKind::ScrollRight,
+    EffectKind::ScrollHalfScreenLeft,
+    EffectKind::ScrollHalfScreenRight,
+    EffectKind::ScrollCursorToLeftEdge,
+    EffectKind::ScrollCursorToRightEdge,
     // Pass 2: fold
     EffectKind::FoldLine,
     EffectKind::UnfoldLine,
@@ -562,7 +562,6 @@ pub(crate) fn dispatch(
             }
             Effect::Undo { steps, .. } => {
                 let mut any_applied = false;
-                let mut all_changes = Vec::new();
                 let mut last_cursors = None;
                 for step in &steps {
                     let current_text: &str = &text;
@@ -571,7 +570,6 @@ pub(crate) fn dispatch(
                         .undo_store_mut()
                         .undo_step(step.node_id, current_text);
                     if let Some(result) = result {
-                        all_changes.extend(result.changes);
                         last_cursors = Some(step.cursors.to_vec());
                         text = Cow::Owned(result.text);
                         line_index = LineIndex::new(&text);
@@ -584,9 +582,10 @@ pub(crate) fn dispatch(
                     }
                 }
                 if any_applied {
-                    commit_strategy = CommitStrategy::UndoRedoChanges {
-                        changes: all_changes,
-                    };
+                    // Each step's changes are relative to the text after the
+                    // previous step — not the original. Diff original→final
+                    // produces correct coordinates in the original space.
+                    commit_strategy = CommitStrategy::Diff;
                     deferred_undo_cursors = last_cursors;
                     text_mutated = true;
                 }
@@ -596,7 +595,6 @@ pub(crate) fn dispatch(
             }
             Effect::Redo { steps, .. } => {
                 let mut any_applied = false;
-                let mut all_changes = Vec::new();
                 let mut last_cursors = None;
                 for step in &steps {
                     let current_text: &str = &text;
@@ -605,7 +603,6 @@ pub(crate) fn dispatch(
                         .undo_store_mut()
                         .redo_step(step.node_id, current_text);
                     if let Some(result) = result {
-                        all_changes.extend(result.changes);
                         last_cursors = Some(step.cursors.to_vec());
                         text = Cow::Owned(result.text);
                         line_index = LineIndex::new(&text);
@@ -618,9 +615,7 @@ pub(crate) fn dispatch(
                     }
                 }
                 if any_applied {
-                    commit_strategy = CommitStrategy::UndoRedoChanges {
-                        changes: all_changes,
-                    };
+                    commit_strategy = CommitStrategy::Diff;
                     deferred_undo_cursors = last_cursors;
                     text_mutated = true;
                 }
@@ -655,9 +650,6 @@ pub(crate) fn dispatch(
                     content,
                 } => {
                     text::handle_replace(_guard.editor, &original_doc, *start, *end, content);
-                }
-                CommitStrategy::UndoRedoChanges { changes } => {
-                    undo::apply_changes(_guard.editor, &original_doc, changes);
                 }
                 CommitStrategy::Diff => {
                     use vim_core::primitives::changeset::ChangeSet;
@@ -926,7 +918,11 @@ pub(crate) fn dispatch_pass2_effect(
         | Effect::CursorToTop
         | Effect::CursorToBottom
         | Effect::ScrollLeft { .. }
-        | Effect::ScrollRight { .. } => {
+        | Effect::ScrollRight { .. }
+        | Effect::ScrollHalfScreenLeft { .. }
+        | Effect::ScrollHalfScreenRight { .. }
+        | Effect::ScrollCursorToLeftEdge
+        | Effect::ScrollCursorToRightEdge => {
             dispatch_scroll_effect(effect, editor, env.doc);
         }
         // ── Fold ────────────────────────────────────────────────────────
@@ -1346,6 +1342,10 @@ fn dispatch_scroll_effect(effect: Effect, editor: &mut impl TextEditorPort, doc:
         Effect::CursorToBottom => scroll::handle_cursor_to_bottom(editor),
         Effect::ScrollLeft { count } => scroll::handle_scroll_left(editor, count),
         Effect::ScrollRight { count } => scroll::handle_scroll_right(editor, count),
+        Effect::ScrollHalfScreenLeft { count } => scroll::handle_scroll_half_left(editor, count),
+        Effect::ScrollHalfScreenRight { count } => scroll::handle_scroll_half_right(editor, count),
+        Effect::ScrollCursorToLeftEdge => scroll::handle_cursor_to_left_edge(editor),
+        Effect::ScrollCursorToRightEdge => scroll::handle_cursor_to_right_edge(editor),
         other => log::error!("dispatch_scroll_effect: unexpected effect {:?}", other),
     }
 }
