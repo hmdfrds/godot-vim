@@ -538,6 +538,29 @@ pub(crate) fn execute(
             }
         },
 
+        // ── :mkvimrc — generate .godot-vimrc template ─────────────────
+        HostRequest::MkVimrc { meta: _, force } => {
+            let path = "res://.godot-vimrc";
+            let gpath = GString::from(path);
+
+            if !force && godot::classes::FileAccess::file_exists(&gpath) {
+                return host_failure(
+                    request.id(),
+                    ".godot-vimrc already exists (use :mkvimrc! to overwrite)",
+                );
+            }
+
+            let presets = &crate::config::presets::PRESETS;
+            let content = crate::config::writer::generate_default_config(presets);
+            match crate::config::writer::write_text_to_file(path, &content) {
+                Ok(()) => HostResult::Success {
+                    id: request.id(),
+                    message: Some(CompactString::from(format!("Wrote {path}"))),
+                },
+                Err(e) => host_failure(request.id(), e),
+            }
+        }
+
         // ── Forward compatibility for #[non_exhaustive] ─────────────────
         _ => {
             let kind = format!("{:?}", request.kind());

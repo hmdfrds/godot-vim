@@ -12,7 +12,6 @@ use godot::prelude::*;
 
 use crate::bridge;
 use crate::controller::VimController;
-use crate::multi_cursor::keybindings::classify_multi_cursor_key;
 use crate::navigation::{self, classify_focus, FocusContext};
 use crate::ui::UiCoordinator;
 
@@ -225,82 +224,6 @@ impl GodotVimCore {
                     let mut ed = editor.clone();
                     ed.cancel_ime();
                     // Fall through — key reaches the engine normally
-                }
-            }
-        }
-
-        // ── Multi-cursor shortcut interception ─────────────────────────
-        // Detect VS Code-style multi-cursor shortcuts (Ctrl+D, Ctrl+Shift+Up/Down,
-        // Ctrl+Shift+L) using the translated KeyEvent. User mappings take
-        // priority: if the mapping trie has an entry for this key, let it
-        // flow through to the engine's mapping system instead.
-        if let Some(controller) = &self.controller {
-            if !controller.could_start_mapping(key) {
-                if let Some(action) =
-                    classify_multi_cursor_key(key, &controller.ctx.multi_cursor_bindings)
-                {
-                    log::debug!("gui_input: multi-cursor shortcut detected: {:?}", action);
-                    let mut ed = editor.clone();
-                    // Re-borrow mutably for execution.
-                    let controller = self.controller.as_mut().unwrap();
-                    let is_add_next = matches!(
-                        action,
-                        crate::multi_cursor::keybindings::MultiCursorAction::AddNextMatch
-                    );
-                    controller.execute_multi_cursor_action(action, &ed);
-                    // AddNextMatch only adds a Godot caret — don't sync from engine
-                    // (engine doesn't know yet). Import picks it up on next keystroke.
-                    if !is_add_next {
-                        controller.sync_multi_cursors_after_action();
-                    }
-                    let mut snap = controller.ui_snapshot(ed.instance_id());
-                    // Use Godot's actual caret count for visibility, not the
-                    // engine's (which is stale — AddNextMatch only adds a Godot
-                    // caret, import syncs to engine on the next keystroke).
-                    snap.cursor_count = ed.get_caret_count().max(1) as usize;
-                    EngineOutcome::with_snapshot(
-                        snap,
-                        crate::controller::PipelineOutcome::Passthrough,
-                    )
-                    .apply_ui_update(&mut self.ui, &mut ed, &mut self.caret_reconciler);
-                    if let Some(mut vp) = ed.get_viewport() {
-                        vp.set_input_as_handled();
-                    }
-                    return;
-                }
-            }
-        }
-
-        // ── Escape clears multi-cursor when active ───────────────────────
-        // When multiple cursors are active and user presses Escape, clear
-        // secondary cursors instead of passing Escape to the vim engine.
-        // This matches VS Code behavior: Escape exits multi-cursor first.
-        //
-        // Only clear in Normal mode. In OperatorPending (e.g. after `d`),
-        // Visual-with-operator, or Insert mode, Escape should flow through
-        // to the vim engine so it can cancel the operator or exit the mode.
-        if key_event.get_keycode() == Key::ESCAPE {
-            if let Some(controller) = &mut self.controller {
-                let mode = controller.mode();
-                // Check both engine cursor count and Godot caret count.
-                // After Ctrl+D, the engine has 1 cursor but Godot has N carets
-                // (import happens on next keystroke). Either being > 1 means
-                // multi-cursor is active.
-                let has_multi = controller.cursor_count() > 1 || editor.get_caret_count() > 1;
-                if has_multi && mode.is_normal() {
-                    log::debug!("gui_input: Escape clearing secondary cursors (Normal mode)");
-                    use crate::multi_cursor::keybindings::MultiCursorAction;
-                    let mut ed = editor.clone();
-                    controller.execute_multi_cursor_action(MultiCursorAction::ClearSecondary, &ed);
-                    controller.sync_multi_cursors_after_action();
-                    controller.clear_match_session(ed.instance_id());
-                    let snap = controller.ui_snapshot(ed.instance_id());
-                    EngineOutcome::with_snapshot(snap, crate::controller::PipelineOutcome::Passthrough)
-                        .apply_ui_update(&mut self.ui, &mut ed, &mut self.caret_reconciler);
-                    if let Some(mut vp) = ed.get_viewport() {
-                        vp.set_input_as_handled();
-                    }
-                    return;
                 }
             }
         }

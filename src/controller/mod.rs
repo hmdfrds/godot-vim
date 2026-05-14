@@ -37,7 +37,6 @@ use vim_core::primitives::Direction;
 
 use crate::bridge::godot_host::{GodotHost, PendingUiAction};
 use crate::host::SecurityPolicy;
-use crate::multi_cursor::keybindings::{self, MultiCursorAction};
 use crate::settings::{FileAccessScope, ShellExecution};
 use crate::state::ShellState;
 
@@ -99,7 +98,6 @@ pub(crate) enum ControllerPhase {
 pub(crate) struct ControllerContext {
     pub(crate) transient: TransientShellState,
     pub(crate) passthrough_keys: HashSet<KeyEvent>,
-    pub(crate) multi_cursor_bindings: Vec<(KeyEvent, MultiCursorAction)>,
     pub(crate) security_policy: SecurityPolicy,
     pub(crate) perf: perf::PerfTracker,
     /// 0 = disabled.
@@ -139,7 +137,6 @@ impl VimController {
             ctx: ControllerContext {
                 transient: TransientShellState::new(),
                 passthrough_keys: HashSet::new(),
-                multi_cursor_bindings: keybindings::default_bindings(),
                 security_policy: SecurityPolicy {
                     shell_execution: ShellExecution::Disabled,
                     file_access_scope: FileAccessScope::ProjectOnly,
@@ -557,15 +554,6 @@ impl VimController {
         }
     }
 
-    /// Destroy the active Ctrl+D match session. Called when secondary
-    /// cursors are cleared (Escape, cursor count → 1) so the next Ctrl+D
-    /// starts fresh from the primary cursor.
-    pub(crate) fn clear_match_session(&mut self, editor_id: InstanceId) {
-        self.host_state_mut()
-            .buffer(editor_id)
-            .clear_match_session();
-    }
-
     /// Save all per-buffer engine state for the current editor.
     ///
     /// Computes the cursor byte offset, calls `engine.on_buffer_leave()` to
@@ -698,6 +686,27 @@ impl VimController {
     /// debug assertion if a new effect type appears.
     pub(crate) fn reload_config(&mut self, text: &str) {
         self.engine_mut().clear_mappings();
+
+        // Seed editor-idiom multi-cursor bindings as defaults.
+        // These are sourced BEFORE the user's .godot-vimrc, so user config
+        // overrides them (later `nmap` on the same key wins).
+        let _ = self.engine_mut().source_config_text(
+            "nmap <C-S-Down> :addcursor below<CR>\n\
+             vmap <C-S-Down> :addcursor below<CR>\n\
+             nmap <C-S-Up> :addcursor above<CR>\n\
+             vmap <C-S-Up> :addcursor above<CR>\n\
+             nmap <C-S-l> :selectall<CR>\n\
+             vmap <C-S-l> :selectall<CR>\n\
+             nmap <leader>mn :addnext<CR>\n\
+             nmap <leader>mN :addprev<CR>\n\
+             nmap <leader>ma :selectall<CR>\n\
+             nmap <leader>ms :cursorsplit<CR>\n\
+             nmap <leader>mx :cursorremove<CR>\n\
+             nmap <leader>mp :cursorprimary next<CR>\n\
+             nmap <leader>mf :cursorfilter \n\
+             nmap <leader>mF :cursorfilter! ",
+        );
+
         let mut response = self.engine_mut().source_config_text(text);
         let effects = response.take_effects();
         // When detached (no session), config effects are logged but cannot
@@ -964,318 +973,6 @@ impl VimController {
         result.consumed
     }
 
-    // ── Multi-cursor action execution ──────────��──────────────────────
-
-    /// Sync multi-cursor positions from the engine to Godot after a
-    /// multi-cursor command executed outside the normal process_key pipeline
-    /// (e.g., keybinding-triggered actions). Delegates to the same
-    /// `sync_multi_cursors_to_godot` used by the process_cycle path.
-    pub(crate) fn sync_multi_cursors_after_action(&mut self) {
-        if let ControllerPhase::Attached { ref mut session } = self.phase {
-            process::sync_multi_cursors_to_godot(session);
-        }
-    }
-
-    /// Execute a VS Code-style multi-cursor action detected by the keybinding
-    /// layer. Translates the action into the corresponding vim-core
-    /// `MultiCursorCommand` and executes it through the engine.
-    pub(crate) fn execute_multi_cursor_action(
-        &mut self,
-        action: crate::multi_cursor::keybindings::MultiCursorAction,
-        editor: &Gd<CodeEdit>,
-    ) {
-        use crate::multi_cursor::keybindings::MultiCursorAction;
-        use vim_core::execution::MultiCursorContext;
-        use vim_core::primitives::Direction;
-        use vim_core::state::MultiCursorCommand;
-
-        let session = match &mut self.phase {
-            ControllerPhase::Attached { session } => session,
-            ControllerPhase::Detached { .. } => {
-                log::warn!("execute_multi_cursor_action: no active session");
-                return;
-            }
-        };
-
-        // Sync cursor position from Godot before reading engine state —
-        // the keybinding path bypasses process_cycle which normally does this.
-        session.host_mut().refresh_from_editor();
-
-        // Build context from the current document state.
-        let text = editor.get_text().to_string();
-        let line_count = editor.get_line_count() as usize;
-        let search_pattern = session
-            .engine()
-            .state()
-            .search()
-            .pattern()
-            .map(|s| s.to_owned());
-
-        // Ctrl+D (AddNextMatch): find the next occurrence of the word under
-        // the primary cursor and add a cursor there, keeping all existing
-        // cursors. This matches VS Code's "Add Selection to Next Find Match".
-        //
-        // SkipAndAddNext is wrong here because with multiple cursors it
-        // removes the primary before adding the next match.
-        if matches!(action, MultiCursorAction::AddNextMatch) {
-            self.execute_add_next_match(&text);
-            return;
-        }
-
-        let cmd = match action {
-            MultiCursorAction::AddNextMatch => unreachable!("handled above"),
-            MultiCursorAction::AddCursorAbove => {
-                MultiCursorCommand::AddCursorVertical(Direction::Backward)
-            }
-            MultiCursorAction::AddCursorBelow => {
-                MultiCursorCommand::AddCursorVertical(Direction::Forward)
-            }
-            MultiCursorAction::SelectAllOccurrences => MultiCursorCommand::SelectAllOccurrences,
-            MultiCursorAction::ClearSecondary => MultiCursorCommand::ClearSecondary,
-        };
-
-        let ctx = MultiCursorContext {
-            text: &text,
-            search_pattern: search_pattern.as_deref(),
-            line_count,
-        };
-
-        match session.engine_mut().execute_multi_cursor(&cmd, &ctx) {
-            Ok(effects) => {
-                if !effects.is_empty() {
-                    log::debug!(
-                        "execute_multi_cursor_action: {:?} produced {} effects",
-                        action,
-                        effects.len()
-                    );
-                }
-            }
-            Err(e) => {
-                log::warn!("execute_multi_cursor_action: {:?} failed: {}", action, e);
-            }
-        }
-    }
-
-    /// Ctrl+D: find the next occurrence of the word under the primary cursor
-    /// and add a Godot caret there.
-    ///
-    /// Maintains a `MatchSession` in BufferState that locks the search word
-    /// and tracks the Godot caret index of the last-added match. On each
-    /// Ctrl+D, the search start is computed by reading the live caret
-    /// position from Godot (immune to text edits between presses). The
-    /// session auto-invalidates when the word under cursor changes.
-    fn execute_add_next_match(&mut self, text: &str) {
-        let session = match &mut self.phase {
-            ControllerPhase::Attached { session } => session,
-            ControllerPhase::Detached { .. } => return,
-        };
-
-        let primary_offset = {
-            use vim_core::execution::VimHost;
-            session.host().cursor_offset()
-        };
-        let word = match find_word_at_offset(text, primary_offset) {
-            Some(w) => w.to_owned(),
-            None => {
-                log::debug!("execute_add_next_match: no word under cursor");
-                return;
-            }
-        };
-
-        let editor_id = session.host().editor().instance_id();
-        let line_index = session.host().line_index().clone();
-        let mut editor = session.host().editor().clone();
-
-        // Determine search start from session state.
-        // If an active session exists with the same word, read the live position
-        // of the last-added caret from Godot (self-healing after text edits).
-        // If the word changed or no session exists, start from primary cursor.
-        let existing_session = session
-            .host()
-            .state()
-            .buffer_ref(editor_id)
-            .and_then(|b| b.match_session().cloned());
-
-        let search_from = match &existing_session {
-            Some(ms) if ms.word == word => {
-                let idx = ms.last_caret_index;
-                let caret_count = editor.get_caret_count();
-                if idx >= 0 && idx < caret_count {
-                    // Read live position — Godot adjusts caret positions after edits.
-                    let line = editor.get_caret_line_ex().caret_index(idx).done();
-                    let col = editor.get_caret_column_ex().caret_index(idx).done();
-                    let byte_off = line_index.line_col_to_byte(text, line, col);
-                    byte_off + word.len()
-                } else {
-                    // Caret index no longer valid (removed externally). Reset.
-                    primary_offset + word.len()
-                }
-            }
-            _ => {
-                // No session or word changed — start fresh from primary cursor.
-                primary_offset + word.len()
-            }
-        };
-
-        // Search forward with whole-word matching (VS Code Ctrl+D semantics).
-        // If the found match overlaps an existing caret, skip it and continue.
-        // Two phases: forward from search_from, then wrap-around from 0.
-        let mut start = search_from;
-        while start < text.len() && !text.is_char_boundary(start) {
-            start += 1;
-        }
-        let caret_count = editor.get_caret_count();
-        let match_offset = 'search: {
-            // Phase 1: forward search.
-            let mut pos = start;
-            while let Some(off) = find_whole_word(text, &word, pos) {
-                if !caret_overlaps_match(&editor, &line_index, text, off, word.len(), caret_count) {
-                    break 'search off;
-                }
-                pos = off + word.len();
-            }
-            // Phase 2: wrap-around from document start.
-            let mut pos = 0;
-            while let Some(off) = find_whole_word(text, &word, pos) {
-                if off >= start {
-                    break; // back to where phase 1 started — all matches checked
-                }
-                if !caret_overlaps_match(&editor, &line_index, text, off, word.len(), caret_count) {
-                    break 'search off;
-                }
-                pos = off + word.len();
-            }
-            log::debug!("execute_add_next_match: all matches of '{}' selected", word);
-            return;
-        };
-
-        let lc = line_index.byte_to_line_col(text, match_offset);
-        let caret_idx = editor.add_caret(lc.line, lc.col);
-        if caret_idx < 0 {
-            log::warn!(
-                "execute_add_next_match: add_caret({}, {}) failed",
-                lc.line,
-                lc.col
-            );
-            return;
-        }
-
-        session
-            .host_mut()
-            .state_mut()
-            .buffer(editor_id)
-            .set_match_session(word.clone(), caret_idx);
-        log::debug!(
-            "execute_add_next_match: caret {} at {}:{} for '{}'",
-            caret_idx,
-            lc.line,
-            lc.col,
-            word
-        );
-    }
-}
-
-/// Check if any existing Godot caret falls within [match_offset, match_offset + word_len).
-fn caret_overlaps_match(
-    editor: &Gd<CodeEdit>,
-    line_index: &crate::bridge::codec::LineIndex,
-    text: &str,
-    match_offset: usize,
-    word_len: usize,
-    caret_count: i32,
-) -> bool {
-    let match_end = match_offset + word_len;
-    for idx in 0..caret_count {
-        let cl = editor.get_caret_line_ex().caret_index(idx).done();
-        let cc = editor.get_caret_column_ex().caret_index(idx).done();
-        let caret_byte = line_index.line_col_to_byte(text, cl, cc);
-        if caret_byte >= match_offset && caret_byte < match_end {
-            return true;
-        }
-    }
-    false
-}
-
-/// Find the next whole-word occurrence of `word` in `text` starting from `from`.
-/// Returns the byte offset of the match, or `None`.
-/// A match is whole-word when the characters immediately before and after the
-/// match are NOT word characters (alphanumeric or underscore).
-fn find_whole_word(text: &str, word: &str, from: usize) -> Option<usize> {
-    let haystack = text.get(from..)?;
-    let mut search_from = 0;
-    loop {
-        let pos = haystack[search_from..].find(word)?;
-        let abs_pos = from + search_from + pos;
-        let match_start = search_from + pos;
-        let match_end = match_start + word.len();
-
-        let before_ok = if match_start == 0 && from == 0 {
-            true
-        } else {
-            let abs_before = abs_pos;
-            abs_before == 0
-                || text[..abs_before]
-                    .chars()
-                    .next_back()
-                    .map_or(true, |c| !c.is_alphanumeric() && c != '_')
-        };
-        let after_ok = if match_end >= haystack.len() {
-            true
-        } else {
-            haystack[match_end..]
-                .chars()
-                .next()
-                .map_or(true, |c| !c.is_alphanumeric() && c != '_')
-        };
-
-        if before_ok && after_ok {
-            return Some(abs_pos);
-        }
-        // Advance past this non-whole-word match.
-        search_from = match_start + word.len();
-        if search_from >= haystack.len() {
-            return None;
-        }
-    }
-}
-
-/// Extract the word at the given byte offset in the text.
-///
-/// Scans backward and forward from `offset` to find word boundaries using
-/// Vim-style classification (alphanumeric + underscore = word character).
-/// Returns `None` if the character at offset is not a word character.
-fn find_word_at_offset(text: &str, offset: usize) -> Option<&str> {
-    let mut clamped = offset.min(text.len().saturating_sub(1));
-    while clamped > 0 && !text.is_char_boundary(clamped) {
-        clamped -= 1;
-    }
-
-    let ch = text[clamped..].chars().next()?;
-    if !ch.is_alphanumeric() && ch != '_' {
-        return None;
-    }
-
-    // Scan backward to word start.
-    let mut start = clamped;
-    for (i, c) in text[..clamped].char_indices().rev() {
-        if c.is_alphanumeric() || c == '_' {
-            start = i;
-        } else {
-            break;
-        }
-    }
-
-    // Scan forward to word end (exclusive).
-    let mut end = clamped;
-    for (i, c) in text[clamped..].char_indices() {
-        if c.is_alphanumeric() || c == '_' {
-            end = clamped + i + c.len_utf8();
-        } else {
-            break;
-        }
-    }
-
-    text.get(start..end)
 }
 
 #[cfg(test)]
@@ -1316,7 +1013,6 @@ mod tests {
             let ControllerContext {
                 transient: _,                  // transient: .reset()
                 passthrough_keys: _,           // config
-                multi_cursor_bindings: _,      // config
                 security_policy: _,            // config
                 perf: _,                       // persistent
                 highlight_yank_duration_ms: _, // config

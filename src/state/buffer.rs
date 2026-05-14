@@ -8,16 +8,6 @@ use crate::types::CharLineCol;
 
 use super::undo_store::UndoStore;
 
-/// Active Ctrl+D session. Locks the search word at session start and tracks
-/// the Godot caret index of the last-added match. The caret position is read
-/// live from Godot on each Ctrl+D, so text edits between presses are handled
-/// correctly (Godot adjusts caret positions after mutations).
-#[derive(Debug, Clone)]
-pub(crate) struct MatchSession {
-    pub(crate) word: String,
-    pub(crate) last_caret_index: i32,
-}
-
 /// Shell-owned visual selection state, set and cleared atomically during
 /// effect dispatch where `final_text` is already available.
 #[derive(Debug, Clone, Copy)]
@@ -53,13 +43,6 @@ pub(crate) struct BufferState {
     /// Cursor positions (line, col, byte_offset) saved by SaveSelections effect,
     /// restored by RestoreSelections.
     saved_selections: Option<Vec<(usize, usize, usize)>>,
-
-    /// Active Ctrl+D (AddNextMatch) session. Tracks the locked search word
-    /// and the Godot caret index of the last-added match. On each Ctrl+D,
-    /// the search start is computed by reading the live caret position from
-    /// Godot (immune to text edits), not a stored byte offset.
-    /// Destroyed when cursor count drops to 1 or the word under cursor changes.
-    match_session: Option<MatchSession>,
 }
 
 impl Default for BufferState {
@@ -70,7 +53,6 @@ impl Default for BufferState {
             undo_store: UndoStore::new(),
             last_caret_count: 1,
             saved_selections: None,
-            match_session: None,
         }
     }
 }
@@ -121,21 +103,6 @@ impl BufferState {
 
     pub(crate) fn clear_saved_selections(&mut self) {
         self.saved_selections = None;
-    }
-
-    pub(crate) fn match_session(&self) -> Option<&MatchSession> {
-        self.match_session.as_ref()
-    }
-
-    pub(crate) fn set_match_session(&mut self, word: String, caret_index: i32) {
-        self.match_session = Some(MatchSession {
-            word,
-            last_caret_index: caret_index,
-        });
-    }
-
-    pub(crate) fn clear_match_session(&mut self) {
-        self.match_session = None;
     }
 
     // ── Mutation ─────────────────────────────────────────────────────

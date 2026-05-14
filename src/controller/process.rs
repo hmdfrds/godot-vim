@@ -803,13 +803,10 @@ fn import_godot_carets_into_engine(session: &mut vim_core::execution::VimSession
         }
     }
 
-    // Update buffer state's last_caret_count + clear match session if back to 1.
+    // Update buffer state's last_caret_count.
     let current_count = session.host().editor().get_caret_count() as usize;
     let buf = session.host_mut().state_mut().buffer(editor_id);
     buf.set_last_caret_count(current_count);
-    if current_count <= 1 {
-        buf.clear_match_session();
-    }
 }
 
 /// Gaps 1 & 5: Sync multi-cursor positions (and visual selections) to Godot
@@ -861,9 +858,6 @@ pub(super) fn sync_multi_cursors_to_godot(
 
         let buf = state.buffer(editor_id);
         buf.set_last_caret_count(1);
-        if was_multi {
-            buf.clear_match_session();
-        }
         return;
     }
 

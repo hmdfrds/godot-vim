@@ -205,6 +205,14 @@ impl VimStatusBar {
         // vimdebug > command-line > message > recording > showcmd > pending keys > mode name.
         self.display_buffer.clear();
 
+        // Append cursor count when multi-cursor is active so the user can see
+        // how many cursors are live at a glance (e.g. "NORMAL (3 cursors)").
+        let mode_display = if snap.cursor_count > 1 {
+            format!("{} ({} cursors)", snap.mode.short_name(), snap.cursor_count)
+        } else {
+            snap.mode.short_name().to_owned()
+        };
+
         let text_color = if let Some(step) = snap.vimdebug.step_status() {
             write!(self.display_buffer, "{step}").ok();
             self.theme.text_fg
@@ -225,19 +233,16 @@ impl VimStatusBar {
                 self.theme.text_fg
             }
         } else if let Some(reg) = snap.recording_register {
-            let mode_name = snap.mode.short_name();
-            write!(self.display_buffer, "recording @{reg} {mode_name}").ok();
+            write!(self.display_buffer, "recording @{reg} {mode_display}").ok();
             self.theme.text_fg
         } else if !snap.pending_command.is_empty() {
-            let mode_name = snap.mode.short_name();
-            write!(self.display_buffer, "{mode_name}  {}", snap.pending_command).ok();
+            write!(self.display_buffer, "{mode_display}  {}", snap.pending_command).ok();
             self.theme.text_fg
         } else if !snap.pending_keys.is_empty() {
-            let mode_name = snap.mode.short_name();
-            write!(self.display_buffer, "{mode_name}  {}", snap.pending_keys).ok();
+            write!(self.display_buffer, "{mode_display}  {}", snap.pending_keys).ok();
             self.theme.text_fg
         } else {
-            self.display_buffer.push_str(snap.mode.short_name());
+            self.display_buffer.push_str(&mode_display);
             self.theme.text_fg
         };
 
