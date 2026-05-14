@@ -48,11 +48,7 @@ impl FileSystemExplorer {
         }
     }
 
-    pub(crate) fn set_callables(
-        &mut self,
-        submitted: Callable,
-        gui_input: Callable,
-    ) {
+    pub(crate) fn set_callables(&mut self, submitted: Callable, gui_input: Callable) {
         self.callable_submitted = Some(submitted);
         self.callable_gui_input = Some(gui_input);
     }
@@ -83,9 +79,7 @@ impl FileSystemExplorer {
             self.dismiss_prompt();
         }
 
-        if key_event.is_ctrl_pressed()
-            || key_event.is_alt_pressed()
-            || key_event.is_meta_pressed()
+        if key_event.is_ctrl_pressed() || key_event.is_alt_pressed() || key_event.is_meta_pressed()
         {
             return DockInputResult::Ignored;
         }
@@ -299,7 +293,9 @@ impl FileSystemExplorer {
 
     fn execute_create(&mut self, name: &str, target_dir: &str) -> bool {
         if let Err(msg) = validate_path(name) {
-            self.prompt_mode = PromptMode::Create { target_dir: target_dir.to_string() };
+            self.prompt_mode = PromptMode::Create {
+                target_dir: target_dir.to_string(),
+            };
             self.show_prompt_error(&msg);
             return false;
         }
@@ -309,18 +305,24 @@ impl FileSystemExplorer {
 
         if is_dir {
             if DirAccess::dir_exists_absolute(&full_path) {
-                self.prompt_mode = PromptMode::Create { target_dir: target_dir.to_string() };
+                self.prompt_mode = PromptMode::Create {
+                    target_dir: target_dir.to_string(),
+                };
                 self.show_prompt_error("Already exists");
                 return false;
             }
             if DirAccess::make_dir_recursive_absolute(&full_path) != godot::global::Error::OK {
-                self.prompt_mode = PromptMode::Create { target_dir: target_dir.to_string() };
+                self.prompt_mode = PromptMode::Create {
+                    target_dir: target_dir.to_string(),
+                };
                 self.show_prompt_error("Failed to create directory");
                 return false;
             }
         } else {
             if FileAccess::file_exists(&full_path) {
-                self.prompt_mode = PromptMode::Create { target_dir: target_dir.to_string() };
+                self.prompt_mode = PromptMode::Create {
+                    target_dir: target_dir.to_string(),
+                };
                 self.show_prompt_error("Already exists");
                 return false;
             }
@@ -328,13 +330,17 @@ impl FileSystemExplorer {
             if !DirAccess::dir_exists_absolute(&parent)
                 && DirAccess::make_dir_recursive_absolute(&parent) != godot::global::Error::OK
             {
-                self.prompt_mode = PromptMode::Create { target_dir: target_dir.to_string() };
+                self.prompt_mode = PromptMode::Create {
+                    target_dir: target_dir.to_string(),
+                };
                 self.show_prompt_error("Failed to create parent directories");
                 return false;
             }
             let file = FileAccess::open(&full_path, godot::classes::file_access::ModeFlags::WRITE);
             if file.is_none() {
-                self.prompt_mode = PromptMode::Create { target_dir: target_dir.to_string() };
+                self.prompt_mode = PromptMode::Create {
+                    target_dir: target_dir.to_string(),
+                };
                 self.show_prompt_error("Failed to create file");
                 return false;
             }
@@ -352,7 +358,6 @@ impl FileSystemExplorer {
             }
         }
     }
-
 }
 
 /// Check logical keycode first, fall back to physical for non-Latin layouts.
@@ -460,7 +465,10 @@ fn trigger_dock_shortcut(path: &str) {
         return;
     }
 
-    log::warn!("filesystem_explorer: no InputEventKey in shortcut '{}'", path);
+    log::warn!(
+        "filesystem_explorer: no InputEventKey in shortcut '{}'",
+        path
+    );
 }
 
 fn get_selected_path(control: &Gd<Control>, kind: DockKind) -> Option<String> {

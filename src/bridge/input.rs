@@ -384,9 +384,7 @@ pub(crate) fn translate_key(
                 ch
             );
             let mut mods = modifiers;
-            if !is_altgr
-                && !mods.intersects(Modifiers::CTRL | Modifiers::ALT | Modifiers::META)
-            {
+            if !is_altgr && !mods.intersects(Modifiers::CTRL | Modifiers::ALT | Modifiers::META) {
                 mods &= !Modifiers::SHIFT;
             }
             return Some(KeyEvent::new(Key::Char(ch), mods));

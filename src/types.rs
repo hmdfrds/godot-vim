@@ -353,4 +353,19 @@ pub(crate) struct UiSnapshot {
     pub(crate) substitute_preview: Option<Vec<MatchRange>>,
     pub(crate) vimdebug: VimdebugSnapshot,
     pub(crate) highlight_yank: Option<HighlightYank>,
+    /// Block visual selection geometry for the overlay. `Some` when in visual
+    /// block mode with an active selection; `None` otherwise.
+    pub(crate) block_visual: Option<BlockVisualGeometry>,
+    /// Number of active cursors (1 = single cursor, >1 = multi-cursor active).
+    pub(crate) cursor_count: usize,
+}
+
+/// Logical geometry for a block (rectangular) visual selection, used by
+/// the block visual overlay to render colored rectangles.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct BlockVisualGeometry {
+    pub(crate) anchor_line: i32,
+    pub(crate) anchor_col: i32,
+    pub(crate) head_line: i32,
+    pub(crate) head_col: i32,
 }

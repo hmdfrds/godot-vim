@@ -22,6 +22,8 @@ use godot::prelude::*;
 use vim_core::execution::host_api::{DeferredAction, WindowNavAction};
 use vim_core::keymap::KeyEvent;
 
+use crate::bridge::port::TextEditorPort;
+
 use super::completion;
 use super::perf;
 use super::VimController;
@@ -102,6 +104,10 @@ impl VimController {
             let auto_pairs_active = session.engine().options().auto_pairs().is_some();
             let scrolloff = usize_to_i32(session.engine().options().scrolloff());
             session.host_mut().refresh_from_editor();
+
+            // ── Gap 2: Import mouse-added Ctrl+Click carets before process_key ──
+            import_godot_carets_into_engine(session);
+
             session
                 .host_mut()
                 .set_auto_brace_eligible(engine_mode.is_insert());
@@ -145,6 +151,15 @@ impl VimController {
 
         self.transient.operations_this_cycle =
             self.transient.operations_this_cycle.saturating_add(1);
+
+        // ── Gap 1 & 5: Sync multi-cursor positions to Godot ────────────
+        {
+            let session = self
+                .session
+                .as_mut()
+                .expect("process_cycle: requires active session");
+            sync_multi_cursors_to_godot(session);
+        }
 
         // ── Post-processing: deferred actions ───────────────────────────
         for action in &result.deferred_actions {
@@ -371,6 +386,10 @@ impl VimController {
             let auto_pairs_active = session.engine().options().auto_pairs().is_some();
             let scrolloff = usize_to_i32(session.engine().options().scrolloff());
             session.host_mut().refresh_from_editor();
+
+            // Gap 2: Import mouse-added carets before processing.
+            import_godot_carets_into_engine(session);
+
             session
                 .host_mut()
                 .set_auto_brace_eligible(engine_mode.is_insert());
@@ -393,6 +412,15 @@ impl VimController {
                 self.transient.operations_this_cycle =
                     self.transient.operations_this_cycle.saturating_add(1);
             }
+        }
+
+        // Gaps 1 & 5: Sync multi-cursor positions after drain.
+        {
+            let session = self
+                .session
+                .as_mut()
+                .expect("resolve_mapping_timeout: requires active session");
+            sync_multi_cursors_to_godot(session);
         }
 
         // Handle any deferred actions produced during drain.
@@ -550,9 +578,10 @@ fn apply_step_effect_to_host(
                 shape,
             );
             let head_pos = doc.line_index.byte_to_line_col(doc.text, head.get());
+            let anchor_pos = doc.line_index.byte_to_line_col(doc.text, anchor.get());
             host.state_mut()
                 .buffer(editor_id)
-                .update_visual_selection(anchor, head, head_pos);
+                .update_visual_selection(anchor, head, head_pos, anchor_pos);
         }
         Effect::ClearSelection => {
             let mut port = crate::bridge::port_impl::CodeEditPort(editor);
@@ -574,6 +603,7 @@ fn apply_step_effect_to_host(
                     scrolloff,
                     highlight_yank_ms,
                     &mut crate::bridge::clipboard::GodotClipboard,
+                    editor_id,
                 );
             }
         }
@@ -703,6 +733,289 @@ fn update_ime_position(editor: &Gd<CodeEdit>) {
         ime_pos.y,
         window_id
     );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Multi-cursor pipeline helpers
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/// Gap 2: Import mouse-added Ctrl+Click carets from Godot into vim-core.
+///
+/// Called before `process_key` so the engine sees any carets the user added
+/// via mouse interaction since the last keystroke.
+///
+/// Delegates to `compute_import_action` (in `multi_cursor::sync`) for the
+/// algorithm, making that function the single source of truth for the
+/// Godot→Engine import decision logic.
+fn import_godot_carets_into_engine(session: &mut vim_core::execution::VimSession<GodotHost>) {
+    use crate::multi_cursor::sync::{compute_import_action, ImportAction};
+    use vim_core::execution::MultiCursorContext;
+    use vim_core::primitives::Offset;
+    use vim_core::state::MultiCursorCommand;
+
+    let editor_id = session.host().editor().instance_id();
+    let last_count = session
+        .host()
+        .state()
+        .buffer_ref(editor_id)
+        .map_or(1, |b| b.last_caret_count());
+
+    // Fast path: if caret count hasn't changed, skip the text allocation entirely.
+    let current_count = session.host().editor().get_caret_count() as usize;
+    if current_count == last_count {
+        return;
+    }
+
+    // Only allocate text/line_index now that we know an import is needed.
+    let text = session.host().text_cache().to_owned();
+    let line_index = session.host().line_index().clone();
+
+    // Compute the import action using the shared algorithm.
+    // Scope the mutable editor borrow so it's released before engine access.
+    let action = {
+        let (editor, _state) = session.host_mut().editor_and_state_mut();
+        let port = crate::bridge::port_impl::CodeEditPort(editor);
+        compute_import_action(&port, last_count, &line_index, &text)
+    };
+
+    match action {
+        ImportAction::NoChange => return,
+        ImportAction::AddCursors(offsets) => {
+            let line_count = line_index.line_count();
+            let host_cursor = {
+                use vim_core::execution::VimHost;
+                session.host().cursor_offset()
+            };
+            let (engine, _host) = session.engine_and_host_mut();
+            // Fix the stale primary cursor before adding secondaries.
+            // The keybinding path bypasses process_key, so the engine's
+            // primary is wherever the last command left it — not where
+            // Godot's caret actually is. sync_primary_cursor fixes this.
+            engine.sync_primary_cursor(host_cursor);
+            let ctx = MultiCursorContext {
+                text: &text,
+                search_pattern: None,
+                line_count,
+            };
+            for offset in &offsets {
+                if let Err(e) = engine.execute_multi_cursor(
+                    &MultiCursorCommand::AddCursor(Offset::new(*offset)),
+                    &ctx,
+                ) {
+                    log::debug!("multi-cursor import AddCursor: {e}");
+                }
+            }
+        }
+        ImportAction::FullResync(new_secondary_offsets) => {
+            let line_count = line_index.line_count();
+            let host_cursor = {
+                use vim_core::execution::VimHost;
+                session.host().cursor_offset()
+            };
+            let (engine, _host) = session.engine_and_host_mut();
+            engine.sync_primary_cursor(host_cursor);
+            let ctx = MultiCursorContext {
+                text: &text,
+                search_pattern: None,
+                line_count,
+            };
+            if let Err(e) = engine.execute_multi_cursor(&MultiCursorCommand::ClearSecondary, &ctx) {
+                log::debug!("multi-cursor import ClearSecondary: {e}");
+            }
+            for offset in &new_secondary_offsets {
+                if let Err(e) = engine.execute_multi_cursor(
+                    &MultiCursorCommand::AddCursor(Offset::new(*offset)),
+                    &ctx,
+                ) {
+                    log::debug!("multi-cursor import AddCursor: {e}");
+                }
+            }
+        }
+    }
+
+    // Update buffer state's last_caret_count + clear match session if back to 1.
+    let current_count = session.host().editor().get_caret_count() as usize;
+    let buf = session.host_mut().state_mut().buffer(editor_id);
+    buf.set_last_caret_count(current_count);
+    if current_count <= 1 {
+        buf.clear_match_session();
+    }
+}
+
+/// Gaps 1 & 5: Sync multi-cursor positions (and visual selections) to Godot
+/// after process_key completes.
+///
+/// Only activates when cursor_count > 1 (multi-cursor is active). When only
+/// one cursor exists, the normal single-cursor path handles positioning.
+pub(super) fn sync_multi_cursors_to_godot(
+    session: &mut vim_core::execution::VimSession<GodotHost>,
+) {
+    let cursor_count = session.engine().state().multi_cursor().selections().len();
+
+    // Single cursor: let the normal path handle it.
+    // Multi-cursor→single-cursor cleanup is handled by the dispatch layer
+    // (dispatch.rs caret cleanup), not here. See dispatch.rs cursor_effect_index logic.
+    if cursor_count <= 1 {
+        let editor_id = session.host().editor().instance_id();
+        let was_multi = session
+            .host()
+            .state()
+            .buffer_ref(editor_id)
+            .map_or(false, |b| b.last_caret_count() > 1);
+
+        // MC→single transition: dispatch may have skipped SetCursor effects
+        // (it used Godot's stale pre-command cursor_count > 1). Reposition the
+        // primary from the engine's authoritative selection state.
+        let transition_pos = if was_multi {
+            let selections = session.engine().state().multi_cursor().selections();
+            let text = session.host().text_cache();
+            let line_index = session.host().line_index();
+            let offset = selections.primary().head().get();
+            let lc = line_index.byte_to_line_col(text, offset);
+            let scrolloff = usize_to_i32(session.engine().options().scrolloff());
+            Some((lc.line as i32, lc.col as i32, scrolloff))
+        } else {
+            None
+        };
+
+        let host = session.host_mut();
+        let (editor, state) = host.editor_and_state_mut();
+        let mut port = crate::bridge::port_impl::CodeEditPort(editor);
+        port.remove_secondary_carets();
+
+        if let Some((line, col, scrolloff)) = transition_pos {
+            port.set_caret_line_unfold(line, crate::bridge::port::ViewportAdjust::Adjust);
+            port.set_caret_column(col);
+            crate::effects::cursor::enforce_scrolloff(&mut port, line, scrolloff);
+        }
+
+        let buf = state.buffer(editor_id);
+        buf.set_last_caret_count(1);
+        if was_multi {
+            buf.clear_match_session();
+        }
+        return;
+    }
+
+    // Collect all data from immutable borrows into owned vecs before mutating.
+    let (positions, visual_selections, editor_id, scrolloff) = {
+        let selections = session.engine().state().multi_cursor().selections();
+        let text = session.host().text_cache();
+        let line_index = session.host().line_index();
+        let mode = session.engine().mode();
+        let eid = session.host().editor().instance_id();
+        let scrolloff = usize_to_i32(session.engine().options().scrolloff());
+
+        let positions: Vec<(usize, usize, usize)> = selections
+            .ranges()
+            .iter()
+            .map(|r| {
+                let offset = r.head().get();
+                let lc = line_index.byte_to_line_col(text, offset);
+                (lc.line as usize, lc.col as usize, offset)
+            })
+            .collect();
+
+        // Gap 5: Compute per-cursor visual selections in Godot-ready coordinates.
+        // Converts Vim-inclusive selections to Godot-exclusive [from, to) format
+        // with +1 on the far end, matching handle_set_selection in cursor.rs.
+        let visual_selections: Option<Vec<(usize, usize, usize, usize)>> =
+            if let Some(vt) = mode.visual_type() {
+                use vim_core::primitives::VisualType;
+                Some(
+                    selections
+                        .ranges()
+                        .iter()
+                        .map(|r| {
+                            let anchor_offset = r.anchor().get();
+                            let head_offset = r.head().get();
+                            let anchor_lc =
+                                line_index.byte_to_line_col(text, anchor_offset);
+                            let head_lc = line_index.byte_to_line_col(text, head_offset);
+                            let (al, ac) =
+                                (anchor_lc.line as usize, anchor_lc.col as usize);
+                            let (hl, hc) =
+                                (head_lc.line as usize, head_lc.col as usize);
+
+                            match vt {
+                                VisualType::Char => {
+                                    if head_offset >= anchor_offset {
+                                        let line_len =
+                                            line_index.line_char_count(text, hl);
+                                        (al, ac, hl, (hc + 1).min(line_len))
+                                    } else {
+                                        let line_len =
+                                            line_index.line_char_count(text, al);
+                                        (al, (ac + 1).min(line_len), hl, hc)
+                                    }
+                                }
+                                VisualType::Line => {
+                                    let top = al.min(hl);
+                                    let bot = al.max(hl);
+                                    let bot_len =
+                                        line_index.line_char_count(text, bot);
+                                    if hl >= al {
+                                        (top, 0, bot, bot_len)
+                                    } else {
+                                        (bot, bot_len, top, 0)
+                                    }
+                                }
+                                VisualType::Block => {
+                                    let min_col = ac.min(hc);
+                                    let max_col = ac.max(hc);
+                                    let line_len =
+                                        line_index.line_char_count(text, hl);
+                                    if hc <= ac {
+                                        (hl, (max_col + 1).min(line_len), hl, min_col)
+                                    } else {
+                                        (hl, min_col, hl, (max_col + 1).min(line_len))
+                                    }
+                                }
+                                _ => {
+                                    if head_offset >= anchor_offset {
+                                        let line_len =
+                                            line_index.line_char_count(text, hl);
+                                        (al, ac, hl, (hc + 1).min(line_len))
+                                    } else {
+                                        let line_len =
+                                            line_index.line_char_count(text, al);
+                                        (al, (ac + 1).min(line_len), hl, hc)
+                                    }
+                                }
+                            }
+                        })
+                        .collect(),
+                )
+            } else {
+                None
+            };
+
+        (positions, visual_selections, eid, scrolloff)
+    };
+
+    // Mutably borrow host to sync — use split borrow helper.
+    let host = session.host_mut();
+    let (editor, state) = host.editor_and_state_mut();
+    let mut port = crate::bridge::port_impl::CodeEditPort(editor);
+    let buffer_state = state.buffer(editor_id);
+
+    // Gap 1: Sync cursor positions to editor.
+    crate::multi_cursor::sync::sync_cursors_to_editor(&positions, &mut port, buffer_state);
+
+    // Gap 5: Sync visual selections if applicable.
+    if let Some(ref sels) = visual_selections {
+        crate::multi_cursor::sync::sync_selections_to_editor(sels, &mut port);
+    }
+
+    if !positions.is_empty() {
+        let primary_line = positions[0].0 as i32;
+        port.set_caret_line_unfold(
+            primary_line,
+            crate::bridge::port::ViewportAdjust::Adjust,
+        );
+        port.adjust_viewport_to_caret();
+        crate::effects::cursor::enforce_scrolloff(&mut port, primary_line, scrolloff);
+    }
 }
 
 #[cfg(test)]

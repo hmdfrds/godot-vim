@@ -102,6 +102,10 @@ pub(crate) struct MockTextEdit {
     /// Nesting depth — only the outermost `end` finalizes the group.
     complex_operation_count: u32,
 
+    /// Multicaret edit nesting depth. `merge_overlapping_carets` is deferred
+    /// to the outermost `end_multicaret_edit`.
+    multicaret_edit_count: u32,
+
     // ── Scroll state (simplified: no wrap, no minimap) ──
     v_scroll: f64,
     h_scroll: i32,
@@ -125,6 +129,7 @@ impl MockTextEdit {
             undo_pos: 0,
             current_group: None,
             complex_operation_count: 0,
+            multicaret_edit_count: 0,
             v_scroll: 0.0,
             h_scroll: 0,
             visible_line_count: 25,
@@ -137,6 +142,23 @@ impl MockTextEdit {
 
     pub(crate) fn set_visible_line_count(&mut self, count: i32) {
         self.visible_line_count = count;
+    }
+
+    fn merge_overlapping_carets(&mut self) {
+        let mut i = 0;
+        while i < self.carets.len() {
+            let mut j = i + 1;
+            while j < self.carets.len() {
+                if self.carets[i].line == self.carets[j].line
+                    && self.carets[i].column == self.carets[j].column
+                {
+                    self.carets.remove(j);
+                } else {
+                    j += 1;
+                }
+            }
+            i += 1;
+        }
     }
 
     // ── Core text operations ─────────────────────────────────────────────
@@ -584,8 +606,57 @@ impl TextEditorPort for MockTextEdit {
         (self.carets.len() - 1) as i32
     }
 
+    fn remove_caret(&mut self, caret_idx: i32) {
+        let idx = caret_idx as usize;
+        if idx < self.carets.len() {
+            self.carets.remove(idx);
+        }
+    }
+
     fn remove_secondary_carets(&mut self) {
         self.carets.truncate(1);
+    }
+
+    fn get_caret_count(&self) -> i32 {
+        self.carets.len() as i32
+    }
+
+    fn get_caret_line_for(&self, caret_idx: i32) -> i32 {
+        let idx = caret_idx as usize;
+        if idx < self.carets.len() {
+            self.carets[idx].line
+        } else {
+            0
+        }
+    }
+
+    fn get_caret_column_for(&self, caret_idx: i32) -> i32 {
+        let idx = caret_idx as usize;
+        if idx < self.carets.len() {
+            self.carets[idx].column
+        } else {
+            0
+        }
+    }
+
+    fn set_caret_line_for(&mut self, line: i32, caret_idx: i32) {
+        let idx = caret_idx as usize;
+        if idx < self.carets.len() {
+            let clamped = self.clamp_line(line);
+            self.carets[idx].line = clamped;
+            let col = self.carets[idx].column;
+            self.carets[idx].column = self.clamp_column(clamped, col);
+        }
+    }
+
+    fn set_caret_column_for(&mut self, col: i32, caret_idx: i32) {
+        let idx = caret_idx as usize;
+        if idx < self.carets.len() {
+            let line = self.carets[idx].line;
+            let clamped = self.clamp_column(line, col);
+            self.carets[idx].column = clamped;
+            self.carets[idx].last_fit_x = clamped;
+        }
     }
 
     // ── Undo ────────────────────────────────────────────────────────────
@@ -619,6 +690,19 @@ impl TextEditorPort for MockTextEdit {
                     self.undo_pos = self.undo_stack.len();
                 }
             }
+        }
+    }
+
+    fn begin_multicaret_edit(&mut self) {
+        self.multicaret_edit_count += 1;
+    }
+
+    fn end_multicaret_edit(&mut self) {
+        if self.multicaret_edit_count > 0 {
+            self.multicaret_edit_count -= 1;
+        }
+        if self.multicaret_edit_count == 0 {
+            self.merge_overlapping_carets();
         }
     }
 

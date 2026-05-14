@@ -43,7 +43,7 @@ pub(crate) fn handle_set_cursor(
 ///
 /// Only scrolls the minimum amount needed — if the cursor is already within
 /// the margin, the viewport stays put.
-fn enforce_scrolloff(editor: &mut impl TextEditorPort, cursor_line: i32, scrolloff: i32) {
+pub(crate) fn enforce_scrolloff(editor: &mut impl TextEditorPort, cursor_line: i32, scrolloff: i32) {
     if scrolloff <= 0 {
         return;
     }
@@ -96,8 +96,9 @@ fn enforce_scrolloff(editor: &mut impl TextEditorPort, cursor_line: i32, scrollo
 ///    the engine's actual head from `visual_head_pos`, not from Godot's
 ///    caret. The +1 shift of the Godot caret doesn't affect cursor display.
 ///
-/// For `Block` mode, the +1 is applied to `max_col` as before (rendering
-/// the exclusive-end rectangle per line).
+/// For `Block` mode, only the head line gets a Godot selection (min_col to
+/// max_col+1). The full block highlight is rendered by `BlockVisualOverlay`,
+/// driven by `UiCoordinator::update` via `UiSnapshot::block_visual`.
 ///
 /// After setting the selection, ensures the head line is visible via
 /// unfold and scrolls the viewport to follow.
@@ -113,11 +114,9 @@ pub(crate) fn handle_set_selection(
     let (anchor_line, anchor_col) = (anchor_pos.line, anchor_pos.col);
     let (head_line, head_col) = (head_pos.line, head_pos.col);
 
-    // Block mode creates secondary carets; clear on shape transitions so
-    // char/line modes operate on the primary caret only.
-    if !matches!(shape, SelectionShape::Block) {
-        editor.remove_secondary_carets();
-    }
+    // Block mode is now rendered by a transparent overlay (BlockVisualOverlay),
+    // not secondary carets. All shapes use primary caret only.
+    editor.remove_secondary_carets();
 
     match shape {
         SelectionShape::Char => {
@@ -163,14 +162,46 @@ pub(crate) fn handle_set_selection(
             }
         }
         SelectionShape::Block => {
-            render_block_selection(editor, doc, anchor_line, anchor_col, head_line, head_col);
+            // Block visual rendering is handled by BlockVisualOverlay (driven
+            // by UiCoordinator::update via UiSnapshot::block_visual). Here we
+            // only set the primary caret selection on the head line so Godot's
+            // native selection highlight shows the head-line portion of the block.
+            let min_col = anchor_col.min(head_col);
+            let max_col = anchor_col.max(head_col);
+            let head_line_len = usize_to_i32(
+                doc.line_index
+                    .line_char_count(doc.text, i32_to_usize(head_line)),
+            );
+            let (render_from, render_to) = if head_col <= anchor_col {
+                ((max_col + 1).min(head_line_len), min_col)
+            } else {
+                (min_col, (max_col + 1).min(head_line_len))
+            };
+            editor.select(
+                CharLineCol::new(head_line, render_from),
+                CharLineCol::new(head_line, render_to),
+            );
         }
         _ => {
             log::warn!(
-                "Unknown SelectionShape variant {:?} — rendering as Block (best-effort)",
+                "Unknown SelectionShape variant {:?} — treating as block (best-effort)",
                 shape
             );
-            render_block_selection(editor, doc, anchor_line, anchor_col, head_line, head_col);
+            let min_col = anchor_col.min(head_col);
+            let max_col = anchor_col.max(head_col);
+            let head_line_len = usize_to_i32(
+                doc.line_index
+                    .line_char_count(doc.text, i32_to_usize(head_line)),
+            );
+            let (render_from, render_to) = if head_col <= anchor_col {
+                ((max_col + 1).min(head_line_len), min_col)
+            } else {
+                (min_col, (max_col + 1).min(head_line_len))
+            };
+            editor.select(
+                CharLineCol::new(head_line, render_from),
+                CharLineCol::new(head_line, render_to),
+            );
         }
     }
 
@@ -195,81 +226,6 @@ pub(crate) fn handle_set_selection(
                 editor.set_v_scroll(target.into());
             }
         }
-    }
-}
-
-/// Render a block (rectangular) visual selection using Godot's multi-caret system.
-///
-/// Places the primary caret on `head_line` with a selection spanning the block
-/// columns, then adds secondary carets on all other lines in the range.
-fn render_block_selection(
-    editor: &mut impl TextEditorPort,
-    doc: &DocumentView,
-    anchor_line: i32,
-    anchor_col: i32,
-    head_line: i32,
-    head_col: i32,
-) {
-    let min_line = anchor_line.min(head_line);
-    let max_line = anchor_line.max(head_line);
-    let min_col = anchor_col.min(head_col);
-    let max_col = anchor_col.max(head_col);
-
-    editor.remove_secondary_carets();
-
-    // Godot's select() places the caret at the `to` end, so swap
-    // anchor/head to keep the caret at the Vim-head side of the block.
-    // The +1 on max_col converts Vim's inclusive end to Godot's exclusive end.
-    let (render_anchor, render_head) = if head_col <= anchor_col {
-        (max_col + 1, min_col)
-    } else {
-        (min_col, max_col + 1)
-    };
-
-    let head_line_len = usize_to_i32(
-        doc.line_index
-            .line_char_count(doc.text, i32_to_usize(head_line)),
-    );
-    editor.select(
-        CharLineCol::new(head_line, render_anchor.min(head_line_len)),
-        CharLineCol::new(head_line, render_head.min(head_line_len)),
-    );
-
-    // One secondary caret per remaining line. Track indices for rollback on failure.
-    let mut added_carets: Vec<i32> = Vec::with_capacity((max_line - min_line) as usize);
-    let mut any_failed = false;
-
-    for line in min_line..=max_line {
-        if line == head_line {
-            continue;
-        }
-        let line_len = usize_to_i32(doc.line_index.line_char_count(doc.text, i32_to_usize(line)));
-        let clamped_anchor = render_anchor.min(line_len);
-        let clamped_head = render_head.min(line_len);
-        let caret_idx = editor.add_caret(line, clamped_head);
-        if caret_idx >= 0 {
-            editor.select_for_caret(
-                CharLineCol::new(line, clamped_anchor),
-                CharLineCol::new(line, clamped_head),
-                caret_idx,
-            );
-            added_carets.push(caret_idx);
-        } else {
-            log::error!(
-                "set_selection: add_caret({}, {}) failed — rolling back {} secondary carets",
-                line,
-                clamped_head,
-                added_carets.len()
-            );
-            any_failed = true;
-            break;
-        }
-    }
-
-    if any_failed {
-        editor.remove_secondary_carets();
-        editor.deselect();
-        log::error!("Block visual selection rolled back due to caret failure");
     }
 }
 

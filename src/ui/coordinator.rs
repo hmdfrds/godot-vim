@@ -15,6 +15,7 @@ use godot::prelude::*;
 
 use vim_core::primitives::{CommandLinePrompt, Direction, Mode};
 
+use super::block_visual::BlockVisualOverlay;
 use super::cursor_shape::{compute_cursor_geometry, VimCursor};
 use super::highlight_yank::HighlightYankOverlay;
 use super::inccommand::InccommandOverlay;
@@ -81,6 +82,7 @@ fn remove_orphaned_overlays(editor: &Gd<CodeEdit>) {
         "DebugRangeOverlay",
         "VirtualTextOverlay",
         "HighlightYankOverlay",
+        "BlockVisualOverlay",
         "LineNumberManager",
     ];
     let editor_node = editor.clone().upcast::<Node>();
@@ -117,6 +119,7 @@ pub(crate) struct UiCoordinator {
     debug_overlay: Option<Gd<DebugRangeOverlay>>,
     virtual_text: Option<Gd<VirtualTextOverlay>>,
     highlight_yank: Option<Gd<HighlightYankOverlay>>,
+    block_visual: Option<Gd<BlockVisualOverlay>>,
 }
 
 impl UiCoordinator {
@@ -135,6 +138,7 @@ impl UiCoordinator {
             debug_overlay: None,
             virtual_text: None,
             highlight_yank: None,
+            block_visual: None,
         }
     }
 
@@ -197,6 +201,9 @@ impl UiCoordinator {
         let mut hy_overlay = create_overlay::<HighlightYankOverlay>(editor, 52);
         hy_overlay.set_process(false);
         self.highlight_yank = Some(hy_overlay);
+
+        // ── 9. Block visual selection overlay ──────────────────────────────
+        self.block_visual = Some(create_overlay::<BlockVisualOverlay>(editor, 49));
     }
 
     /// Remove all overlays and restore the editor to its pre-attach state.
@@ -233,6 +240,9 @@ impl UiCoordinator {
         // ── 2e. Highlight yank overlay ─────────────────────────────────────
         remove_and_free(&mut self.highlight_yank);
 
+        // ── 2f. Block visual overlay ──────────────────────────────────────
+        remove_and_free(&mut self.block_visual);
+
         // ── 3. Status bar ────────────────────────────────────────────────
         // The recording-indicator tween runs in an infinite loop. It must be
         // killed before freeing the node, or Godot keeps stepping it against
@@ -268,6 +278,7 @@ impl UiCoordinator {
         self.debug_overlay.take();
         self.virtual_text.take();
         self.highlight_yank.take();
+        self.block_visual.take();
     }
 
     /// Refresh all overlays from the latest engine snapshot. Called once per
@@ -318,14 +329,30 @@ impl UiCoordinator {
             // selection end, but Vim's cursor should render at the head.
             if let Some(geom) = compute_cursor_geometry(editor, snap.visual_head) {
                 vim_cursor.set_target(geom.pos, geom.height, geom.width);
+                drop(vim_cursor);
+                cursor.set_visible(self.cursor_enabled);
             } else {
-                log::trace!(
-                    "cursor geometry unavailable (folded/offscreen?), keeping previous position"
-                );
+                drop(vim_cursor);
+                cursor.set_visible(false);
             }
         }
 
-        // ── 2b. Native caret type (when custom cursor is disabled) ──────
+        // ── 2b. Native caret for multi-cursor, transparent for single ───
+        // Multi-cursor: restore native caret color so Godot renders secondary
+        // cursors. VimCursor overlay covers the primary (acceptable overlap).
+        // Single cursor: transparent (VimCursor handles rendering).
+        if snap.cursor_count > 1 {
+            if let Some(ref color) = self.saved.caret_color {
+                editor.add_theme_color_override("caret_color", *color);
+            } else {
+                editor.remove_theme_color_override("caret_color");
+            }
+            editor.set_caret_type(mode_to_native_caret(snap.mode));
+        } else if self.cursor_enabled {
+            editor.add_theme_color_override("caret_color", Color::from_rgba(0.0, 0.0, 0.0, 0.0));
+        }
+
+        // ── 2c. Native caret type (when custom cursor is disabled) ──────
         if !self.cursor_enabled {
             editor.set_caret_type(mode_to_native_caret(snap.mode));
         }
@@ -389,7 +416,22 @@ impl UiCoordinator {
             }
         }
 
-        // ── 7. Debug range overlay ───────────────────────────────────────
+        // ── 7. Block visual overlay ──────────────────────────────────────
+        if let Some(ref bv) = snap.block_visual {
+            if let Some(ref mut overlay) = self.block_visual {
+                overlay.bind_mut().update_block(
+                    bv.anchor_line,
+                    bv.anchor_col,
+                    bv.head_line,
+                    bv.head_col,
+                    editor,
+                );
+            }
+        } else {
+            self.clear_block_visual();
+        }
+
+        // ── 8. Debug range overlay ───────────────────────────────────────
         match snap.vimdebug.range() {
             Some(range) => {
                 if let Some(ref mut overlay) = self.debug_overlay {
@@ -411,11 +453,14 @@ impl UiCoordinator {
     pub(crate) fn update_cursor_position(&mut self, editor: &Gd<CodeEdit>) {
         if let Some(ref mut cursor) = self.cursor {
             if let Some(geom) = compute_cursor_geometry(editor, self.cache.cached_visual_head) {
-                cursor
-                    .bind_mut()
-                    .set_target(geom.pos, geom.height, geom.width);
+                {
+                    cursor
+                        .bind_mut()
+                        .set_target(geom.pos, geom.height, geom.width);
+                }
+                cursor.set_visible(self.cursor_enabled);
             } else {
-                log::trace!("cursor_position: geometry unavailable, skipping update");
+                cursor.set_visible(false);
             }
         }
     }
@@ -527,6 +572,22 @@ impl UiCoordinator {
             overlay.bind_mut().clear_highlights();
         }
     }
+
+    pub(crate) fn clear_block_visual(&mut self) {
+        if let Some(ref mut overlay) = self.block_visual {
+            overlay.bind_mut().clear_highlights();
+        }
+    }
+
+    /// Recompute block visual overlay pixel rects from stored logical positions.
+    ///
+    /// Called from scroll/resize/draw signal handlers to keep the block
+    /// selection highlight aligned with the viewport between keystrokes.
+    pub(crate) fn recompute_block_visual_rects(&mut self, editor: &Gd<CodeEdit>) {
+        if let Some(ref mut overlay) = self.block_visual {
+            overlay.bind_mut().recompute_rects(editor);
+        }
+    }
 }
 
 impl Drop for UiCoordinator {
@@ -540,6 +601,7 @@ impl Drop for UiCoordinator {
             || self.debug_overlay.is_some()
             || self.virtual_text.is_some()
             || self.highlight_yank.is_some()
+            || self.block_visual.is_some()
         {
             log::warn!(
                 "UiCoordinator dropped with overlays still attached — detach() was not called"

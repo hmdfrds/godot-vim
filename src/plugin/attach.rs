@@ -174,6 +174,7 @@ impl GodotVimCore {
         if !editor.is_instance_valid() {
             log::warn!("detach: editor no longer valid, skipping cleanup");
             if let Some(controller) = &mut self.controller {
+                controller.clear_multi_cursor_on_detach();
                 controller.force_cleanup_without_editor();
                 controller.detach_session();
             }
@@ -252,6 +253,7 @@ impl GodotVimCore {
 
             if !editor.is_instance_valid() {
                 log::warn!("detach: editor freed during mapping timeout resolution");
+                controller.clear_multi_cursor_on_detach();
                 controller.force_cleanup_without_editor();
                 controller.detach_session();
                 self.ui.reset_cached_state();
@@ -266,6 +268,7 @@ impl GodotVimCore {
 
             if !editor.is_instance_valid() {
                 log::warn!("detach: editor freed during exit_mode_via_pipeline");
+                controller.clear_multi_cursor_on_detach();
                 controller.force_cleanup_without_editor();
                 controller.detach_session();
                 self.ui.reset_cached_state();
@@ -287,6 +290,10 @@ impl GodotVimCore {
 
             // Reset transient shell state (vimdebug, pending effects, caches).
             controller.reset_transients();
+
+            // Clear multi-cursor on buffer leave — multi-cursor state is per-buffer,
+            // not persisted across buffer switches.
+            controller.clear_multi_cursor_on_detach();
         }
 
         self.ui.detach(&mut editor);

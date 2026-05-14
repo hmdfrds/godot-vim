@@ -63,6 +63,7 @@ mod bridge;
 mod controller;
 mod effects;
 mod host;
+mod multi_cursor;
 mod ui;
 
 // Cross-cutting concerns (referenced on demand by the pipeline modules above).

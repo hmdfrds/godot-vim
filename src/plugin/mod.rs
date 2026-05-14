@@ -156,11 +156,7 @@ impl INode for GodotVimCore {
             },
             (),
         );
-        panic_guard(
-            "exit_tree:fs_explorer",
-            || self.fs_explorer.cleanup(),
-            (),
-        );
+        panic_guard("exit_tree:fs_explorer", || self.fs_explorer.cleanup(), ());
         // Unconditional: even if a guard above caught a panic, null the
         // controller so enter_tree can reinitialize cleanly. Orphaned signals
         // from a panicking teardown step fire into handlers that check
@@ -625,7 +621,9 @@ impl GodotVimCore {
         }
         panic_guard(
             "on_scrollbar_changed",
-            || self.update_cursor_if_attached(),
+            || {
+                self.update_cursor_if_attached();
+            },
             (),
         );
     }
@@ -932,6 +930,7 @@ impl GodotVimCore {
         // Scroll and resize change the viewport, making cached pixel
         // coordinates from `get_rect_at_line_column` stale.
         self.ui.recompute_inccommand_rects(editor);
+        self.ui.recompute_block_visual_rects(editor);
     }
 
     fn resolve_config_path(&self) -> crate::config::path::ResolvedConfig {

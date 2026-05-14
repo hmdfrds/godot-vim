@@ -171,22 +171,24 @@ fn line_selection_single_line() {
 }
 
 // ── Effect handler: set_selection — Block mode ──────────────────────────
-// Block selection uses multi-caret: one caret per line in the block range,
-// each with a selection spanning the block columns. The bridge must create
-// secondary carets and clamp columns for short lines.
+// Block selection rendering was moved to BlockVisualOverlay. The dispatch
+// layer now only sets a primary-caret selection on the head line; the full
+// block highlight is drawn by the overlay. These tests verify the primary
+// caret behavior only (1 caret, selection on head line).
 
 #[test]
 fn effect_handle_set_selection_block() {
     let mut mock = MockTextEdit::new("abcd\nefgh\nijkl");
     apply_set_selection(&mut mock, 1, 12, SelectionShape::Block);
-    assert_editor!(mock, carets: 3);
+    // Only 1 caret (primary on head line); overlay handles the rest.
+    assert_editor!(mock, carets: 1, has_selection);
 }
 
 #[test]
-fn block_selection_backward_creates_correct_carets() {
+fn block_selection_backward_creates_one_caret() {
     let mut mock = MockTextEdit::new("abcd\nefgh\nijkl");
     apply_set_selection(&mut mock, 12, 1, SelectionShape::Block);
-    assert_editor!(mock, carets: 3);
+    assert_editor!(mock, carets: 1, has_selection);
 }
 
 #[test]
@@ -200,6 +202,7 @@ fn block_selection_single_line_one_caret() {
 fn block_selection_columns_are_correct() {
     let mut mock = MockTextEdit::new("abcd\nefgh\nijkl");
     // anchor=(0,1), head=(2,2) → block cols 1..=2 → render cols 1..3 (exclusive end)
+    // Head line is line 2; selection on head line should span col 1..3.
     apply_set_selection(&mut mock, 1, 12, SelectionShape::Block);
     assert_editor!(mock, selection_cols: (1, 3));
 }
@@ -208,6 +211,7 @@ fn block_selection_columns_are_correct() {
 fn block_selection_backward_columns() {
     let mut mock = MockTextEdit::new("abcd\nefgh\nijkl");
     // Same block columns regardless of anchor/head direction.
+    // Head line is line 0; selection on head line should span col 1..3.
     apply_set_selection(&mut mock, 12, 1, SelectionShape::Block);
     assert_editor!(mock, selection_cols: (1, 3));
 }
@@ -216,29 +220,30 @@ fn block_selection_backward_columns() {
 fn clear_selection_removes_secondary_carets() {
     let mut mock = MockTextEdit::new("abcd\nefgh\nijkl");
     apply_set_selection(&mut mock, 1, 12, SelectionShape::Block);
-    assert_editor!(mock, carets: 3);
+    assert_editor!(mock, carets: 1, has_selection);
 
     crate::effects::cursor::handle_clear_selection(&mut mock);
     assert_editor!(mock, carets: 1, no_selection);
 }
 
 #[test]
-fn block_selection_replaces_previous_carets() {
+fn block_selection_replaces_previous() {
     let mut mock = MockTextEdit::new("abcd\nefgh\nijkl");
     apply_set_selection(&mut mock, 1, 12, SelectionShape::Block);
-    assert_editor!(mock, carets: 3);
+    assert_editor!(mock, carets: 1, has_selection);
 
-    // New block on 2 lines — must replace previous 3-caret block, not accumulate.
+    // New block — must replace previous, still only 1 caret.
     apply_set_selection(&mut mock, 0, 6, SelectionShape::Block);
-    assert_editor!(mock, carets: 2);
+    assert_editor!(mock, carets: 1, has_selection);
 }
 
 #[test]
-fn block_selection_short_line_clamps() {
+fn block_selection_short_line_does_not_panic() {
     // Line 1 ("ab") is shorter than the block columns — must clamp, not panic.
     let mut mock = MockTextEdit::new("0123456789\nab\n0123456789");
+    // Head is on line 2 (offset 21, which is 'b' at line 2 col 8).
     apply_set_selection(&mut mock, 5, 21, SelectionShape::Block);
-    assert_editor!(mock, carets: 3);
+    assert_editor!(mock, carets: 1, has_selection);
 }
 
 // ── Edge case: char selection crossing line boundary ─────────────────
@@ -275,7 +280,8 @@ fn block_selection_zero_width() {
     // Same column on anchor and head — block is 1 char wide (min_col == max_col).
     let mut mock = MockTextEdit::new("abcd\nefgh\nijkl");
     apply_set_selection(&mut mock, 1, 11, SelectionShape::Block);
-    assert_editor!(mock, carets: 3, has_selection);
+    // Only primary caret on head line; overlay handles full block.
+    assert_editor!(mock, carets: 1, has_selection);
 }
 
 // ── Edge case: block selection where ALL lines are shorter than block ─
@@ -286,5 +292,6 @@ fn block_selection_all_lines_short() {
     // Must clamp without panicking.
     let mut mock = MockTextEdit::new("ab\ncd\nef");
     apply_set_selection(&mut mock, 1, 8, SelectionShape::Block);
-    assert_editor!(mock, carets: 3);
+    // Only primary caret on head line; overlay handles full block.
+    assert_editor!(mock, carets: 1, has_selection);
 }

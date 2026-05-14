@@ -21,6 +21,7 @@ mod macros;
 
 mod cursor;
 mod dispatch;
+mod multi_cursor_sync;
 mod scroll;
 mod text_mutations;
 mod undo;

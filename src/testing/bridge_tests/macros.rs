@@ -217,6 +217,18 @@ macro_rules! effects {
         });
     };
 
+    // ── Selections (save/restore) ───────────────────────────────
+    (@one $v:ident, save_selections) => {
+        $v.push(vim_core::effects::Effect::SaveSelections {
+            tag: vim_core::effects::SelectionTag::Search,
+        });
+    };
+    (@one $v:ident, restore_selections) => {
+        $v.push(vim_core::effects::Effect::RestoreSelections {
+            tag: vim_core::effects::SelectionTag::Search,
+        });
+    };
+
     // ── Folds ────────────────────────────────────────────────────
     (@one $v:ident, fold_line($line:expr)) => {
         $v.push(vim_core::effects::Effect::FoldLine {
@@ -285,6 +297,34 @@ impl DispatchCtx {
                 highlight_yank_duration_ms: 150,
                 syntax_query: Box::new(|_, _| crate::bridge::SyntaxRegion::code()),
                 clipboard: &mut self.clipboard,
+                cursor_count: 1,
+            },
+            &text,
+        );
+    }
+
+    pub(super) fn dispatch_multi(
+        &mut self,
+        mock: &mut MockTextEdit,
+        effects: Vec<vim_core::effects::Effect>,
+        cursor_count: usize,
+    ) {
+        let text = mock.get_text();
+        crate::effects::dispatch(
+            effects,
+            mock,
+            crate::effects::DispatchContext {
+                state: &mut self.state,
+                editor_id: self.editor_id,
+                undo_depth: &mut self.undo_depth,
+                auto_brace: crate::effects::dispatch::AutoBraceMode::Ineligible,
+                auto_brace_snapshot: crate::bridge::AutoBraceSnapshot::disabled(),
+                line_index_hint: None,
+                scrolloff: 0,
+                highlight_yank_duration_ms: 150,
+                syntax_query: Box::new(|_, _| crate::bridge::SyntaxRegion::code()),
+                clipboard: &mut self.clipboard,
+                cursor_count,
             },
             &text,
         );

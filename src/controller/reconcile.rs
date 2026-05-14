@@ -143,19 +143,37 @@ mod tests {
     #[test]
     fn reconcile_simple_insertion() {
         let mut engine = VimEngine::new();
-        reconcile_external_text_change(&mut engine, "hello\n", "hello world\n", 11, ExternalEditKind::HostNotified);
+        reconcile_external_text_change(
+            &mut engine,
+            "hello\n",
+            "hello world\n",
+            11,
+            ExternalEditKind::HostNotified,
+        );
     }
 
     #[test]
     fn reconcile_no_change_is_noop() {
         let mut engine = VimEngine::new();
-        reconcile_external_text_change(&mut engine, "hello\n", "hello\n", 5, ExternalEditKind::HostNotified);
+        reconcile_external_text_change(
+            &mut engine,
+            "hello\n",
+            "hello\n",
+            5,
+            ExternalEditKind::HostNotified,
+        );
     }
 
     #[test]
     fn reconcile_cjk_insertion() {
         let mut engine = VimEngine::new();
-        reconcile_external_text_change(&mut engine, "abc\n", "ab你好c\n", 8, ExternalEditKind::HostNotified);
+        reconcile_external_text_change(
+            &mut engine,
+            "abc\n",
+            "ab你好c\n",
+            8,
+            ExternalEditKind::HostNotified,
+        );
     }
 
     // ── diff_texts pure assertions ──────────────────────────────────────

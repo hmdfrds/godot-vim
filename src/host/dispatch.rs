@@ -434,9 +434,7 @@ pub(crate) fn execute(
             buffer_id,
         ),
         HostRequest::RunAction {
-            ref name,
-            count,
-            ..
+            ref name, count, ..
         } => {
             log::debug!("RunAction: {} (count={:?})", name, count);
             let repeat = count.unwrap_or(1).max(1);
@@ -487,9 +485,7 @@ pub(crate) fn execute(
             }
         }
         HostRequest::RequestCmdlineCompletion {
-            kind,
-            ref prefix,
-            ..
+            kind, ref prefix, ..
         } => match kind {
             CmdlineCompletionKind::Action => {
                 // Collect action names matching the prefix.

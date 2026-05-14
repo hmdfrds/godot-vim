@@ -8,6 +8,7 @@ use godot::prelude::*;
 
 use crate::bridge;
 use crate::controller::VimController;
+use crate::multi_cursor::keybindings::is_multi_cursor_shortcut;
 use crate::navigation::{self, classify_focus, FocusContext};
 use crate::ui::UiCoordinator;
 
@@ -119,13 +120,9 @@ impl GodotVimCore {
             FocusContext::Editor | FocusContext::Foreign | FocusContext::Unknown => false,
             FocusContext::Dock(kind, control) => {
                 let result = if navigation::is_in_filesystem_dock(&control) {
-                    let fs_result =
-                        self.fs_explorer.handle_key(&key_event, &control, kind);
+                    let fs_result = self.fs_explorer.handle_key(&key_event, &control, kind);
                     if fs_result.is_consumed() {
-                        log::trace!(
-                            "input: filesystem explorer consumed key={:?}",
-                            keycode
-                        );
+                        log::trace!("input: filesystem explorer consumed key={:?}", keycode);
                         fs_result
                     } else {
                         navigation::handle_dock_input(control, &key_event, kind)
@@ -166,6 +163,9 @@ impl GodotVimCore {
         if !editor.is_instance_valid() || !editor.has_focus() {
             return;
         }
+
+        // ── Mouse wheel interception ─────────────────────────────────────
+        // Route mouse wheel through the vim engine as Ctrl-Y (scroll up) /
         let Ok(key_event) = event.try_cast::<InputEventKey>() else {
             return;
         };
@@ -220,6 +220,70 @@ impl GodotVimCore {
                     let mut ed = editor.clone();
                     ed.cancel_ime();
                     // Fall through — key reaches the engine normally
+                }
+            }
+        }
+
+        // ── Multi-cursor shortcut interception ─────────────────────────
+        // Detect VS Code-style multi-cursor shortcuts (Ctrl+D, Ctrl+Alt+Up/Down,
+        // Ctrl+Shift+L) before they reach the vim engine. If detected, execute
+        // the corresponding multi-cursor command and consume the event.
+        if let Some(action) = is_multi_cursor_shortcut(&key_event) {
+            log::debug!("gui_input: multi-cursor shortcut detected: {:?}", action);
+            let mut ed = editor.clone();
+            if let Some(controller) = &mut self.controller {
+                let is_add_next = matches!(
+                    action,
+                    crate::multi_cursor::keybindings::MultiCursorAction::AddNextMatch
+                );
+                controller.execute_multi_cursor_action(action, &ed);
+                // AddNextMatch only adds a Godot caret — don't sync from engine
+                // (engine doesn't know yet). Import picks it up on next keystroke.
+                if !is_add_next {
+                    controller.sync_multi_cursors_after_action();
+                }
+                let mut snap = controller.ui_snapshot(ed.instance_id());
+                // Use Godot's actual caret count for visibility, not the
+                // engine's (which is stale — AddNextMatch only adds a Godot
+                // caret, import syncs to engine on the next keystroke).
+                snap.cursor_count = ed.get_caret_count().max(1) as usize;
+                self.ui.update(&snap, &mut ed);
+            }
+            if let Some(mut vp) = ed.get_viewport() {
+                vp.set_input_as_handled();
+            }
+            return;
+        }
+
+        // ── Escape clears multi-cursor when active ───────────────────────
+        // When multiple cursors are active and user presses Escape, clear
+        // secondary cursors instead of passing Escape to the vim engine.
+        // This matches VS Code behavior: Escape exits multi-cursor first.
+        //
+        // Only clear in Normal mode. In OperatorPending (e.g. after `d`),
+        // Visual-with-operator, or Insert mode, Escape should flow through
+        // to the vim engine so it can cancel the operator or exit the mode.
+        if key_event.get_keycode() == Key::ESCAPE {
+            if let Some(controller) = &mut self.controller {
+                let mode = controller.mode();
+                // Check both engine cursor count and Godot caret count.
+                // After Ctrl+D, the engine has 1 cursor but Godot has N carets
+                // (import happens on next keystroke). Either being > 1 means
+                // multi-cursor is active.
+                let has_multi = controller.cursor_count() > 1 || editor.get_caret_count() > 1;
+                if has_multi && mode.is_normal() {
+                    log::debug!("gui_input: Escape clearing secondary cursors (Normal mode)");
+                    use crate::multi_cursor::keybindings::MultiCursorAction;
+                    let mut ed = editor.clone();
+                    controller.execute_multi_cursor_action(MultiCursorAction::ClearSecondary, &ed);
+                    controller.sync_multi_cursors_after_action();
+                    controller.clear_match_session(ed.instance_id());
+                    let snap = controller.ui_snapshot(ed.instance_id());
+                    self.ui.update(&snap, &mut ed);
+                    if let Some(mut vp) = ed.get_viewport() {
+                        vp.set_input_as_handled();
+                    }
+                    return;
                 }
             }
         }
@@ -385,6 +449,11 @@ impl GodotVimCore {
         }
     }
 
+    /// Route a mouse-wheel event through the vim engine.
+    ///
+    /// Feeds Ctrl-Y (scroll up) or Ctrl-E (scroll down) through the normal
+    /// `process_cycle` pipeline, repeating 3 times to match Godot's default
+    /// scroll speed. Consumes the event so Godot's native scroll doesn't fire.
     /// Reconcile external cursor/selection changes with Vim engine state.
     /// Connected DEFERRED to avoid re-entrancy during text edits.
     ///

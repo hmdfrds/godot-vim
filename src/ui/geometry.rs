@@ -21,7 +21,16 @@ pub(super) fn corrected_col_x(
     line: i32,
     col: i32,
 ) -> Option<PixelPos> {
-    let rect = editor.get_rect_at_line_column(line, col);
+    // Clamp column to line length — Godot's get_rect_at_line_column errors
+    // when p_column > text[p_line].length(). This happens in block visual
+    // when the selection extends past shorter lines.
+    let line_len = if line >= 0 && line < editor.get_line_count() {
+        editor.get_line(line).len() as i32
+    } else {
+        0
+    };
+    let clamped_col = col.min(line_len);
+    let rect = editor.get_rect_at_line_column(line, clamped_col);
     // (-1,-1) = off-screen/not-laid-out sentinel.
     if rect.position.x == -1 && rect.position.y == -1 {
         return None;
@@ -30,7 +39,7 @@ pub(super) fn corrected_col_x(
     if rect.position.x == 0 && rect.position.y == 0 && rect.size.x == 0 && rect.size.y == 0 {
         return None;
     }
-    let x = if col == 0 {
+    let x = if clamped_col == 0 {
         rect.position.x
     } else {
         rect.position.x + rect.size.x

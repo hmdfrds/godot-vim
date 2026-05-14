@@ -267,8 +267,40 @@ impl TextEditorPort for CodeEditPort<'_> {
         self.0.add_caret(line, col)
     }
 
+    fn remove_caret(&mut self, caret_idx: i32) {
+        self.0.remove_caret(caret_idx);
+    }
+
     fn remove_secondary_carets(&mut self) {
         self.0.remove_secondary_carets();
+    }
+
+    fn get_caret_count(&self) -> i32 {
+        self.0.get_caret_count()
+    }
+
+    fn get_caret_line_for(&self, caret_idx: i32) -> i32 {
+        self.0.get_caret_line_ex().caret_index(caret_idx).done()
+    }
+
+    fn get_caret_column_for(&self, caret_idx: i32) -> i32 {
+        self.0.get_caret_column_ex().caret_index(caret_idx).done()
+    }
+
+    fn set_caret_line_for(&mut self, line: i32, caret_idx: i32) {
+        self.0
+            .set_caret_line_ex(line)
+            .adjust_viewport(false)
+            .caret_index(caret_idx)
+            .done();
+    }
+
+    fn set_caret_column_for(&mut self, col: i32, caret_idx: i32) {
+        self.0
+            .set_caret_column_ex(col)
+            .adjust_viewport(false)
+            .caret_index(caret_idx)
+            .done();
     }
 
     fn begin_complex_operation(&mut self) {
@@ -277,6 +309,14 @@ impl TextEditorPort for CodeEditPort<'_> {
 
     fn end_complex_operation(&mut self) {
         self.0.end_complex_operation();
+    }
+
+    fn begin_multicaret_edit(&mut self) {
+        self.0.begin_multicaret_edit();
+    }
+
+    fn end_multicaret_edit(&mut self) {
+        self.0.end_multicaret_edit();
     }
 
     fn undo(&mut self) {

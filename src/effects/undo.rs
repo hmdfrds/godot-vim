@@ -78,9 +78,6 @@ pub(crate) fn handle_undo(editor: &mut impl TextEditorPort, count: u32) {
     for _ in 0..count {
         editor.undo();
     }
-    // Godot's undo restores the caret snapshot from begin_complex_operation,
-    // which may include secondary carets and selections the engine already cleared.
-    editor.remove_secondary_carets();
     editor.deselect();
 }
 
@@ -89,7 +86,6 @@ pub(crate) fn handle_redo(editor: &mut impl TextEditorPort, count: u32) {
     for _ in 0..count {
         editor.redo();
     }
-    editor.remove_secondary_carets();
     editor.deselect();
 }
 

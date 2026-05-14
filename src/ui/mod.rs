@@ -16,6 +16,7 @@
 //! between the controller and the UI layer — populated once per keystroke by the
 //! controller and passed to [`UiCoordinator::update`].
 
+mod block_visual;
 mod coordinator;
 pub(crate) mod cursor_shape;
 mod geometry;

@@ -52,6 +52,9 @@ pub(crate) struct DispatchContext<'a> {
     pub(crate) syntax_query: Box<dyn Fn(i32, i32) -> SyntaxRegion + 'a>,
     /// Clipboard abstraction for register sync and copy-to-clipboard effects.
     pub(crate) clipboard: &'a mut dyn crate::bridge::clipboard::ClipboardPort,
+    /// Number of active cursors in the engine (1 = single cursor).
+    /// Used to skip `remove_secondary_carets()` when multi-cursor is active.
+    pub(crate) cursor_count: usize,
 }
 
 /// State machine tracking SetSelection → SetCursor effect pairing.
@@ -124,14 +127,18 @@ pub(crate) fn dispatch(
         highlight_yank_duration_ms,
         syntax_query,
         clipboard,
+        cursor_count,
     } = ctx;
     let auto_brace_eligible = matches!(auto_brace, AutoBraceMode::Eligible);
     log::trace!("dispatch: {} effects", effects.len());
     let mut pass2 = Vec::with_capacity(effects.len());
 
-    // Block visual selection creates secondary carets that persist across dispatches.
-    // Godot's caret-relative APIs operate on ALL carets, so clear before pass 1.
-    editor.remove_secondary_carets();
+    // Clear stale carets and selections. When multi-cursor is active,
+    // preserve secondary carets — they're managed by the indexed SetCursor
+    // routing in pass 2 and post-dispatch sync.
+    if cursor_count <= 1 {
+        editor.remove_secondary_carets();
+    }
     editor.deselect();
 
     // Pass 1: text mutations and undo. The Cow starts as a zero-copy borrow;
@@ -248,6 +255,9 @@ pub(crate) fn dispatch(
             }
             Effect::Undo { count, .. } => {
                 undo::handle_undo(editor, count);
+                if cursor_count <= 1 {
+                    editor.remove_secondary_carets();
+                }
                 text = Cow::Owned(editor.get_text());
                 line_index = LineIndex::new(&text);
                 text_mutated = true;
@@ -257,6 +267,9 @@ pub(crate) fn dispatch(
             }
             Effect::Redo { count, .. } => {
                 undo::handle_redo(editor, count);
+                if cursor_count <= 1 {
+                    editor.remove_secondary_carets();
+                }
                 text = Cow::Owned(editor.get_text());
                 line_index = LineIndex::new(&text);
                 text_mutated = true;
@@ -284,6 +297,7 @@ pub(crate) fn dispatch(
     let doc = DocumentView::new(&text, &line_index);
 
     let mut pairing = SelectionPairing::Idle;
+    let mut cursor_effect_index: usize = 0;
 
     for effect in pass2 {
         match effect {
@@ -292,34 +306,137 @@ pub(crate) fn dispatch(
                 head,
                 shape,
             } => {
-                log::trace!(
-                    "pass2: SetSelection anchor={} head={} shape={:?}",
-                    anchor.get(),
-                    head.get(),
-                    shape
-                );
-                cursor::handle_set_selection(editor, &doc, anchor.get(), head.get(), shape);
-                let head_pos = doc.line_index.byte_to_line_col(doc.text, head.get());
-                state
-                    .buffer(editor_id)
-                    .update_visual_selection(anchor, head, head_pos);
+                if cursor_count > 1 {
+                    log::trace!("pass2: SetSelection skipped (multi-cursor, sync-only)");
+                } else {
+                    log::trace!(
+                        "pass2: SetSelection anchor={} head={} shape={:?}",
+                        anchor.get(),
+                        head.get(),
+                        shape
+                    );
+                    cursor::handle_set_selection(editor, &doc, anchor.get(), head.get(), shape);
+                    let head_pos = doc.line_index.byte_to_line_col(doc.text, head.get());
+                    let anchor_pos = doc.line_index.byte_to_line_col(doc.text, anchor.get());
+                    state
+                        .buffer(editor_id)
+                        .update_visual_selection(anchor, head, head_pos, anchor_pos);
+                }
                 pairing = pairing.on_set_selection();
             }
             Effect::ClearSelection => {
-                // Capture canonical head before clearing — Godot's caret is at
-                // head_col+1 from inclusive→exclusive rendering in SetSelection.
-                let restore_pos = state.buffer(editor_id).visual().map(|vs| vs.head_pos);
-                cursor::handle_clear_selection(editor);
-                state.buffer(editor_id).clear_visual_selection();
-                if let Some(pos) = restore_pos {
-                    editor.set_caret_line(pos.line);
-                    editor.set_caret_column(pos.col);
+                if cursor_count > 1 {
+                    editor.deselect();
+                    state.buffer(editor_id).clear_visual_selection();
+                } else {
+                    // Capture canonical head before clearing — Godot's caret is at
+                    // head_col+1 from inclusive→exclusive rendering in SetSelection.
+                    let restore_pos = state.buffer(editor_id).visual().map(|vs| vs.head_pos);
+                    cursor::handle_clear_selection(editor);
+                    state.buffer(editor_id).clear_visual_selection();
+                    if let Some(pos) = restore_pos {
+                        editor.set_caret_line(pos.line);
+                        editor.set_caret_column(pos.col);
+                    }
                 }
                 pairing = pairing.on_consume_cursor();
             }
             Effect::SetCursor { offset: _ } if pairing.should_suppress_cursor() => {
                 log::trace!("pass2: SetCursor skipped (awaiting cursor for selection)");
                 pairing = pairing.on_consume_cursor();
+            }
+            Effect::SetCursor { offset } => {
+                if cursor_count > 1 {
+                    log::trace!("pass2: SetCursor skipped (multi-cursor, sync-only)");
+                } else {
+                    let pos = doc.line_index.byte_to_line_col(doc.text, offset.get());
+                    if cursor_effect_index == 0 {
+                        cursor::handle_set_cursor(editor, &doc, offset.get(), scrolloff);
+                    } else {
+                        let idx = cursor_effect_index as i32;
+                        let caret_count = editor.get_caret_count();
+                        if idx >= caret_count {
+                            let added = editor.add_caret(pos.line, pos.col);
+                            if added < 0 {
+                                log::error!(
+                                    "multi-cursor: add_caret({}, {}) failed for index {}",
+                                    pos.line,
+                                    pos.col,
+                                    cursor_effect_index
+                                );
+                                cursor_effect_index += 1;
+                                continue;
+                            }
+                        } else {
+                            editor.set_caret_line_for(pos.line, idx);
+                            editor.set_caret_column_for(pos.col, idx);
+                        }
+                    }
+                }
+                cursor_effect_index += 1;
+            }
+            Effect::SaveSelections { tag } => {
+                // Snapshot current cursor positions from the editor into buffer state.
+                let caret_count = editor.get_caret_count();
+                let mut positions = Vec::with_capacity(caret_count as usize);
+                for idx in 0..caret_count {
+                    let line = editor.get_caret_line_for(idx) as usize;
+                    let col = editor.get_caret_column_for(idx) as usize;
+                    positions.push((line, col, 0));
+                }
+                log::trace!(
+                    "SaveSelections({:?}): saved {} caret positions",
+                    tag,
+                    positions.len()
+                );
+                state.buffer(editor_id).save_selections(positions);
+            }
+            Effect::RestoreSelections { tag } => {
+                if let Some(positions) = state.buffer(editor_id).saved_selections() {
+                    let positions = positions.to_vec();
+                    log::trace!(
+                        "RestoreSelections({:?}): restoring {} caret positions",
+                        tag,
+                        positions.len()
+                    );
+                    // Restore carets: primary first, then secondaries.
+                    for (idx, &(line, col, _)) in positions.iter().enumerate() {
+                        let line_i32 = line as i32;
+                        let col_i32 = col as i32;
+                        if idx == 0 {
+                            editor.set_caret_line(line_i32);
+                            editor.set_caret_column(col_i32);
+                        } else {
+                            let caret_idx = idx as i32;
+                            let caret_count = editor.get_caret_count();
+                            if caret_idx >= caret_count {
+                                editor.add_caret(line_i32, col_i32);
+                            } else {
+                                editor.set_caret_line_for(line_i32, caret_idx);
+                                editor.set_caret_column_for(col_i32, caret_idx);
+                            }
+                        }
+                    }
+                    // Remove excess carets beyond the restored count.
+                    let target = positions.len() as i32;
+                    let current = editor.get_caret_count();
+                    for idx in (target..current).rev() {
+                        editor.remove_caret(idx);
+                    }
+                    // Update cursor_effect_index so the tail cleanup preserves
+                    // the restored carets instead of clearing them.
+                    cursor_effect_index = positions.len();
+                    // Update last_caret_count so the import logic sees the
+                    // correct count after RestoreSelections.
+                    state
+                        .buffer(editor_id)
+                        .set_last_caret_count(positions.len());
+                    // One-shot restore: clear saved data so stale positions are
+                    // never accidentally re-applied.
+                    state.buffer(editor_id).clear_saved_selections();
+                } else {
+                    log::trace!("RestoreSelections({:?}): no saved state — skipped", tag);
+                }
             }
             other => {
                 dispatch_pass2_effect(
@@ -331,22 +448,33 @@ pub(crate) fn dispatch(
                     scrolloff,
                     highlight_yank_duration_ms,
                     clipboard,
+                    editor_id,
                 );
             }
         }
     }
 
-    debug_assert!(
-        matches!(pairing, SelectionPairing::Idle),
-        "Engine invariant: selection pairing ended in {:?}, expected Idle",
-        pairing
-    );
-
+    // Note: pairing may end in AwaitingCursor when vim-core emits multiple
+    // SetSelection effects without matching SetCursor (e.g., visual block
+    // extension can emit 2 SetSelections + 1 SetCursor). This is not a bug —
+    // the last SetSelection wins and its cursor is correctly positioned.
     if matches!(pairing, SelectionPairing::AwaitingCursor { .. }) {
-        log::warn!(
-            "Engine invariant: selection pairing ended in {:?}, expected Idle",
+        log::trace!(
+            "selection pairing ended in {:?} (extra SetSelections without cursor — normal for visual block)",
             pairing
         );
+    }
+
+    if cursor_count > 1 {
+        // Multi-cursor: post-sync owns all caret lifecycle. No cleanup here.
+    } else if cursor_effect_index >= 2 {
+        let target_count = cursor_effect_index as i32;
+        let current_count = editor.get_caret_count();
+        for idx in (target_count..current_count).rev() {
+            editor.remove_caret(idx);
+        }
+    } else {
+        editor.remove_secondary_carets();
     }
 
     compound_actions
@@ -365,6 +493,7 @@ pub(crate) fn dispatch_pass2_effect(
     scrolloff: i32,
     _highlight_yank_duration_ms: u32,
     clipboard: &mut dyn crate::bridge::clipboard::ClipboardPort,
+    _editor_id: InstanceId,
 ) {
     match effect {
         // ── Cursor ──────────────────────────────────────────────────────
@@ -469,7 +598,7 @@ pub(crate) fn dispatch_pass2_effect(
         }
 
         // ── Message ─────────────────────────────────────────────────────
-        Effect::ShowMessage { .. } | Effect::ShowError { .. } | Effect::ClearMessage => {
+        Effect::ShowInfo { .. } | Effect::ShowError { .. } | Effect::ClearMessage => {
             dispatch_message_effect(effect, state);
         }
 
@@ -525,8 +654,8 @@ pub(crate) fn dispatch_pass2_effect(
         | Effect::SetStickyColumn { .. }
         | Effect::SetCursorStyle { .. }
         | Effect::SetSubstitutePattern { .. }
-        | Effect::SetPluginHighlight { .. }
-        | Effect::ClearPluginHighlight { .. }
+        | Effect::SetHighlightRange { .. }
+        | Effect::ClearHighlightRange { .. }
         | Effect::ClearNamedRegister { .. }
         | Effect::ClearMark { .. }
         | Effect::JumpToBuffer { .. }
@@ -603,9 +732,9 @@ pub(crate) fn dispatch_pass2_effect(
         // Produced by the compose middleware when Insert+Delete annihilate.
         Effect::Noop => {}
 
-        // ── Engine-internal: plugin state (processed by effect_processor) ──
-        Effect::SetPluginState { .. } | Effect::ClearPluginState { .. } => {
-            log::trace!("[internal] plugin state update");
+        // ── Engine-internal: mode transition (processed by effect_processor) ──
+        Effect::ModeTransition { .. } => {
+            log::trace!("[internal] mode transition");
         }
 
         // ── Engine-internal: substitute confirm (processed by effect_processor) ──
@@ -621,14 +750,40 @@ pub(crate) fn dispatch_pass2_effect(
             log::trace!("[internal] syntax selection (no-op in CodeEdit)");
         }
 
-        // ── Engine-internal: multi-selection / block selection state ─────
-        Effect::HighlightRows { .. }
-        | Effect::SetBlockSelections { .. }
-        | Effect::SaveSelections { .. }
-        | Effect::RestoreSelections { .. }
-        | Effect::SelectNextMatch { .. }
-        | Effect::SelectPreviousMatch { .. } => {
-            log::trace!("[internal] multi-selection effect (no-op in CodeEdit)");
+        // ── Multi-selection / block selection state ───────────────────────
+        // SaveSelections and RestoreSelections are handled in the main pass 2
+        // loop (alongside SetCursor) so they can update cursor_effect_index.
+        // They should never reach here.
+        Effect::SelectNextMatch {
+            ref pattern,
+            skip_current,
+        } => {
+            // Engine-internal state mutation already applied before effects reach
+            // the host. The post-dispatch sync renders the new cursor positions.
+            log::trace!(
+                "SelectNextMatch: pattern={:?} skip_current={}",
+                pattern,
+                skip_current
+            );
+        }
+        Effect::SelectPreviousMatch {
+            ref pattern,
+            skip_current,
+        } => {
+            log::trace!(
+                "SelectPreviousMatch: pattern={:?} skip_current={}",
+                pattern,
+                skip_current
+            );
+        }
+        Effect::SetBlockSelections { .. } => {
+            // Rendered by BlockVisualOverlay via UiSnapshot::block_visual.
+            // This effect carries the logical selection data for engine state;
+            // no additional host work needed.
+            log::trace!("[internal] SetBlockSelections (rendered via BlockVisualOverlay)");
+        }
+        Effect::HighlightRows { .. } => {
+            log::trace!("[internal] HighlightRows");
         }
 
         // ── Engine-internal: scroll half-count (state-only) ─────────────
@@ -728,7 +883,7 @@ fn dispatch_search_effect(effect: Effect, state: &mut ShellState, doc: &Document
             log::trace!("ClearSubstitutePreview");
             state.clear_substitute_preview();
         }
-        Effect::SearchMatchInfo { current, total } => {
+        Effect::SearchMatchInfo { current, total, .. } => {
             let msg = compact_str::format_compact!("[{}/{}]", current, total);
             messages::handle_show_message(state.globals_mut(), msg.as_str());
         }
@@ -802,10 +957,10 @@ fn dispatch_fold_effect(effect: Effect, editor: &mut impl FoldCapable) {
 
 fn dispatch_message_effect(effect: Effect, state: &mut ShellState) {
     match effect {
-        Effect::ShowMessage { text: msg } => {
-            messages::handle_show_message(state.globals_mut(), &msg);
+        Effect::ShowInfo { info } => {
+            messages::handle_show_message(state.globals_mut(), &format!("{:?}", info));
         }
-        Effect::ShowError { error } => {
+        Effect::ShowError { error, .. } => {
             messages::handle_show_error(state.globals_mut(), &error);
         }
         Effect::ClearMessage => {

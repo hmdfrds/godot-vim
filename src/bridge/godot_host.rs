@@ -205,6 +205,7 @@ impl VimHost for GodotHost {
 
         // Clone editor for syntax closure (Gd::clone is a cheap refcount bump).
         let editor_for_syntax = self.editor.clone();
+        let cursor_count = self.editor.get_caret_count().max(1) as usize;
 
         // Destructure to satisfy the borrow checker: we need &mut self.editor
         // for CodeEditPort AND &mut self.state / &mut self.undo_depth for
@@ -241,6 +242,7 @@ impl VimHost for GodotHost {
                     SyntaxRegion::from_editor(&editor_for_syntax, line, col)
                 }),
                 clipboard,
+                cursor_count,
             },
             text_cache,
         );
@@ -541,6 +543,10 @@ impl GodotHost {
 
     // ── Field accessors ─────────────────────────────────────────────────
 
+    pub(crate) fn state(&self) -> &ShellState {
+        &self.state
+    }
+
     pub(crate) fn state_mut(&mut self) -> &mut ShellState {
         &mut self.state
     }
@@ -559,6 +565,37 @@ impl GodotHost {
 
     pub(crate) fn highlight_yank_duration_ms(&self) -> u32 {
         self.highlight_yank_duration_ms
+    }
+
+    // ── Multi-cursor sync accessors ────────────────────────────────────
+
+    /// Access the cached text for multi-cursor position computation.
+    pub(crate) fn text_cache(&self) -> &str {
+        &self.text_cache
+    }
+
+    /// Access the line index for byte→line/col conversion.
+    pub(crate) fn line_index(&self) -> &LineIndex {
+        &self.line_index
+    }
+
+    /// Mutable access to the editor for multi-cursor sync operations.
+    #[allow(dead_code)]
+    pub(crate) fn editor_mut(&mut self) -> &mut Gd<CodeEdit> {
+        &mut self.editor
+    }
+
+    /// Immutable access to the editor (for multi-cursor import).
+    pub(crate) fn editor(&self) -> &Gd<CodeEdit> {
+        &self.editor
+    }
+
+    /// Split borrow: simultaneous mutable access to editor and state.
+    ///
+    /// Required by multi-cursor sync which needs `CodeEditPort` (from editor)
+    /// and `BufferState` (from shell state) simultaneously.
+    pub(crate) fn editor_and_state_mut(&mut self) -> (&mut Gd<CodeEdit>, &mut ShellState) {
+        (&mut self.editor, &mut self.state)
     }
 }
 

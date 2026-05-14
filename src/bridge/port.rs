@@ -2,7 +2,7 @@
 //!
 //! Trait hierarchy:
 //!
-//! - **`TextEditorPort`** (24 methods) — core text editing (required).
+//! - **`TextEditorPort`** (26 methods) — core text editing (required).
 //! - **`FoldCapable`** (5 methods, default no-ops) — code folding.
 //! - **`IdeCapable`** (2 methods, default no-ops) — autocomplete/hints.
 //! - **`NavigationCapable`** (2 methods, default no-ops) — go-to-definition, hover docs.
@@ -59,11 +59,26 @@ pub(crate) trait TextEditorPort {
 
     /// Returns the new caret index, or -1 on failure.
     fn add_caret(&mut self, line: i32, col: i32) -> i32;
+    fn remove_caret(&mut self, caret_idx: i32);
     fn remove_secondary_carets(&mut self);
+    fn get_caret_count(&self) -> i32;
+
+    /// Get caret line for a specific caret index (multi-cursor import).
+    fn get_caret_line_for(&self, caret_idx: i32) -> i32;
+    /// Get caret column for a specific caret index (multi-cursor import).
+    fn get_caret_column_for(&self, caret_idx: i32) -> i32;
+
+    /// Set caret line for a specific caret index (multi-cursor sync).
+    fn set_caret_line_for(&mut self, line: i32, caret_idx: i32);
+    /// Set caret column for a specific caret index (multi-cursor sync).
+    fn set_caret_column_for(&mut self, col: i32, caret_idx: i32);
 
     /// Groups subsequent edits into a single undo step. Nesting is supported.
     fn begin_complex_operation(&mut self);
     fn end_complex_operation(&mut self);
+
+    fn begin_multicaret_edit(&mut self);
+    fn end_multicaret_edit(&mut self);
     fn undo(&mut self);
     fn redo(&mut self);
 
