@@ -896,6 +896,10 @@ impl GodotVimCore {
                             "recover_controller_from_panic: no valid editor, Tier 1 cleanup only"
                         );
                         controller.force_cleanup_without_editor();
+                        controller.detach_session();
+                        self.attached_editor = None;
+                        self.last_editor_id = None;
+                        self.ui.reset_cached_state();
                     }
                 }
             },

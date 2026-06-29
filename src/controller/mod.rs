@@ -200,8 +200,16 @@ impl VimController {
                 state: ShellState::default(),
             },
         );
-        let ControllerPhase::Detached { engine, state } = old_phase else {
-            panic!("attach_session: must be in detached state");
+        let (engine, state) = match old_phase {
+            ControllerPhase::Detached { engine, state } => (engine, state),
+            ControllerPhase::Attached { session } => {
+                // Should be unreachable once detach paths are correct, but never panic:
+                // reclaim engine+state from the stranded session instead of UB-on-unwind.
+                log::warn!("attach_session: recovered from stranded Attached phase");
+                let (engine, mut host) = session.into_parts();
+                let state = host.take_state();
+                (engine, state)
+            }
         };
         let mut host = GodotHost::new(editor);
         host.set_state(state);
