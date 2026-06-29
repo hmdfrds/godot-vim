@@ -28,6 +28,39 @@ use super::CursorColorMap;
 use crate::types::{CharLineCol, StatusMessage, UiSnapshot};
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Overlay-validity guard
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Run `body` only when the overlay slot is Some AND its node is still alive.
+/// Foreign-editor frees auto-free our overlay CHILDREN while these Option<Gd<T>>
+/// slots still hold dangling handles; calling bind_mut()/set_visible() on them
+/// panics with "... after it has been freed". This guard makes every access safe.
+macro_rules! with_valid_overlay {
+    ($slot:expr, |$node:ident| $body:expr) => {
+        if let Some(ref mut $node) = $slot {
+            if $node.is_instance_valid() {
+                $body
+            } else {
+                log::warn!("overlay access skipped: instance freed");
+            }
+        }
+    };
+}
+
+/// Helper alternative for sites where the macro causes borrow-checker conflicts.
+/// Returns `Some(&mut Gd<T>)` only when the slot is occupied and the node is live.
+fn valid_mut<T: godot::prelude::GodotClass>(slot: &mut Option<Gd<T>>) -> Option<&mut Gd<T>> {
+    match slot {
+        Some(g) if g.is_instance_valid() => Some(g),
+        Some(_) => {
+            log::warn!("overlay access skipped: instance freed");
+            None
+        }
+        None => None,
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Sub-structs
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -212,9 +245,9 @@ impl UiCoordinator {
     pub(crate) fn detach(&mut self, editor: &mut Gd<CodeEdit>) {
         log::debug!("ui::detach: editor=#{}", editor.instance_id().to_i64());
         // ── 1. Line numbers ──────────────────────────────────────────────
-        if let Some(ln) = self.line_numbers.as_mut() {
+        with_valid_overlay!(self.line_numbers, |ln| {
             ln.bind_mut().detach();
-        }
+        });
         remove_and_free(&mut self.line_numbers);
 
         // ── 2. Cursor ────────────────────────────────────────────────────
@@ -249,9 +282,9 @@ impl UiCoordinator {
         // The recording-indicator tween runs in an infinite loop. It must be
         // killed before freeing the node, or Godot keeps stepping it against
         // a freed panel (use-after-free in the tween list).
-        if let Some(bar) = self.status_bar.as_mut() {
+        with_valid_overlay!(self.status_bar, |bar| {
             bar.bind_mut().stop_recording_animation();
-        }
+        });
         remove_and_free(&mut self.status_bar);
 
         // ── 4. Search highlighting ──────────────────────────────────────
@@ -310,9 +343,9 @@ impl UiCoordinator {
             || cmdline_active
             || vimdebug_active
         {
-            if let Some(ref mut bar) = self.status_bar {
+            with_valid_overlay!(self.status_bar, |bar| {
                 bar.bind_mut().update(snap);
-            }
+            });
             self.cache.last_mode = Some(snap.mode);
             self.cache.last_message = snap.message.clone();
             self.cache.last_recording = snap.recording_register;
@@ -322,14 +355,17 @@ impl UiCoordinator {
 
         // ── 2. Cursor ────────────────────────────────────────────────────
         self.cache.cached_visual_head = snap.visual_head;
-        if let Some(ref mut cursor) = self.cursor {
+        // Bind geometry before the overlay borrow so the borrow checker can
+        // see self.shaped_cache and self.cursor as separate field borrows.
+        let cursor_geom = compute_cursor_geometry(&mut self.shaped_cache, editor, snap.visual_head);
+        if let Some(cursor) = valid_mut(&mut self.cursor) {
             let mut vim_cursor = cursor.bind_mut();
             // Always push mode even without geometry, so the shape doesn't
             // get stuck (e.g. beam lingering after insert-repeat exit).
             vim_cursor.set_style(snap.cursor_style, snap.mode);
             // visual_head: in visual mode, Godot's caret is at the exclusive
             // selection end, but Vim's cursor should render at the head.
-            if let Some(geom) = compute_cursor_geometry(&mut self.shaped_cache, editor, snap.visual_head) {
+            if let Some(geom) = cursor_geom {
                 vim_cursor.set_target(geom.pos, geom.height, geom.width);
                 drop(vim_cursor);
                 cursor.set_visible(self.cursor_enabled);
@@ -410,17 +446,17 @@ impl UiCoordinator {
         // ── 6. Highlight yank ───────────────────────────────────────────
         if let Some(ref yank) = snap.highlight_yank {
             if yank.duration_ms > 0 {
-                if let Some(ref mut overlay) = self.highlight_yank {
+                with_valid_overlay!(self.highlight_yank, |overlay| {
                     overlay
                         .bind_mut()
                         .show_yank(yank.start, yank.end, yank.duration_ms, yank.shape, editor);
-                }
+                });
             }
         }
 
         // ── 7. Block visual overlay ──────────────────────────────────────
         if let Some(ref bv) = snap.block_visual {
-            if let Some(ref mut overlay) = self.block_visual {
+            with_valid_overlay!(self.block_visual, |overlay| {
                 overlay.bind_mut().update_block(
                     bv.anchor_line,
                     bv.anchor_col,
@@ -428,7 +464,7 @@ impl UiCoordinator {
                     bv.head_col,
                     editor,
                 );
-            }
+            });
         } else {
             self.clear_block_visual();
         }
@@ -436,11 +472,11 @@ impl UiCoordinator {
         // ── 8. Debug range overlay ───────────────────────────────────────
         match snap.vimdebug.range() {
             Some(range) => {
-                if let Some(ref mut overlay) = self.debug_overlay {
+                with_valid_overlay!(self.debug_overlay, |overlay| {
                     overlay
                         .bind_mut()
                         .show_range(range.start, range.end, editor);
-                }
+                });
             }
             // Only clear when vimdebug is fully inactive, not just range-less.
             None if !snap.vimdebug.is_active() => {
@@ -453,13 +489,14 @@ impl UiCoordinator {
     /// Lightweight cursor-only refresh for scroll/draw signal handlers.
     /// Keeps the overlay in sync with the viewport between keystrokes.
     pub(crate) fn update_cursor_position(&mut self, editor: &Gd<CodeEdit>) {
-        if let Some(ref mut cursor) = self.cursor {
-            if let Some(geom) = compute_cursor_geometry(&mut self.shaped_cache, editor, self.cache.cached_visual_head) {
-                {
-                    cursor
-                        .bind_mut()
-                        .set_target(geom.pos, geom.height, geom.width);
-                }
+        // Bind geometry before the overlay borrow so the borrow checker can
+        // see self.shaped_cache and self.cursor as separate field borrows.
+        let geom = compute_cursor_geometry(&mut self.shaped_cache, editor, self.cache.cached_visual_head);
+        if let Some(cursor) = valid_mut(&mut self.cursor) {
+            if let Some(geom) = geom {
+                cursor
+                    .bind_mut()
+                    .set_target(geom.pos, geom.height, geom.width);
                 cursor.set_visible(self.cursor_enabled);
             } else {
                 cursor.set_visible(false);
@@ -475,7 +512,7 @@ impl UiCoordinator {
         current_mode: Mode,
         editor: &mut Gd<CodeEdit>,
     ) {
-        if let Some(ref mut cursor) = self.cursor {
+        with_valid_overlay!(self.cursor, |cursor| {
             let mut vim_cursor = cursor.bind_mut();
             vim_cursor.set_color_map(CursorColorMap {
                 normal: snapshot.cursor.normal,
@@ -501,7 +538,7 @@ impl UiCoordinator {
             };
             vim_cursor.set_animation(snapshot.cursor.lerp_speed, blink_speed);
             vim_cursor.set_dimensions(2.0, snapshot.cursor.underline_height as f32);
-        }
+        });
 
         // ── Cursor enable/disable toggle ────────────────────────────────
         // Swaps between the custom VimCursor overlay and Godot's native caret.
@@ -509,9 +546,9 @@ impl UiCoordinator {
         // restoring/re-hiding the caret_color override.
         if snapshot.cursor.enabled != self.cursor_enabled {
             if !snapshot.cursor.enabled {
-                if let Some(ref mut cursor) = self.cursor {
+                with_valid_overlay!(self.cursor, |cursor| {
                     cursor.set_visible(false);
-                }
+                });
                 if let Some(color) = self.saved.caret_color {
                     editor.add_theme_color_override("caret_color", color);
                 } else {
@@ -521,25 +558,25 @@ impl UiCoordinator {
             } else {
                 editor
                     .add_theme_color_override("caret_color", Color::from_rgba(0.0, 0.0, 0.0, 0.0));
-                if let Some(ref mut cursor) = self.cursor {
+                with_valid_overlay!(self.cursor, |cursor| {
                     cursor.set_visible(true);
-                }
+                });
             }
             self.cursor_enabled = snapshot.cursor.enabled;
         }
 
-        if let Some(ref mut ln) = self.line_numbers {
+        with_valid_overlay!(self.line_numbers, |ln| {
             ln.bind_mut().set_mode(snapshot.line_number_mode);
-        }
+        });
 
         self.inccommand_enabled = snapshot.inccommand.is_enabled();
         if !self.inccommand_enabled {
             self.clear_substitute_preview();
         }
 
-        if let Some(ref mut bar) = self.status_bar {
+        with_valid_overlay!(self.status_bar, |bar| {
             bar.bind_mut().apply_colors(&snapshot.status_bar);
-        }
+        });
     }
 
     pub(crate) fn update_substitute_preview(
@@ -547,15 +584,15 @@ impl UiCoordinator {
         positions: &[crate::types::MatchRange],
         editor: &Gd<CodeEdit>,
     ) {
-        if let Some(ref mut overlay) = self.inccommand {
+        with_valid_overlay!(self.inccommand, |overlay| {
             overlay.bind_mut().update_matches(positions, editor);
-        }
+        });
     }
 
     pub(crate) fn clear_substitute_preview(&mut self) {
-        if let Some(ref mut overlay) = self.inccommand {
+        with_valid_overlay!(self.inccommand, |overlay| {
             overlay.bind_mut().clear_highlights();
-        }
+        });
     }
 
     /// Recompute inccommand pixel rects from stored logical positions.
@@ -564,21 +601,21 @@ impl UiCoordinator {
     /// aligned with the viewport between keystrokes. No-op when no preview
     /// is active.
     pub(crate) fn recompute_inccommand_rects(&mut self, editor: &Gd<CodeEdit>) {
-        if let Some(ref mut overlay) = self.inccommand {
+        with_valid_overlay!(self.inccommand, |overlay| {
             overlay.bind_mut().recompute_rects(editor);
-        }
+        });
     }
 
     pub(crate) fn clear_debug_overlay(&mut self) {
-        if let Some(ref mut overlay) = self.debug_overlay {
+        with_valid_overlay!(self.debug_overlay, |overlay| {
             overlay.bind_mut().clear_highlights();
-        }
+        });
     }
 
     pub(crate) fn clear_block_visual(&mut self) {
-        if let Some(ref mut overlay) = self.block_visual {
+        with_valid_overlay!(self.block_visual, |overlay| {
             overlay.bind_mut().clear_highlights();
-        }
+        });
     }
 
     /// Recompute block visual overlay pixel rects from stored logical positions.
@@ -586,9 +623,9 @@ impl UiCoordinator {
     /// Called from scroll/resize/draw signal handlers to keep the block
     /// selection highlight aligned with the viewport between keystrokes.
     pub(crate) fn recompute_block_visual_rects(&mut self, editor: &Gd<CodeEdit>) {
-        if let Some(ref mut overlay) = self.block_visual {
+        with_valid_overlay!(self.block_visual, |overlay| {
             overlay.bind_mut().recompute_rects(editor);
-        }
+        });
     }
 }
 
@@ -618,6 +655,9 @@ impl Drop for UiCoordinator {
 fn remove_and_free<T: GodotClass + Inherits<Node>>(slot: &mut Option<Gd<T>>) {
     if let Some(node) = slot.take() {
         let mut gd_node = node.upcast::<Node>();
+        if !gd_node.is_instance_valid() {
+            return; // child auto-freed with the editor; just drop the dangling Gd
+        }
         if let Some(mut parent) = gd_node.get_parent() {
             parent.remove_child(&gd_node);
         }
