@@ -490,7 +490,7 @@ impl VimController {
         self.engine_mut().emergency_reset();
         if let ControllerPhase::Attached { ref mut session } = self.phase {
             let host = session.host_mut();
-            let editor_id = host.editor().instance_id();
+            let editor_id = host.editor_id();
             // Discard any pending undo group text (orphaned begin_group).
             host.state_mut()
                 .buffer(editor_id)
@@ -779,7 +779,7 @@ impl VimController {
     pub(crate) fn recover_from_panic(&mut self, editor: &mut Gd<CodeEdit>) {
         // Capture pending text BEFORE force_cleanup discards it.
         let pending_text = if let ControllerPhase::Attached { ref mut session } = self.phase {
-            let editor_id = session.host().editor().instance_id();
+            let editor_id = session.host().editor_id();
             session
                 .host_mut()
                 .state_mut()

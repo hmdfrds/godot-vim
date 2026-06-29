@@ -606,6 +606,12 @@ impl GodotHost {
         &self.editor
     }
 
+    /// The attached editor's InstanceId, safe to read even after the editor is freed
+    /// (returns the construction-captured id; never dereferences the live `Gd`).
+    pub(crate) fn editor_id(&self) -> InstanceId {
+        self.cache_editor_id
+    }
+
     /// Split borrow: simultaneous mutable access to editor, state, and
     /// pending UI actions.
     ///
