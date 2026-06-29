@@ -154,12 +154,15 @@ impl GodotVimCore {
             return;
         };
 
-        let editor_valid_at_entry = editor.is_instance_valid();
-
         // Catch ANY panic after the take() so the teardown tail always runs.
         let teardown_ok = crate::safety::panic_guard(
             "detach:teardown",
             || {
+                if !editor.is_instance_valid() {
+                    log::warn!("detach: editor no longer valid at entry");
+                    return false;
+                }
+
                 self.cancel_pending_tooltip();
 
                 // Reset so outstanding expectations from this editor don't suppress
@@ -299,7 +302,6 @@ impl GodotVimCore {
             }
             controller.detach_session();
         }
-        let _ = editor_valid_at_entry;
         log::debug!("Detached (teardown_ok={teardown_ok})");
     }
 }
