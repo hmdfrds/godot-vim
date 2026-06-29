@@ -308,6 +308,7 @@ impl GodotVimCore {
         }
         if let Some(controller) = &mut self.controller {
             if !still_valid || !teardown_ok {
+                controller.clear_multi_cursor_on_detach();
                 controller.force_cleanup_without_editor();
             }
             controller.detach_session();
