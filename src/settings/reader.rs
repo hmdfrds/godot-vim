@@ -25,6 +25,7 @@ pub(crate) fn read_all(settings: &EditorSettings) -> SettingsSnapshot {
             defaults::LOG_LEVEL,
             defaults::LOG_LEVEL_OPTIONS,
         )),
+        enabled: read_bool(settings, keys::ENABLED, defaults::ENABLED),
         scrolloff: read_int(settings, keys::SCROLLOFF, defaults::SCROLLOFF),
         textwidth: read_int(settings, keys::TEXTWIDTH, defaults::TEXTWIDTH),
         clipboard_enabled: read_bool(

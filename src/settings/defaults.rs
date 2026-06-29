@@ -13,6 +13,7 @@ use godot::prelude::*;
 
 pub(crate) const LOG_LEVEL: &str = "Off";
 pub(crate) const LOG_LEVEL_OPTIONS: &[&str] = &["Off", "Error", "Warn", "Info", "Debug", "Trace"];
+pub(crate) const ENABLED: bool = true;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Editor behavior

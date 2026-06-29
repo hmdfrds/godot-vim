@@ -30,6 +30,7 @@ pub(crate) fn register_all(settings: &mut EditorSettings) {
         defaults::LOG_LEVEL,
         defaults::LOG_LEVEL_OPTIONS,
     );
+    register_bool(settings, keys::ENABLED, defaults::ENABLED);
 
     // ── Editor behavior ─────────────────────────────────────────────────
     // tabstop/shiftwidth/expandtab: not registered — synced from Godot's

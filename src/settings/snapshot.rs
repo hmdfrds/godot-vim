@@ -163,6 +163,8 @@ pub(crate) struct SettingsSnapshot {
     pub(crate) highlight_yank_duration: u32,
 
     // ── 1-byte aligned (bool + small enums) ─────────────────────────────
+    #[allow(dead_code)]
+    pub(crate) enabled: bool,
     pub(crate) clipboard_enabled: bool,
     pub(crate) ignorecase: bool,
     pub(crate) smartcase: bool,
@@ -224,6 +226,7 @@ mod tests {
     fn make_snapshot(scrolloff: i64, textwidth: i64, timeoutlen: i64) -> SettingsSnapshot {
         SettingsSnapshot {
             log_level: crate::logging::LogLevel::Info,
+            enabled: true,
             scrolloff,
             textwidth,
             clipboard_enabled: false,
@@ -426,6 +429,13 @@ mod tests {
     #[test]
     fn inccommand_mode_nosplit_is_enabled() {
         assert!(InccommandMode::Nosplit.is_enabled());
+    }
+
+    #[test]
+    fn snapshot_default_is_enabled() {
+        // make_snapshot takes (scrolloff, textwidth, timeoutlen); other fields hardcoded.
+        let s = make_snapshot(5, 80, 1000);
+        assert!(s.enabled, "plugin should default to enabled (opt-out)");
     }
 
     #[test]

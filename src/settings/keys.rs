@@ -10,6 +10,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub(crate) const LOG_LEVEL: &str = "plugins/GodotVim/log_level";
+pub(crate) const ENABLED: &str = "plugins/GodotVim/enabled";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Editor behavior
