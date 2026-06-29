@@ -163,7 +163,6 @@ pub(crate) struct SettingsSnapshot {
     pub(crate) highlight_yank_duration: u32,
 
     // ── 1-byte aligned (bool + small enums) ─────────────────────────────
-    #[allow(dead_code)]
     pub(crate) enabled: bool,
     pub(crate) clipboard_enabled: bool,
     pub(crate) ignorecase: bool,

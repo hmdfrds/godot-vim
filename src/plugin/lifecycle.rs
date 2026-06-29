@@ -17,11 +17,14 @@ use super::GodotVimCore;
 impl GodotVimCore {
     // ── Settings ──────────────────────────────────────────────────────
 
-    /// Register EditorSettings keys, read initial values, source the config
-    /// file, and connect `settings_changed` for live reload.
+    /// Register EditorSettings keys, read initial values, and connect
+    /// `settings_changed` for live reload. Config-sourcing and
+    /// `apply_settings` are deferred to the enabled edge in
+    /// `apply_enabled_state` so startup equals the runtime enable path.
     pub(super) fn init_settings(&mut self) {
         let Some(mut editor_settings) = EditorInterface::singleton().get_editor_settings() else {
             log::warn!("EditorSettings unavailable, using default VimOptions");
+            self.enabled = crate::settings::defaults::ENABLED;
             return;
         };
 
@@ -31,16 +34,8 @@ impl GodotVimCore {
         let snapshot = crate::settings::reader::read_all(&editor_settings);
         crate::logging::set_level(snapshot.log_level);
 
-        if let Some(controller) = &mut self.controller {
-            controller.apply_settings(&snapshot);
-        }
-
+        self.enabled = snapshot.enabled;
         self.settings = Some(snapshot);
-
-        if !self.source_config_from_disk("enter_tree") {
-            let path = self.resolve_config_path().path;
-            log::debug!("enter_tree: no config file found at '{path}'");
-        }
 
         let callable = self.base().callable("on_settings_changed");
         connect_immediate(&mut editor_settings, SIG_SETTINGS_CHANGED, &callable);

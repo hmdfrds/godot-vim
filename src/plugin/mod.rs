@@ -77,6 +77,12 @@ pub struct GodotVimCore {
     /// Used by [`ProcessingKeyGuard`] for RAII-based keystroke processing tracking.
     processing_key: bool,
     fs_explorer: crate::navigation::FileSystemExplorer,
+    /// Desired master-enable state (mirrors plugins/GodotVim/enabled).
+    enabled: bool,
+    /// Disabled->enabled EDGE detector (NOT a correctness gate): apply_enabled_state
+    /// always reconciles toward `enabled`; `wired` only fires the one-shot
+    /// re-discovery + config-source exactly once per enable transition.
+    wired: bool,
 }
 
 #[godot_api]
@@ -97,6 +103,8 @@ impl INode for GodotVimCore {
             tracked_windows: Vec::new(),
             processing_key: false,
             fs_explorer: crate::navigation::FileSystemExplorer::new(),
+            enabled: true,
+            wired: false,
         }
     }
 
@@ -120,12 +128,9 @@ impl INode for GodotVimCore {
                 self.controller = Some(VimController::new());
                 self.init_settings();
                 self.init_mapping_timer();
-                self.base_mut().set_process_input(true);
-                self.connect_editor_signals();
-                self.init_floating_window_tracking();
                 self.init_fs_explorer_callables();
-                self.base_mut()
-                    .call_deferred("on_script_changed", &[Variant::nil()]);
+                self.wired = false;
+                self.apply_enabled_state();
 
                 log::info!("GodotVim initialized");
             },
@@ -185,6 +190,35 @@ impl GodotVimCore {
                         .call_deferred("perform_attach", &[code_edit.to_variant()]);
                 } else {
                     self.base_mut().call_deferred("perform_detach", &[]);
+                }
+            },
+            (),
+        );
+    }
+
+    /// Called via `call_deferred` on the disabled→enabled edge to reattach to
+    /// whatever CodeEdit is currently focused. Skipped when disabled or no
+    /// controller is present (deferred call arrived after exit_tree).
+    #[func]
+    fn rediscover_and_attach(&mut self) {
+        if !self.enabled || self.controller.is_none() {
+            return;
+        }
+        panic_guard(
+            "rediscover_and_attach",
+            || {
+                if let Some(code_edit) = discovery::find_active_code_edit() {
+                    self.base_mut()
+                        .call_deferred("perform_attach", &[code_edit.to_variant()]);
+                } else if let Some(focus) = EditorInterface::singleton()
+                    .get_base_control()
+                    .and_then(|c| c.get_viewport())
+                    .and_then(|v| v.gui_get_focus_owner())
+                {
+                    if let Some(code_edit) = discovery::find_code_edit_from_control(&focus) {
+                        self.base_mut()
+                            .call_deferred("perform_attach", &[code_edit.to_variant()]);
+                    }
                 }
             },
             (),
@@ -750,6 +784,7 @@ impl GodotVimCore {
     /// to defaults for missing or wrong-type values.
     #[func]
     fn on_settings_changed(&mut self) {
+        // Intentionally NOT gated by `!self.enabled` — must observe re-enable.
         if self.controller.is_none() {
             return;
         }
@@ -764,6 +799,12 @@ impl GodotVimCore {
                 let snapshot = crate::settings::reader::read_all(&editor_settings);
                 log::debug!("settings_changed: log_level={:?}", snapshot.log_level);
                 crate::logging::set_level(snapshot.log_level);
+
+                self.enabled = snapshot.enabled;
+                // CLONE: the trailing live-reload code still borrows `&snapshot`,
+                // so storing by move would be a use-after-move.
+                self.settings = Some(snapshot.clone());
+                self.apply_enabled_state();
 
                 if let Some(controller) = &mut self.controller {
                     controller.apply_settings(&snapshot);
@@ -790,8 +831,6 @@ impl GodotVimCore {
                     }
                 }
 
-                self.settings = Some(snapshot);
-
                 true
             },
             false,
@@ -809,6 +848,49 @@ impl GodotVimCore {
             base.callable("on_fs_prompt_submitted"),
             base.callable("on_fs_prompt_gui_input"),
         );
+    }
+
+    /// Reconcile the plugin toward the desired `self.enabled` state.
+    ///
+    /// Branch-on-desired: always runs toward the target state; no
+    /// `enabled == wired` early-return. `wired` is purely an edge
+    /// detector — it fires the one-shot re-discovery + config-source
+    /// exactly once per disabled→enabled transition.
+    fn apply_enabled_state(&mut self) {
+        if self.enabled {
+            let was_inert = !self.wired;
+            panic_guard("enable:input", || { self.base_mut().set_process_input(true); }, ());
+            panic_guard("enable:signals", || self.connect_editor_signals(), ());
+            panic_guard("enable:floating", || self.init_floating_window_tracking(), ());
+            self.wired = true;
+            if was_inert {
+                // disabled→enabled edge: single startup-equivalent config load + re-discovery
+                if let Some(s) = self.settings.clone() {
+                    if let Some(c) = &mut self.controller {
+                        c.apply_settings(&s);
+                    }
+                }
+                self.source_config_from_disk("enable");
+                self.last_editor_id = None;
+                self.base_mut().call_deferred("rediscover_and_attach", &[]);
+                self.base_mut().call_deferred("on_floating_window_focused", &[]);
+            }
+        } else {
+            panic_guard("disable:detach", || self.detach(), ());
+            panic_guard("disable:signals", || self.disconnect_editor_signals(), ());
+            panic_guard("disable:floating", || self.teardown_floating_window_tracking(), ());
+            panic_guard("disable:fs", || self.fs_explorer.cleanup(), ());
+            panic_guard("disable:dialog", || {
+                if let Some(mut d) = self.mapping_dialog.take() {
+                    if d.is_instance_valid() {
+                        d.queue_free();
+                    }
+                }
+            }, ());
+            self.last_editor_id = None;
+            panic_guard("disable:input", || { self.base_mut().set_process_input(false); }, ());
+            self.wired = false; // unconditional: safe because there is no latch to trap on
+        }
     }
 
     /// Execute a pending UI action that requires plugin-level access (scene tree,
