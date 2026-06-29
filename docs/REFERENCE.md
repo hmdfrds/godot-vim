@@ -337,7 +337,7 @@ All settings are in **Editor > Editor Settings > Plugins > GodotVim**.
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| Enabled | `bool` | `true` | Master toggle. |
+| Enabled | `bool` | `true` | **Master switch** — global, per-user editor setting (stored in `editor_settings-*.tres`, not `project.godot`). When `false` the plugin is inert: no keybindings, overlays, input handling, signal connections, filesystem-prompt interception, or `.godot-vimrc` sourcing occur. What remains connected while inert: the settings listener (so re-enable is observed), an idle one-shot mapping timer whose connection persists but never fires while input is off, filesystem Callables (plain data), the process-global panic hook, and the always-loaded native extension. To disable only one project, turn off the plugin in that project's **Project Settings → Plugins** (writes `project.godot`). |
 | Log Level | `enum` | `Off` | `Off`, `Error`, `Warn`, `Info`, `Debug`, `Trace`. |
 
 ### Editor Behavior
@@ -357,7 +357,7 @@ All settings are in **Editor > Editor Settings > Plugins > GodotVim**.
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| Enabled | `bool` | `true` | Custom cursor overlay (disable for native caret). |
+| Enabled | `bool` | `true` | Custom cursor overlay (disable for native caret). **NOT the master toggle — see General → Enabled.** |
 | Lerp Speed | `float` | `25.0` | Smooth movement speed (higher = snappier). |
 | Underline Height | `float` | `4.0` | Replace-mode underline height in pixels. |
 | Normal Color | `Color` | `#FFFFFF` | Cursor color in Normal mode. |
