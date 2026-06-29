@@ -295,6 +295,29 @@ impl GodotVimCore {
         );
     }
 
+    /// Fires when the attached CodeEdit leaves the scene tree (tab closed,
+    /// foreign editor freed). Performs an identity-guarded immediate detach so
+    /// we don't hold a dangling handle until the next focus event.
+    #[func]
+    fn on_attached_editor_tree_exited(&mut self) {
+        if self.controller.is_none() {
+            return;
+        }
+        panic_guard(
+            "on_attached_editor_tree_exited",
+            || {
+                // tree_exited also fires on benign reparents; only act if this is
+                // OUR attached editor leaving for good. detach() is self-completing
+                // + safe (checks is_instance_valid internally).
+                if self.attached_editor.is_some() {
+                    self.detach();
+                    self.last_editor_id = None;
+                }
+            },
+            (),
+        );
+    }
+
     #[func]
     fn evict_stale_wrappers(&mut self) {
         if self.controller.is_none() {

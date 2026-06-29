@@ -12,7 +12,7 @@ use godot::prelude::*;
 use crate::bridge::code_edit_ext::CodeEditExt;
 
 use super::outcome::EngineOutcome;
-use super::signals::{connect_deferred, connect_immediate, safe_disconnect};
+use super::signals::{connect_deferred, connect_immediate, safe_disconnect, SIG_TREE_EXITED};
 use super::GodotVimCore;
 
 const SIG_GUI_INPUT: &str = "gui_input";
@@ -146,6 +146,12 @@ impl GodotVimCore {
             connect_deferred(&mut editor, signal_name, &draw_callable);
         }
 
+        // Eagerly detect foreign editor free so we don't hold a dangling handle
+        // until the next focus event. tree_exited fires synchronously when the
+        // editor leaves the scene tree (tab closed / editor freed).
+        let tree_exited_callable = self.base().callable("on_attached_editor_tree_exited");
+        connect_immediate(&mut editor, SIG_TREE_EXITED, &tree_exited_callable);
+
         log::debug!("Attached to editor #{}", new_id.to_i64());
     }
 
@@ -228,6 +234,10 @@ impl GodotVimCore {
                 for signal_name in &[SIG_DRAW, SIG_VISIBILITY_CHANGED, SIG_MINIMUM_SIZE_CHANGED] {
                     safe_disconnect(&mut editor, signal_name, &draw_callable);
                 }
+
+                let tree_exited_callable =
+                    self.base().callable("on_attached_editor_tree_exited");
+                safe_disconnect(&mut editor, SIG_TREE_EXITED, &tree_exited_callable);
 
                 // ── Teardown operations (signal-safe: no callbacks can enqueue) ─
 
