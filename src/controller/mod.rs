@@ -200,8 +200,16 @@ impl VimController {
                 state: ShellState::default(),
             },
         );
-        let ControllerPhase::Detached { engine, state } = old_phase else {
-            panic!("attach_session: must be in detached state");
+        let (engine, state) = match old_phase {
+            ControllerPhase::Detached { engine, state } => (engine, state),
+            ControllerPhase::Attached { session } => {
+                // Should be unreachable once detach paths are correct, but never panic:
+                // reclaim engine+state from the stranded session instead of UB-on-unwind.
+                log::warn!("attach_session: recovered from stranded Attached phase");
+                let (engine, mut host) = session.into_parts();
+                let state = host.take_state();
+                (engine, state)
+            }
         };
         let mut host = GodotHost::new(editor);
         host.set_state(state);
@@ -490,7 +498,7 @@ impl VimController {
         self.engine_mut().emergency_reset();
         if let ControllerPhase::Attached { ref mut session } = self.phase {
             let host = session.host_mut();
-            let editor_id = host.editor().instance_id();
+            let editor_id = host.editor_id();
             // Discard any pending undo group text (orphaned begin_group).
             host.state_mut()
                 .buffer(editor_id)
@@ -779,7 +787,7 @@ impl VimController {
     pub(crate) fn recover_from_panic(&mut self, editor: &mut Gd<CodeEdit>) {
         // Capture pending text BEFORE force_cleanup discards it.
         let pending_text = if let ControllerPhase::Attached { ref mut session } = self.phase {
-            let editor_id = session.host().editor().instance_id();
+            let editor_id = session.host().editor_id();
             session
                 .host_mut()
                 .state_mut()
