@@ -24,7 +24,7 @@ log = { version = "0.4", features = ["max_level_trace", "release_max_level_trace
 # vim-text internally uses 0.8, so cargo tree shows both; that one never
 # crosses the boundary. Bumping this to 0.8 makes every CompactString in
 # vim-core's API a type mismatch (28 errors). Dependabot: leave this alone.
-compact_str = "0.7"
+compact_str = "0.8"
 
 [dev-dependencies]
 proptest = "1.4"

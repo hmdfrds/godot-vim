@@ -248,7 +248,7 @@ name = "godot-vim"
 version = "1.7.1"
 dependencies = [
  "bitflags",
- "compact_str 0.7.1",
+ "compact_str 0.8.2",
  "godot",
  "log",
  "proptest",
