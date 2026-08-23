@@ -177,6 +177,7 @@ pub(crate) fn explain_report(
     lhs: &str,
     chain: &FocusChain,
     path: &SurfacePath,
+    overlay: Option<&SurfacePath>,
     index: &BindingIndex,
     registry: &ActionRegistry,
     vim_claims: &dyn Fn(KeyEvent) -> bool,
@@ -235,6 +236,67 @@ pub(crate) fn explain_report(
         chain.is_plugin_prompt
     );
 
+    // ── What this report structurally cannot know ────────────────────
+    //
+    // `Probes::from_key` builds ONE as-typed probe with the positional index
+    // unset, so the walk below runs against a one-element list while a real
+    // keystroke carries up to three. Until this line existed the caveat was a
+    // source comment addressed to the maintainer and the user was told
+    // nothing, which on a non-QWERTY layout means the report answers a
+    // different question than the one the user asked. Printed once, above the
+    // walk, because it hedges the probe list and not any one path.
+    let probe_list: Vec<String> = probes
+        .iter()
+        .map(|probe| probe.to_vim_notation().into_owned())
+        .collect();
+    let _ = writeln!(
+        out,
+        "probes: {} (as typed only — a real keystroke on a non-QWERTY layout also carries a \
+         Latin collapse and a US-QWERTY position, which a written LHS cannot derive)",
+        probe_list.join(", ")
+    );
+
+    explain_on_path(&mut out, path, &probes, index, registry, vim_claims);
+
+    // ── The counterfactual overlay ───────────────────────────────────
+    //
+    // The live path can never be a completion path: the command line owns
+    // focus while `:panelmap` is typed, so the popup is already cancelled.
+    // The report answers anyway, through the same `Forest::overlay` and the
+    // same walk, with one input flipped, and says plainly that it is a
+    // counterfactual.
+    if let Some(overlay_path) = overlay {
+        let id = overlay_path.ids.first().copied().unwrap_or("<overlay>");
+        let when = index
+            .forest()
+            .get(id)
+            .and_then(|s| s.overlay.as_ref())
+            .map_or("", |o| o.when);
+        let _ = writeln!(
+            out,
+            "\n--- if the script editor had focus in insert mode with the completion popup open ---"
+        );
+        let _ = writeln!(
+            out,
+            "overlay '{id}' ({when}) is not on the path this report sampled, and it cannot be \
+             while the command line has focus. This is how the key would resolve if it were:"
+        );
+        explain_on_path(&mut out, overlay_path, &probes, index, registry, vim_claims);
+    }
+    out
+}
+
+/// The walk half of the explainer: surface stack, candidates and verdict for
+/// ONE path. Extracted so the live path and the counterfactual overlay render
+/// through the same code, which is the whole honesty argument.
+fn explain_on_path(
+    out: &mut String,
+    path: &SurfacePath,
+    probes: &Probes,
+    index: &BindingIndex,
+    registry: &ActionRegistry,
+    vim_claims: &dyn Fn(KeyEvent) -> bool,
+) {
     // ── What is above me ─────────────────────────────────────────────
     let _ = writeln!(
         out,
@@ -249,25 +311,6 @@ pub(crate) fn explain_report(
         out,
         "anchor: {anchor}  caps: {:?}  seal: {:?}  yields_to_engine: {}  refuses_positional: {}",
         path.caps, path.seal, path.anchor_yields_to_engine, path.anchor_refuses_positional
-    );
-
-    // ── What this report structurally cannot know ────────────────────
-    //
-    // `Probes::from_key` builds ONE as-typed probe with the positional index
-    // unset, so the walk below runs against a one-element list while a real
-    // keystroke carries up to three. Until this line existed the caveat was a
-    // source comment addressed to the maintainer and the user was told
-    // nothing, which on a non-QWERTY layout means the report answers a
-    // different question than the one the user asked.
-    let probe_list: Vec<String> = probes
-        .iter()
-        .map(|probe| probe.to_vim_notation().into_owned())
-        .collect();
-    let _ = writeln!(
-        out,
-        "probes: {} (as typed only — a real keystroke on a non-QWERTY layout also carries a \
-         Latin collapse and a US-QWERTY position, which a written LHS cannot derive)",
-        probe_list.join(", ")
     );
 
     // ── Candidates, surface by surface ───────────────────────────────
@@ -380,7 +423,7 @@ pub(crate) fn explain_report(
 
     // ── The verdict ──────────────────────────────────────────────────
     let resolution = resolve(&ResolveInput {
-        probes: &probes,
+        probes,
         path,
         index,
         registry,
@@ -426,7 +469,6 @@ pub(crate) fn explain_report(
             let _ = writeln!(out, "reason: {}", explain_stop(stop));
         }
     }
-    out
 }
 
 /// One sentence per stop reason, each naming the fix.
@@ -486,7 +528,25 @@ mod tests {
         let reg = registry();
         let index = builtin_index(&reg);
         let path = providers::forest().classify(chain).expect("total probe");
-        explain_report(lhs, chain, &path, &index, &reg, claims)
+        explain_report(lhs, chain, &path, None, &index, &reg, claims)
+    }
+
+    /// The report the plugin builds for `:panelmap {keys}`: the live path
+    /// plus the counterfactual overlay, popup open.
+    fn explain_counterfactual(lhs: &str, chain: &FocusChain) -> String {
+        let reg = registry();
+        let index = builtin_index(&reg);
+        let path = providers::forest().classify(chain).expect("total probe");
+        let overlay = index
+            .forest()
+            .overlay(&crate::actions::surface::OverlayFacts {
+                at_attached_editor: true,
+                mode: Some(vim_core::primitives::Mode::Insert),
+                selected_index: 0,
+                caret: (0, 0),
+            })
+            .expect("the hypothetical facts activate the overlay");
+        explain_report(lhs, chain, &path, Some(&overlay), &index, &reg, NEVER)
     }
 
     fn fs_chain() -> FocusChain {
@@ -530,7 +590,7 @@ mod tests {
     ) -> String {
         let reg = registry();
         let path = providers::forest().classify(chain).expect("total probe");
-        explain_report(lhs, chain, &path, index, &reg, claims)
+        explain_report(lhs, chain, &path, None, index, &reg, claims)
     }
 
     #[test]
@@ -954,6 +1014,56 @@ panel  (parent: -, seal: Open)
         assert!(report.contains("runs: godotvim.item.activate"), "{report}");
     }
 
+    // ── The counterfactual overlay ───────────────────────────────────
+
+    #[test]
+    fn the_report_explains_a_completion_key_through_the_counterfactual_overlay() {
+        // The question this whole section exists to answer: "why is my <CR>
+        // dead / what will it do over the popup?" could never be answered
+        // live, because typing the command puts focus on the command line.
+        let report = explain_counterfactual("<CR>", &fs_chain());
+        assert!(report.contains("editor.completion"), "{report}");
+        assert!(report.contains("caps: Caps(POPUP)"), "{report}");
+        assert!(
+            report.contains("eligible (godotvim.completion.confirm)"),
+            "{report}"
+        );
+        assert!(
+            report.contains("runs: godotvim.completion.confirm on 'editor.completion'"),
+            "{report}"
+        );
+        assert!(report.contains("elastic"), "{report}");
+    }
+
+    #[test]
+    fn the_counterfactual_section_says_it_is_not_live() {
+        let report = explain_counterfactual("<CR>", &fs_chain());
+        assert!(
+            report.contains("while the script editor is in an insert-like mode"),
+            "{report}"
+        );
+        assert!(
+            report.contains("is not on the path this report sampled"),
+            "{report}"
+        );
+    }
+
+    #[test]
+    fn the_counterfactual_reports_a_handoff_rule_honestly() {
+        let report = explain_counterfactual("<Up>", &fs_chain());
+        assert!(report.contains("the vim engine is skipped"), "{report}");
+        assert!(report.contains("(handoff)"), "{report}");
+    }
+
+    #[test]
+    fn the_counterfactual_prints_the_withheld_positional_probe() {
+        // `<physical>` is inert on the overlay for a PRINTED reason now:
+        // `refuses_positional: true` appears on the counterfactual's own
+        // anchor line, where the flag used to be silently dead.
+        let report = explain_counterfactual("<CR>", &fs_chain());
+        assert!(report.contains("refuses_positional: true"), "{report}");
+    }
+
     #[test]
     fn a_rejected_vimrc_line_is_printed_by_the_listing() {
         // `binding_diagnostics` was written by `rebuild_bindings` and read by
@@ -1072,7 +1182,7 @@ panel  (parent: -, seal: Open)
         let index = index_with("panelmap dock.filesystem dd godotvim.fs.delete");
         let chain = fs_chain();
         let path = providers::forest().classify(&chain).expect("total probe");
-        let report = explain_report("d", &chain, &path, &index, &reg, NEVER);
+        let report = explain_report("d", &chain, &path, None, &index, &reg, NEVER);
         assert!(report.contains("dock.filesystem: RESERVED"), "{report}");
         assert!(report.contains("waits timeoutlen for: dd"), "{report}");
     }

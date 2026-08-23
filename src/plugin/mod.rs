@@ -1539,6 +1539,18 @@ impl GodotVimCore {
             godot_warn!("panelmap: no surface claimed the current focus");
             return;
         };
+        // The live path can never be a completion path: the command line owns
+        // focus while `:panelmap` is typed, so the mode is CommandLine, and
+        // `handle_set_mode` (`effects/mode.rs`) has already cancelled the
+        // popup. The report answers anyway, through the same `Forest::overlay`
+        // and the same `resolve`, with one input flipped.
+        let hypothetical = crate::actions::surface::OverlayFacts {
+            at_attached_editor: true,
+            mode: Some(vim_core::primitives::Mode::Insert),
+            selected_index: 0,
+            caret: (0, 0),
+        };
+        let overlay = self.bindings.forest().overlay(&hypothetical);
         let controller = self.controller.as_ref();
         let claims =
             |k: vim_core::keymap::KeyEvent| controller.is_some_and(|c| c.could_start_mapping(k));
@@ -1548,6 +1560,7 @@ impl GodotVimCore {
                 args,
                 &chain,
                 &path,
+                overlay.as_ref(),
                 &self.bindings,
                 &self.actions,
                 &claims,
