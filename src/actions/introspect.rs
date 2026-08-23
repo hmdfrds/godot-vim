@@ -118,8 +118,14 @@ pub(crate) fn list_report(
             let _ = writeln!(out, "{surface}{note}");
             continue;
         }
-        let parent = spec.and_then(|s| s.parent).unwrap_or("-");
-        let _ = writeln!(out, "{surface}  (parent: {parent}, seal: {seal:?})");
+        let header = match spec.and_then(|s| s.overlay.as_ref()) {
+            Some(o) => format!("(overlay: {}, seal: {seal:?})", o.when),
+            None => format!(
+                "(parent: {}, seal: {seal:?})",
+                spec.and_then(|s| s.parent).unwrap_or("-")
+            ),
+        };
+        let _ = writeln!(out, "{surface}  {header}");
         for rule in rules {
             total += 1;
             let _ = writeln!(
@@ -597,7 +603,7 @@ mod tests {
 --- panel bindings ---
 editor.nav  (no bindings)
 editor.insert  (barrier — takes no bindings)
-editor.completion  (parent: -, seal: Open)
+editor.completion  (overlay: while the script editor is in an insert-like mode, seal: Open)
   panelmap editor.completion <C-@> godotvim.completion.trigger    [godotvim.completion]
   panelmap editor.completion <C-n> godotvim.completion.next    [godotvim.completion]
   panelmap editor.completion <C-p> godotvim.completion.prev    [godotvim.completion]

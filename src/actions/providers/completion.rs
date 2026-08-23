@@ -4,7 +4,7 @@
 //! shows a new *panel* costs one file, this one shows a hardcoded key table
 //! deep inside the editor pipeline can become data without moving transports.
 //!
-//! # This surface is never classified, and that is the whole design
+//! # This surface is an overlay, lent per keystroke rather than probed
 //!
 //! Every other surface is reached by probing a sampled [`FocusChain`]. This one
 //! cannot be, for a reason that is structural rather than incidental: whether
@@ -13,13 +13,17 @@
 //! `(focus owner, epoch, index generation)`. A probe reading popup visibility
 //! would be answering from a cache that is stale by construction.
 //!
-//! So [`EDITOR_COMPLETION`] declares `probe: |_| None` and is reached by name,
-//! by the one transport that has the popup in hand:
-//! `GodotVimCore::handle_gui_input_impl` looks the key up on this surface
-//! directly, after the IME guard and before the vim engine sees anything. It is
-//! the same "reached without probing" arrangement `panel` has — `panel` is
-//! reached by following parent links, this one by an explicit lookup — which is
-//! why both are excluded from the golden-table coverage audit.
+//! So [`EDITOR_COMPLETION`] declares `probe: |_| None` and an
+//! [`OverlaySpec`]: `Forest::overlay` materialises it as an ordinary
+//! one-element `SurfacePath` for the one transport that has the popup in
+//! hand, `GodotVimCore::handle_gui_input_impl`, after the IME guard and
+//! before the vim engine sees anything. The path is ordinary, so `resolve`,
+//! flags, params, capabilities, the consumption fold and `:panelmap` explain
+//! are the same code every classified surface runs, not a reimplementation.
+//!
+//! `resolve` and `classify` are called only from `_input`, so classification
+//! would deliver these keys into the transport that was rejected three times,
+//! which is why the surface is lent rather than probed.
 //!
 //! # Why it stays on `gui_input`, restated because it keeps being asked
 //!
@@ -64,31 +68,47 @@
 use crate::actions::action::{ActionCtx, ActionSpec, CompletionOps};
 use crate::actions::caps::Caps;
 use crate::actions::outcome::Outcome;
-use crate::actions::surface::{Seal, SurfaceSpec};
+use crate::actions::surface::{OverlaySpec, Seal, SurfaceSpec};
 
 use super::Provider;
 
-/// The surface the `gui_input` transport looks up by name.
+/// The surface the `gui_input` transport lends as an overlay.
 pub(crate) const SURFACE: crate::actions::surface::SurfaceId = "editor.completion";
 
 pub(crate) static EDITOR_COMPLETION: SurfaceSpec = SurfaceSpec {
     id: SURFACE,
-    // A root. Naming `editor.nav` as parent would be wrong twice over: the
-    // popup is live in Insert, where the active surface is `editor.insert`
-    // (a `Barrier`), and this surface is never on a classified path at all, so
-    // a parent link would only invite an upward walk that cannot happen.
+    // Rootless BY AUDIT (V-O1), not by habit: membership is stacking, not
+    // parenthood, and a parent would invite an upward walk into `panel`'s
+    // <void> Ctrl+hjkl rules from inside Insert mode.
     parent: None,
-    // Inert, and documented as inert: `Seal` decides how the forest WALK
-    // terminates, and nothing ever walks here. `Open` rather than `Barrier`
-    // because `BindingIndex::try_insert` refuses rules on a `Barrier`, and
-    // rules are the entire point of this surface.
     seal: Seal::Open,
+    // The chain-driven grant. An overlay never classifies, so this is never
+    // reached; the live grant is on the overlay below.
     grants: |_| Caps::empty(),
-    // Never. See the module docs: popup visibility is per-keystroke and the
-    // chain is per-focus-change, so a probe here would read a stale cache.
+    // Still never. An overlay joins the path through `Forest::overlay`, which
+    // `_input` does not call, which is the whole parity argument.
     probe: |_| None,
+    overlay: Some(OverlaySpec {
+        // Deliberately NOT popup-gated. Popup-gating would kill <C-@>, <C-n>
+        // and <C-p> with the popup closed, which are exactly the three keys
+        // the Ctrl+Space bug fix exists to revive. The popup enters as a
+        // CAPABILITY instead, where the gate is declared per verb.
+        active: |f| f.at_attached_editor && f.insert_like(),
+        grants: |f| {
+            if f.popup() {
+                Caps::POPUP
+            } else {
+                Caps::empty()
+            }
+        },
+        when: "while the script editor is in an insert-like mode",
+    }),
     on_key: None,
-    refuses_positional: false,
+    // WAS `false`, contradicting the prose at the old transport-only lookup
+    // ("honouring it here would turn a Dvorak Ctrl+p into a completion key").
+    // Inert only while the surface never anchored; live from the first
+    // overlay walk, so it is corrected here and audited by V-O3.
+    refuses_positional: true,
     yields_to_engine: false,
 };
 
@@ -572,7 +592,7 @@ mod tests {
     }
 
     #[test]
-    fn the_surface_never_probes_and_is_therefore_never_classified() {
+    fn the_overlay_never_probes_and_joins_the_path_only_when_its_predicate_holds() {
         // Asserted rather than commented, because a future edit that "fixes"
         // the probe would put a stale-cache read on the hot path and the
         // symptom would be an intermittently dead `<Tab>`.
@@ -587,6 +607,130 @@ mod tests {
         ];
         for chain in chains {
             assert_eq!((EDITOR_COMPLETION.probe)(&chain), None);
+        }
+        assert!(
+            EDITOR_COMPLETION.overlay.is_some(),
+            "the surface joins the path as an overlay, not through a probe"
+        );
+    }
+
+    /// Every mode the engine has, plus "no controller".
+    fn every_mode() -> Vec<Option<vim_core::primitives::Mode>> {
+        use vim_core::primitives::{Mode, Operator, VisualType};
+        vec![
+            None,
+            Some(Mode::Normal),
+            Some(Mode::Insert),
+            Some(Mode::Replace),
+            Some(Mode::VirtualReplace),
+            Some(Mode::CommandLine),
+            Some(Mode::Visual(VisualType::Char)),
+            Some(Mode::Visual(VisualType::Line)),
+            Some(Mode::Visual(VisualType::Block)),
+            Some(Mode::Select(VisualType::Char)),
+            Some(Mode::OperatorPending(Operator::Delete)),
+        ]
+    }
+
+    #[test]
+    fn the_activation_table_is_exhaustive_over_attachment_and_mode() {
+        use crate::actions::surface::OverlayFacts;
+        use vim_core::primitives::Mode;
+        let overlay = EDITOR_COMPLETION.overlay.as_ref().expect("declared");
+        for at_attached_editor in [false, true] {
+            for mode in every_mode() {
+                let facts = OverlayFacts {
+                    at_attached_editor,
+                    mode,
+                    selected_index: -1,
+                };
+                let want = at_attached_editor
+                    && matches!(
+                        mode,
+                        Some(Mode::Insert | Mode::Replace | Mode::VirtualReplace)
+                    );
+                assert_eq!(
+                    (overlay.active)(&facts),
+                    want,
+                    "at_attached_editor={at_attached_editor} mode={mode:?}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_grant_is_the_popup_and_nothing_else() {
+        use crate::actions::surface::OverlayFacts;
+        let overlay = EDITOR_COMPLETION.overlay.as_ref().expect("declared");
+        for (selected_index, want) in [(-1, Caps::empty()), (0, Caps::POPUP), (3, Caps::POPUP)] {
+            let facts = OverlayFacts {
+                at_attached_editor: true,
+                mode: Some(vim_core::primitives::Mode::Insert),
+                selected_index,
+            };
+            assert_eq!((overlay.grants)(&facts), want, "index {selected_index}");
+        }
+    }
+
+    #[test]
+    fn overlay_facts_default_is_the_absent_popup() {
+        // Pins the hand-written `Default`: a derived one gives
+        // `selected_index: 0`, which reads as "a popup is up with row 0
+        // selected".
+        use crate::actions::surface::OverlayFacts;
+        assert!(!OverlayFacts::default().popup());
+        assert!(!OverlayFacts::default().insert_like());
+    }
+
+    fn popup_facts(selected_index: i32) -> crate::actions::surface::OverlayFacts {
+        crate::actions::surface::OverlayFacts {
+            at_attached_editor: true,
+            mode: Some(vim_core::primitives::Mode::Insert),
+            selected_index,
+        }
+    }
+
+    #[test]
+    fn the_overlay_path_is_one_rootless_element_with_grants_only_caps() {
+        use crate::actions::surface::{Anchor, Seal};
+        let forest = crate::actions::providers::forest();
+        let path = forest.overlay(&popup_facts(0)).expect("active");
+        assert_eq!(path.ids, vec!["editor.completion"]);
+        assert_eq!(path.anchor, Anchor::Rootless);
+        assert_eq!(path.caps, Caps::POPUP);
+        assert_eq!(path.seal, Seal::Open);
+        assert!(!path.anchor_yields_to_engine);
+        assert!(path.anchor_refuses_positional);
+    }
+
+    #[test]
+    fn no_widget_capability_reaches_the_overlay() {
+        // Grants-only caps are what keep `godotvim.search.accept`
+        // (requires: Caps::TEXTENTRY) permanently gated on this surface,
+        // rather than merely unlikely: the control under the caret IS a
+        // TextEdit, and an anchored path would grant TEXTENTRY.
+        let forest = crate::actions::providers::forest();
+        let path = forest.overlay(&popup_facts(0)).expect("active");
+        assert!(!path.caps.satisfies(Caps::TEXTENTRY));
+    }
+
+    #[test]
+    fn the_overlay_is_absent_outside_an_insert_like_mode() {
+        use crate::actions::surface::OverlayFacts;
+        use vim_core::primitives::{Mode, VisualType};
+        let forest = crate::actions::providers::forest();
+        for mode in [
+            None,
+            Some(Mode::Normal),
+            Some(Mode::Visual(VisualType::Char)),
+            Some(Mode::CommandLine),
+        ] {
+            let facts = OverlayFacts {
+                at_attached_editor: true,
+                mode,
+                selected_index: 0,
+            };
+            assert!(forest.overlay(&facts).is_none(), "{mode:?}");
         }
     }
 

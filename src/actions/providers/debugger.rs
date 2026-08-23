@@ -105,6 +105,7 @@ pub(crate) static DOCK_DEBUGGER: SurfaceSpec = SurfaceSpec {
         (chain.index_of_ancestor(DEBUGGER_DOCK_CLASS).is_some() && chain.focus_is("Tree"))
             .then_some(Anchor::Node(0))
     },
+    overlay: None,
     on_key: None,
     refuses_positional: false,
     yields_to_engine: false,

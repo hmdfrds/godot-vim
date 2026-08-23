@@ -45,6 +45,7 @@ pub(crate) static EDITOR_NAV: SurfaceSpec = SurfaceSpec {
         (chain.attached_editor_focused() && chain.editor_mode.is_none_or(is_nav_mode))
             .then_some(Anchor::Node(0))
     },
+    overlay: None,
     on_key: None,
     // The one surface that declares it, and it carries ZERO rules of its own:
     // the `<C-h>` binding lives on `panel`, which is this surface's declared
@@ -71,6 +72,7 @@ pub(crate) static EDITOR_INSERT: SurfaceSpec = SurfaceSpec {
         (chain.attached_editor_focused() && chain.editor_mode.is_some_and(|m| !is_nav_mode(m)))
             .then_some(Anchor::Node(0))
     },
+    overlay: None,
     on_key: None,
     yields_to_engine: false,
     // Moot — a Barrier resolves nothing — but stated rather than inherited.

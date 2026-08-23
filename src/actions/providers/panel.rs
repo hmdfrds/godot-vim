@@ -27,6 +27,7 @@ pub(crate) static PANEL: SurfaceSpec = SurfaceSpec {
     // the editor) all lives here, and reaches every descendant through the
     // upward walk.
     probe: |_| None,
+    overlay: None,
     on_key: None,
     refuses_positional: false,
     yields_to_engine: false,

@@ -46,6 +46,7 @@ pub(crate) static DOCK_FILESYSTEM: SurfaceSpec = SurfaceSpec {
     probe: |chain| {
         (chain.in_filesystem_dock && focuses_nav_widget(chain)).then_some(Anchor::Node(0))
     },
+    overlay: None,
     // The one shipped hook, and it belongs to no binding: the stale-prompt
     // auto-dismiss that used to sit at the top of `FileSystemExplorer::
     // handle_key`, before the modifier filter and before any key was
