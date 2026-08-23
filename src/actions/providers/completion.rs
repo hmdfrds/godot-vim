@@ -385,7 +385,10 @@ mod tests {
         fn cancel(&mut self) {
             self.log.push("cancel".into());
             self.visible = false;
-            self.selected = -1;
+            // Godot's `cancel_code_completion` (code_edit.cpp:2711-2719)
+            // clears `code_completion_active` and leaves the index and the
+            // option list intact. Resetting the index here makes the
+            // provenance regression test pass vacuously.
         }
         fn hand_to_editor(&mut self) {
             self.handed_off = true;
@@ -393,8 +396,12 @@ mod tests {
     }
 
     /// Run one verb against one popup state, returning the outcome.
-    fn run(spec: &ActionSpec, popup: &mut FakePopup) -> Outcome {
-        let mut cx = ActionCtx::new(None, Params::new()).with_completion(popup);
+    ///
+    /// Takes `params` rather than hardcoding `Params::new()`: parameter
+    /// behaviour is untestable otherwise, and `require_selection` is on its
+    /// way here.
+    fn run(spec: &ActionSpec, params: Params, popup: &mut FakePopup) -> Outcome {
+        let mut cx = ActionCtx::new(None, params).with_completion(popup);
         (spec.run)(&mut cx)
     }
 
@@ -405,7 +412,7 @@ mod tests {
     /// the assertion, and asserting through the implementation would make it
     /// a tautology.
     fn verdict(spec: &ActionSpec, popup: &mut FakePopup) -> Option<bool> {
-        let outcome = run(spec, popup);
+        let outcome = run(spec, Params::new(), popup);
         if popup.handed_off {
             Some(false)
         } else {
@@ -611,9 +618,18 @@ mod tests {
             );
         }
         for line in lines {
-            let id = line.rsplit(' ').next().expect("a target");
+            // Through the real parser, not `rsplit(' ')`: a row carrying
+            // `require_selection=0` would otherwise make the split read the
+            // parameter as the action id.
+            let parsed = crate::config::panelmap::parse_panel_line(line);
+            let Ok(Some(crate::config::panelmap::PanelLine::Map(map))) = parsed else {
+                panic!("'{line}' is not a panelmap line: {parsed:?}");
+            };
+            let crate::config::panelmap::TargetSpec::Action(ref id) = map.target else {
+                panic!("'{line}' does not target an action");
+            };
             assert!(
-                ACTIONS.iter().any(|s| s.id == id),
+                ACTIONS.iter().any(|s| s.id == id.as_str()),
                 "'{id}' is not declared by this provider"
             );
         }
