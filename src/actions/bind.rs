@@ -837,7 +837,16 @@ mod tests {
     /// provider files. Columns: surface, LHS, action id, `<physical>`,
     /// consumption, repeat, `<shift>`.
     #[allow(clippy::type_complexity, reason = "a golden table is a table")]
-    const SHIPPED_DEFAULTS: &[(SurfaceId, &str, &str, bool, Consumption, Repeat, bool)] = &[
+    const SHIPPED_DEFAULTS: &[(
+        SurfaceId,
+        &str,
+        &str,
+        bool,
+        Consumption,
+        Repeat,
+        bool,
+        &[(&str, i64)],
+    )] = &[
         // Cross-panel focus. `<void>` reproduces input.rs, where
         // handle_window_nav's result is discarded and set_input_as_handled()
         // fires even when nothing was found. `<norepeat>` keeps a held Ctrl+J
@@ -850,6 +859,7 @@ mod tests {
             Consumption::Void,
             Repeat::Suppress,
             false,
+            &[],
         ),
         (
             "panel",
@@ -859,6 +869,7 @@ mod tests {
             Consumption::Void,
             Repeat::Suppress,
             false,
+            &[],
         ),
         (
             "panel",
@@ -868,6 +879,7 @@ mod tests {
             Consumption::Void,
             Repeat::Suppress,
             false,
+            &[],
         ),
         (
             "panel",
@@ -877,6 +889,7 @@ mod tests {
             Consumption::Void,
             Repeat::Suppress,
             false,
+            &[],
         ),
         // The autocomplete popup (P9). Every one is elastic and none carries
         // `<physical>`: the verdict on the `gui_input` transport IS the
@@ -892,6 +905,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "editor.completion",
@@ -901,6 +915,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "editor.completion",
@@ -910,6 +925,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "editor.completion",
@@ -919,6 +935,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "editor.completion",
@@ -928,15 +945,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
-        ),
-        (
-            "editor.completion",
-            "<Esc>",
-            "godotvim.completion.dismiss",
-            false,
-            Consumption::Elastic,
-            Repeat::Allow,
-            false,
+            &[],
         ),
         // `navigate` declares `default_consume: Handoff`, folded into the
         // rule at registration: acceptance skips the engine without
@@ -949,6 +958,7 @@ mod tests {
             Consumption::Handoff,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "editor.completion",
@@ -958,6 +968,7 @@ mod tests {
             Consumption::Handoff,
             Repeat::Allow,
             false,
+            &[],
         ),
         // Dock item navigation. Elastic: `j` at the end of a list declines and
         // the key falls through, exactly as dock.rs does today.
@@ -969,6 +980,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "dock",
@@ -978,6 +990,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "dock",
@@ -987,6 +1000,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "dock",
@@ -996,6 +1010,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "dock",
@@ -1005,6 +1020,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         // Enter and Escape complete the dock keyset — `dock_action_for` binds
         // seven keys, not five. Neither carries `<physical>`: a named key
@@ -1017,6 +1033,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "dock",
@@ -1026,6 +1043,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         // The filter box. Shift-tolerant, and the ONLY two rules that are:
         // handle_search_input rejects ctrl/alt/meta but not shift, while a
@@ -1038,6 +1056,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             true,
+            &[],
         ),
         (
             "searchbox",
@@ -1047,6 +1066,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             true,
+            &[],
         ),
         // nvim-tree-flavoured file operations. `R` refreshes while `r`
         // renames: Shift is a discriminant here, carried by the character
@@ -1059,6 +1079,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "dock.filesystem",
@@ -1068,6 +1089,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "dock.filesystem",
@@ -1077,6 +1099,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "dock.filesystem",
@@ -1086,6 +1109,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "dock.filesystem",
@@ -1095,6 +1119,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         // The debugger provider (P9). Transcribed from `providers/debugger.rs`
         // independently, which is the point of this table: a provider that
@@ -1109,6 +1134,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "dock.debugger",
@@ -1118,6 +1144,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "dock.debugger",
@@ -1127,6 +1154,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "dock.debugger",
@@ -1136,6 +1164,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
     ];
 
@@ -1158,7 +1187,9 @@ mod tests {
                 .collect::<Vec<_>>()
         );
 
-        for (surface, notation, action, physical, consume, repeat, shift) in SHIPPED_DEFAULTS {
+        for (surface, notation, action, physical, consume, repeat, shift, params) in
+            SHIPPED_DEFAULTS
+        {
             let lhs = crate::actions::keys::parse_lhs(notation).expect(notation);
             let rule = resolve(&index, surface, &lhs)
                 .unwrap_or_else(|| panic!("no rule at {surface} {notation}"));
@@ -1168,6 +1199,11 @@ mod tests {
             assert_eq!(rule.consume, *consume, "{surface} {notation} consumption");
             assert_eq!(rule.repeat, *repeat, "{surface} {notation} repeat");
             assert_eq!(rule.shift_tolerant, *shift, "{surface} {notation} <shift>");
+            assert_eq!(
+                rule.params.iter().collect::<Vec<_>>(),
+                *params,
+                "{surface} {notation} params"
+            );
             assert!(
                 !rule.nowait,
                 "{surface} {notation} — nothing ships <nowait>"
@@ -1420,9 +1456,9 @@ mod tests {
         // ancestor of any editor surface, and must not be.
         let index = empty_index();
         // `editor.completion` is reachable by its own name and by nothing
-        // else — it is a root with no probe, dispatched by direct lookup from
-        // `gui_input`. It must still be caught, because V8's multi-key and
-        // grammar-prefix rejections are exactly what stop a user binding
+        // else: it is an overlay, lent to `gui_input` per keystroke by
+        // `Forest::overlay`. It must still be caught, because V8's multi-key
+        // and grammar-prefix rejections are exactly what stop a user binding
         // `<C-w>` there and breaking `<C-w>s` inside the editor.
         for surface in ["panel", "editor.nav", "editor.insert", "editor.completion"] {
             assert!(index.editor_reachable(surface), "{surface}");
@@ -1791,20 +1827,28 @@ mod tests {
 
     #[test]
     fn every_shipped_completion_default_still_loads() {
-        // The count the reject must not move: eight rules on
-        // `editor.completion`, six distinct verbs, every one `Caps::empty()`.
+        // Seven rules, six distinct verbs, and an exact per-verb capability
+        // expectation: the trigger family requires nothing so the popup can
+        // be OPENED with none up, while confirm/dismiss/navigate require the
+        // popup they act on.
         let index = builtin_index(&registry());
-        assert_eq!(index.rules_on("editor.completion").count(), 8);
+        assert_eq!(index.rules_on("editor.completion").count(), 7);
         let reg = registry();
         for rule in index.rules_on("editor.completion") {
             let RuleTarget::Action(id) = rule.target else {
                 panic!("a completion default must target an action");
             };
-            assert!(
-                reg.get(id).is_some_and(|s| s.requires.is_empty()),
-                "{:?} needs capabilities this surface cannot grant",
-                rule.lhs
-            );
+            let spec = reg.get(id).expect("registered");
+            let want = match spec.id {
+                "godotvim.completion.trigger"
+                | "godotvim.completion.next"
+                | "godotvim.completion.prev" => Caps::empty(),
+                "godotvim.completion.confirm"
+                | "godotvim.completion.dismiss"
+                | "godotvim.completion.navigate" => Caps::POPUP,
+                other => panic!("unexpected completion verb {other}"),
+            };
+            assert_eq!(spec.requires, want, "{:?}", rule.lhs);
         }
     }
 

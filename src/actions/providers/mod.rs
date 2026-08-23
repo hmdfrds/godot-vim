@@ -762,6 +762,43 @@ mod tests {
     }
 
     #[test]
+    fn a_handoff_default_is_gated_on_a_capability_no_classified_path_can_satisfy() {
+        // Audit A9'. `Disposition::Handoff` deletes the vim engine from the
+        // pipeline, and the engine is the only route out of Insert mode. This
+        // is what makes "Handoff implies the popup was up" a theorem rather
+        // than a habit, and what makes the variant unreachable on `_input`.
+        //
+        // Strictly stronger than "requires must be non-empty": `TEXTENTRY` is
+        // non-empty and `Caps::of_control` contributes it for any LineEdit or
+        // TextEdit, so the weaker form would admit a verb that fires on a
+        // dock filter box with no downstream stage to skip.
+        //
+        // Lives here rather than in `specs.rs` because it reads the golden
+        // fixture table, which is this module's.
+        use crate::actions::bind::Consumption;
+        let forest = forest();
+        let reachable = golden()
+            .iter()
+            .map(|case| forest.classify(&case.chain).expect("total").caps)
+            .fold(Caps::empty(), |a, b| a | b);
+        for (_, spec) in crate::actions::specs::registry().iter() {
+            if spec.default_consume == Some(Consumption::Handoff) {
+                assert!(
+                    !reachable.satisfies(spec.requires),
+                    "{}: Handoff skips the vim engine, so it must require a capability no \
+                     classified path can grant; the fixture table grants {reachable:?}",
+                    spec.id
+                );
+                assert!(
+                    !spec.requires.intersection(Caps::HANDOFF_SAFE).is_empty(),
+                    "{}: and that capability must be HANDOFF_SAFE",
+                    spec.id
+                );
+            }
+        }
+    }
+
+    #[test]
     fn at_most_one_overlay_is_active_for_any_facts() {
         // V-O4. `Forest::overlay` is first-active-wins in PROVIDERS order,
         // exactly as `classify` is; with one shipped overlay this can only

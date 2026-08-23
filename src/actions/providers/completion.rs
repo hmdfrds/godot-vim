@@ -45,8 +45,8 @@
 //!
 //! # What the user gets
 //!
-//! Eight keys that were literals in a `match` are now rows in `:panelmap`,
-//! rebindable and unmappable like every other binding:
+//! Keys that were literals in a `match` are rows in `:panelmap`, rebindable
+//! and unmappable like every other binding:
 //!
 //! ```vim
 //! panelunmap editor.completion <Tab>
@@ -225,23 +225,35 @@ pub(crate) static PREV: ActionSpec = ActionSpec {
     },
 };
 
+// THE RULE OF THIS FILE, and it decides which of the old popup checks lived
+// and which died: a GATE becomes a CAPABILITY; a BRANCH stays in the body.
+// `NEXT`/`PREV` branch on the popup because they do different work in each
+// state, so their `popup_visible()` reads stay. `CONFIRM`, `DISMISS` and
+// `NAVIGATE` refused outright with no popup up, which is a routing
+// precondition, so it is `requires: Caps::POPUP` and the pipeline decides
+// before the body runs, which is the only place a precondition can be
+// decided safely under `<void>`.
+//
+// There is no third path to a popup-less run, and no defence-in-depth guard
+// is kept: a verb bound on a surface that lends no port declines at
+// `let Some(ops) = ops(cx) else`, and a verb bound on the overlay is gated
+// by `POPUP`. A kept guard would be unreachable code that reads as a
+// decision.
+
 pub(crate) static CONFIRM: ActionSpec = ActionSpec {
     id: "godotvim.completion.confirm",
     desc: "Completion: accept the selected candidate",
-    requires: Caps::empty(),
+    // THE load-bearing line of this file, replacing the declination that
+    // was: `POPUP` decides BEFORE the body runs, so with no popup up `<CR>`
+    // is a `Hit::Miss`, the walk exhausts, and the engine inserts a newline,
+    // even under a user's `<void>`.
+    requires: Caps::POPUP,
     host_invocable: false,
     default_consume: None,
     run: |cx| {
         let Some(ops) = ops(cx) else {
             return Outcome::Declined;
         };
-        if !ops.popup_visible() {
-            // THE load-bearing declination of this file. With no popup up,
-            // `<CR>` must reach the engine and insert a newline and `<Tab>`
-            // must indent. Consuming here would make Enter stop working in
-            // insert mode, which is as bad as this plugin gets.
-            return Outcome::Declined;
-        }
         ops.confirm();
         Outcome::Handled
     },
@@ -249,47 +261,39 @@ pub(crate) static CONFIRM: ActionSpec = ActionSpec {
 
 pub(crate) static DISMISS: ActionSpec = ActionSpec {
     id: "godotvim.completion.dismiss",
-    desc: "Completion: close the popup, letting the key through",
-    requires: Caps::empty(),
+    desc: "Completion: close the popup, keeping insert mode",
+    requires: Caps::POPUP,
     host_invocable: false,
     default_consume: None,
+    // The body reports honestly that it dismissed; `dispose` reads the
+    // rule's declared policy downstream of this outcome. The shipped table
+    // binds no `<Esc>`, so one press still exits Insert through the engine
+    // and `handle_set_mode` cancels the popup on Normal entry; the two-stage
+    // Escape is one unflagged vimrc line:
+    // `panelmap editor.completion <Esc> godotvim.completion.dismiss`.
     run: |cx| {
         let Some(ops) = ops(cx) else {
             return Outcome::Declined;
         };
-        if !ops.popup_visible() {
-            return Outcome::Declined;
-        }
         ops.cancel();
-        // Declines ON PURPOSE, having already acted. `<Esc>` must close the
-        // popup *and* leave insert mode in one press — two effects from one
-        // key — so the popup is cancelled here and the keystroke still travels
-        // on to the engine. A `Handled` would trap the user in insert mode
-        // with the popup gone, needing a second Esc.
-        Outcome::Declined
+        Outcome::Handled
     },
 };
 
 pub(crate) static NAVIGATE: ActionSpec = ActionSpec {
     id: "godotvim.completion.navigate",
     desc: "Completion: hand this key to CodeEdit's own popup handling",
-    requires: Caps::empty(),
+    requires: Caps::POPUP,
     host_invocable: false,
     // The third routing state, declared on the verb rather than flagged on a
     // lent port: `CodeEdit::_gui_input` moves the popup selection on Up/Down
     // by itself and does it better than we would (it handles scrolling and
     // page bounds), so acceptance folds to `Disposition::Handoff`: skip the
-    // engine, do not consume, let the control have it.
+    // engine, do not consume, let the control have it. Audit A9' holds this
+    // declaration to a capability no classified path can satisfy.
     default_consume: Some(Consumption::Handoff),
     run: |cx| {
-        let Some(ops) = ops(cx) else {
-            return Outcome::Declined;
-        };
-        if !ops.popup_visible() {
-            // No popup: Up/Down are ordinary cursor movement and belong to
-            // the engine. Kept until the popup becomes a capability, because
-            // without it a popup-less <Up> would return Handled, fold to
-            // Handoff, and eat the arrow key.
+        if ops(cx).is_none() {
             return Outcome::Declined;
         }
         Outcome::Handled
@@ -306,17 +310,21 @@ const ACTIONS: &[&ActionSpec] = &[&TRIGGER, &NEXT, &PREV, &CONFIRM, &DISMISS, &N
 /// never match a real keystroke. `parse_lhs` accepts both spellings, which is
 /// exactly why the wrong one is a silent dead key.
 ///
-/// Every rule is elastic: a verb that declines does not consume, and the key
-/// continues to the vim engine. That is what keeps `<CR>` inserting a newline
-/// and `<Tab>` indenting when no popup is up, without a single mode check in
-/// the binding table.
+/// No flags: `confirm`, `dismiss` and `navigate` are gated by `Caps::POPUP`,
+/// so with no popup up the rules miss and `<CR>` inserts a newline, `<Tab>`
+/// indents and the arrows move the caret, without a single mode check in the
+/// binding table.
+///
+/// No `<Esc>` row. `DISMISS` returns `Handled` now, and an elastic `<Esc>`
+/// rule would consume the press that should also leave Insert; the engine's
+/// own `SetMode(Normal)` cancels the popup on the way out (`effects/mode.rs`),
+/// so one press still does both. The two-stage Escape is one vimrc line.
 const DEFAULTS: &str = "\
 panelmap editor.completion <C-@> godotvim.completion.trigger
 panelmap editor.completion <C-n> godotvim.completion.next
 panelmap editor.completion <C-p> godotvim.completion.prev
 panelmap editor.completion <Tab> godotvim.completion.confirm
 panelmap editor.completion <CR> godotvim.completion.confirm
-panelmap editor.completion <Esc> godotvim.completion.dismiss
 panelmap editor.completion <Up> godotvim.completion.navigate
 panelmap editor.completion <Down> godotvim.completion.navigate
 ";
@@ -536,39 +544,54 @@ mod tests {
     }
 
     #[test]
-    fn confirm_declines_with_no_popup_so_enter_still_inserts_a_newline() {
-        // The regression that would be reported as "Enter stopped working".
-        let mut popup = FakePopup::closed();
-        assert_eq!(
-            fold(&CONFIRM, Params::new(), &mut popup),
-            Disposition::Ignore
-        );
-        assert!(popup.log.is_empty());
+    fn with_no_popup_the_capability_gate_stops_the_key_before_the_verb_runs() {
+        // The regression that would be reported as "Enter stopped working",
+        // decided at the resolve level now: with no popup the overlay grants
+        // nothing, `POPUP` misses, the walk exhausts, and the engine inserts
+        // the newline. Deciding BEFORE the body runs is what makes the
+        // precondition safe under a user's `<void>`.
+        use crate::actions::resolve::{Resolution, Stop};
+        let index = crate::actions::bind::builtin_index(&crate::actions::specs::registry());
+        let rows = [
+            ("<CR>", "godotvim.completion.confirm"),
+            ("<Tab>", "godotvim.completion.confirm"),
+            ("<Up>", "godotvim.completion.navigate"),
+            ("<Down>", "godotvim.completion.navigate"),
+        ];
+        for (notation, verb) in rows {
+            assert_eq!(
+                resolve_overlay(&index, notation, &popup_facts(-1)),
+                Resolution::None(Stop::Exhausted),
+                "{notation} must miss with no popup"
+            );
+            let Resolution::Run { candidates, .. } =
+                resolve_overlay(&index, notation, &popup_facts(0))
+            else {
+                panic!("{notation} must resolve with the popup open");
+            };
+            let crate::actions::resolve::CandidateTarget::Action(_, spec) = &candidates[0].target
+            else {
+                panic!("an action rule");
+            };
+            assert_eq!(spec.id, verb, "{notation}");
+        }
     }
 
     #[test]
-    fn dismiss_cancels_the_popup_and_still_lets_escape_reach_the_engine() {
-        // Two effects, one key: the popup closes AND insert mode exits. This
-        // is the one verb that acts and declines in the same breath, and it is
-        // the reason `Outcome::Declined` had to keep meaning "the engine gets
-        // it" rather than "nothing happened".
+    fn dismiss_cancels_and_reports_that_it_did() {
+        // The body reports what happened; consumption is the rule's declared
+        // policy, read downstream by `dispose`. No shipped rule binds `<Esc>`
+        // any more, so one press still exits Insert through the engine, and
+        // `handle_set_mode` cancels the popup on Normal entry.
+        let mut popup = FakePopup::open(3, 1);
+        assert_eq!(run(&DISMISS, Params::new(), &mut popup), Outcome::Handled);
+        assert_eq!(popup.log, vec!["cancel"]);
+        assert!(!popup.visible);
         let mut popup = FakePopup::open(3, 1);
         assert_eq!(
             fold(&DISMISS, Params::new(), &mut popup),
-            Disposition::Ignore
+            Disposition::Consume
         );
-        assert_eq!(popup.log, vec!["cancel"]);
-        assert!(!popup.visible);
-    }
-
-    #[test]
-    fn dismiss_with_no_popup_does_nothing_at_all() {
-        let mut popup = FakePopup::closed();
-        assert_eq!(
-            fold(&DISMISS, Params::new(), &mut popup),
-            Disposition::Ignore
-        );
-        assert!(popup.log.is_empty());
     }
 
     #[test]
@@ -588,16 +611,6 @@ mod tests {
             fold(&NAVIGATE, Params::new(), &mut popup),
             Disposition::Handoff
         );
-    }
-
-    #[test]
-    fn navigate_declines_with_no_popup_so_arrows_move_the_caret() {
-        let mut popup = FakePopup::closed();
-        assert_eq!(
-            fold(&NAVIGATE, Params::new(), &mut popup),
-            Disposition::Ignore
-        );
-        assert!(popup.log.is_empty());
     }
 
     #[test]
@@ -893,12 +906,32 @@ mod tests {
     }
 
     #[test]
-    fn no_verb_requires_a_capability() {
-        // Capabilities are sampled from the focus chain, and this surface has
-        // none. A `requires` bit here would gate every completion key off
-        // permanently — silently, since the gate is a declination.
+    fn the_popup_is_a_capability_and_the_rest_is_a_branch() {
+        // The rule, written where it is enforced: a gate becomes a
+        // capability, a branch stays in the body. This test's predecessor
+        // claimed a `requires` bit here "would gate every completion key off
+        // permanently, silently" — the sentence this refactor falsifies: the
+        // overlay's grants are real capabilities now, decided by the same
+        // `hit_from` gate every classified surface gets.
+        for spec in [&CONFIRM, &DISMISS, &NAVIGATE] {
+            assert_eq!(
+                spec.requires,
+                Caps::POPUP,
+                "{} refuses outright with no popup, which is a routing \
+                 precondition and therefore a capability",
+                spec.id
+            );
+        }
+        for spec in [&TRIGGER, &NEXT, &PREV] {
+            assert_eq!(
+                spec.requires,
+                Caps::empty(),
+                "{} does different work in each popup state, which is a \
+                 branch and stays in the body",
+                spec.id
+            );
+        }
         for spec in ACTIONS {
-            assert_eq!(spec.requires, Caps::empty(), "{}", spec.id);
             assert!(!spec.host_invocable, "{}", spec.id);
             assert!(
                 spec.id.starts_with("godotvim.completion."),
@@ -910,16 +943,16 @@ mod tests {
 
     #[test]
     fn the_defaults_cover_every_key_the_old_table_matched() {
-        // Eight rows for eight literals: <C-@>, <C-n>, <C-p>, Tab, Enter,
-        // Escape, Up, Down. `Backspace` is deliberately absent — it was never
-        // a routing decision, it is the post-engine re-filter in
-        // `maybe_retrigger_completion`, which runs AFTER the key was already
-        // handled and so has no binding to be.
+        // Seven rows for seven of the eight old literals. `<Esc>` is
+        // deliberately absent: DISMISS consumes now, and a shipped `<Esc>`
+        // rule would trap the user in Insert; the engine's own
+        // `SetMode(Normal)` cancels the popup instead. `Backspace` is
+        // deliberately absent too — it was never a routing decision, it is
+        // the post-engine re-filter in `maybe_retrigger_completion`, which
+        // runs AFTER the key was already handled and so has no binding to be.
         let lines: Vec<&str> = DEFAULTS.lines().filter(|l| !l.is_empty()).collect();
-        assert_eq!(lines.len(), 8);
-        for notation in [
-            "<C-@>", "<C-n>", "<C-p>", "<Tab>", "<CR>", "<Esc>", "<Up>", "<Down>",
-        ] {
+        assert_eq!(lines.len(), 7);
+        for notation in ["<C-@>", "<C-n>", "<C-p>", "<Tab>", "<CR>", "<Up>", "<Down>"] {
             assert!(
                 lines.iter().any(|l| l.contains(&format!(" {notation} "))),
                 "{notation} is no longer bound"

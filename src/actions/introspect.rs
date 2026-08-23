@@ -591,7 +591,7 @@ mod tests {
     }
 
     /// Asserted literally rather than through a snapshot crate: the shipped
-    /// keyset is thirty rules and a hand-written expectation is reviewable
+    /// keyset is twenty-nine rules and a hand-written expectation is reviewable
     /// in a diff, which is the same argument the provider array makes.
     ///
     /// `dock.debugger` appearing between `dock.filesystem` and `dock` is not
@@ -609,7 +609,6 @@ editor.completion  (overlay: while the script editor is in an insert-like mode, 
   panelmap editor.completion <C-p> godotvim.completion.prev    [godotvim.completion]
   panelmap editor.completion <Tab> godotvim.completion.confirm    [godotvim.completion]
   panelmap editor.completion <CR> godotvim.completion.confirm    [godotvim.completion]
-  panelmap editor.completion <Esc> godotvim.completion.dismiss    [godotvim.completion]
   panelmap editor.completion <Up> godotvim.completion.navigate    [godotvim.completion]
   panelmap editor.completion <Down> godotvim.completion.navigate    [godotvim.completion]
 prompt  (no bindings)
@@ -642,7 +641,7 @@ panel  (parent: -, seal: Open)
   panelmap <physical> <void> <norepeat> panel <C-j> godotvim.focus.down    [godotvim.panel]
   panelmap <physical> <void> <norepeat> panel <C-k> godotvim.focus.up    [godotvim.panel]
   panelmap <physical> <void> <norepeat> panel <C-l> godotvim.focus.right    [godotvim.panel]
---- 30 binding(s) ---
+--- 29 binding(s) ---
 ";
         assert_eq!(report, expected);
     }
