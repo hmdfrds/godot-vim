@@ -117,4 +117,5 @@ Include the Godot version, your OS, and your keyboard layout. Layout matters
 more than it sounds: several past defects reproduced only on Colemak, Dvorak
 or AZERTY, because a key's *position* and the character it produces differ
 there. If a keybinding misbehaves, `:panelmap {key}` prints exactly how that
-key resolved and is worth pasting too.
+key resolved and is worth pasting too; for completion keys it prints a
+counterfactual section resolving the key as if the popup were open.

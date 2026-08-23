@@ -85,7 +85,8 @@ didn't `:w` work?" finds the answer at `debug` without drowning in noise.
 
 Qualifies: the per-keystroke summary line (target `"key"`), editor
 attach/detach, host request dispatch, indent/commentstring sync, undo/redo,
-mode transitions, window navigation, completion interception, passthrough
+mode transitions, window navigation, completion overlay dispatch
+(`dispatch_overlay`), passthrough
 keys, floating window detection, custom ex-commands.
 
 Does NOT qualify: per-character insert/delete (use `trace`), cursor position

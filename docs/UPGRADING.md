@@ -3,6 +3,53 @@
 Notes for people arriving from an older release. Nothing here applies to a
 fresh install.
 
+## From v1.7.x
+
+The completion popup keys now resolve through the same pipeline as every
+other panel binding, and three long-standing defects went with the old
+transport. Four notes:
+
+1. **Tab and Enter no longer accept a candidate you did not choose.** Godot
+   preselects the first row the moment a popup opens; pressing Enter to break
+   a line used to accept it. They now confirm only a selection you explicitly
+   moved onto (`Ctrl-N`/`Ctrl-P`, arrows, a click); otherwise the popup
+   closes and the key does its ordinary job. Restore the old behaviour with:
+
+   ```vim
+   panelmap editor.completion <CR> godotvim.completion.confirm require_selection=0
+   panelmap editor.completion <Tab> godotvim.completion.confirm require_selection=0
+   ```
+
+2. **Ctrl-Space, Ctrl-N and Ctrl-P now open the popup.** They never did: the
+   old gate read a `CodeEdit` flag Godot's script editor never sets, so
+   Ctrl-Space fell through to Vim's `i_CTRL-@`, which pastes your previous
+   insert and exits Insert mode. If you relied on that, restore it with
+   `panelunmap editor.completion <C-@>`.
+
+3. **`<C-y>` and `<C-e>` are claimed while a popup is visible**: explicit
+   accept and close-keeping-text, Vim's own popup keys. With no popup up they
+   still reach vim-core's copy-character-above / copy-character-below
+   untouched.
+
+4. **Completion bindings now honour `:set langmap`, `<void>`, `<norepeat>`
+   and `key=value` parameters**, all of which parsed and did nothing before.
+   A project-level `.godot-vimrc` under the `Sandbox` policy can no longer
+   bind keys on an `editor.*` surface (a committed vimrc could otherwise
+   consume Escape inside Insert mode); your user-level vimrc is unaffected.
+
+One residual: inside a `<C-x>` completion submode, Escape does not fire a
+mode change in the engine, so the popup closes on the second of the two
+presses you were already making.
+
+The shipped `<Esc>` row on `editor.completion` is gone, with no behaviour
+change: one press still closes the popup and leaves Insert, through the
+engine. If you want the two-stage Escape (first press closes the popup and
+stays in Insert, second press leaves), it is now one line:
+
+```vim
+panelmap editor.completion <Esc> godotvim.completion.dismiss
+```
+
 ## From v0.x
 
 v1.0 was a complete rewrite. Settings, the config format and the internals are

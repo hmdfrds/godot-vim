@@ -285,7 +285,7 @@ impl BindingIndex {
         // V-DISPATCH: refuse at registration what no transport can honour.
         // `<Shortcut>(path)` is parsed, registered and printed as eligible,
         // and then `run_candidate` unconditionally declines it after a
-        // `log::warn!` nobody sees — the default Log Level is Off. With
+        // `log::warn!` nobody sees, since the default Log Level is Off. With
         // `<void>` that is a permanently dead key the introspector actively
         // confirms will work. Delegating to Godot's own shortcuts needs a
         // cycle audit and an injection budget it does not have yet; until

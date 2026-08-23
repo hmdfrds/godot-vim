@@ -41,14 +41,17 @@ set timeoutlen=1000
 "
 " Surfaces   panel  dock  dock.filesystem  dock.debugger  searchbox  prompt
 "            editor.nav  editor.completion  unknown
-"            (editor.insert and foreign are barriers and take no bindings)
+"            (editor.insert and foreign are barriers and take no bindings;
+"            editor.completion is an overlay: the script editor in an
+"            insert-like mode, live per keystroke rather than by focus)
 "            A deeper surface wins: a rule on dock.filesystem beats the same
 "            key on dock, which beats the same key on panel.
 " Targets    a godotvim.* action id, or `native` to hand the key to Godot.
 " Flags      <physical> also match the US-QWERTY key POSITION — drop it and
 "                       the key dies on Colemak / Dvorak / AZERTY
-"            <void>     consume even when the action declines — drop it and
-"                       the panel chords leak to Godot at the layout's edges
+"            <void>     consume even when the action declines; on the panel
+"                       chords, dropping it leaks them to Godot at the
+"                       layout's edges
 "            <norepeat> ignore auto-repeat while the key is held
 "            <shift>    also match with Shift held (named keys only)
 "            <nowait>   fire now instead of waiting for a longer sequence
@@ -81,10 +84,14 @@ set timeoutlen=1000
 " panelunmap dock.filesystem d
 " panelmap <physical> dock.filesystem dd godotvim.fs.delete
 "
-" ── Completion: Ctrl-Y confirms, Ctrl-E dismisses, Tab goes back to Godot ─
-" panelunmap editor.completion <Tab>
-" panelmap editor.completion <C-y> godotvim.completion.confirm
-" panelmap editor.completion <C-e> godotvim.completion.dismiss
+" ── Completion: Tab and Enter accept even an unchosen candidate ───────────
+"    (Ctrl-Y and Ctrl-E ship as defaults; this restores the pre-1.8 accept.)
+" panelmap editor.completion <Tab> godotvim.completion.confirm require_selection=0
+" panelmap editor.completion <CR> godotvim.completion.confirm require_selection=0
+"
+" ── Completion: two-stage Escape ──────────────────────────────────────────
+"    First press closes the popup and stays in Insert; second press leaves.
+" panelmap editor.completion <Esc> godotvim.completion.dismiss
 "
 " ── Half-page dock movement ───────────────────────────────────────────────
 " panelmap dock <C-d> godotvim.item.next count=10

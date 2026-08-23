@@ -963,9 +963,9 @@ mod tests {
         // The rule, written where it is enforced: a gate becomes a
         // capability, a branch stays in the body. This test's predecessor
         // claimed a `requires` bit here "would gate every completion key off
-        // permanently, silently" — the sentence this refactor falsifies: the
-        // overlay's grants are real capabilities now, decided by the same
-        // `hit_from` gate every classified surface gets.
+        // permanently, silently", which is the sentence this refactor
+        // falsifies: the overlay's grants are real capabilities now, decided
+        // by the same `hit_from` gate every classified surface gets.
         for spec in [&CONFIRM, &DISMISS, &NAVIGATE] {
             assert_eq!(
                 spec.requires,
@@ -1000,7 +1000,7 @@ mod tests {
         // deliberately absent: DISMISS consumes now, and a shipped `<Esc>`
         // rule would trap the user in Insert; the engine's own
         // `SetMode(Normal)` cancels the popup instead. `Backspace` is
-        // deliberately absent too — it was never a routing decision, it is
+        // deliberately absent too: it was never a routing decision, it is
         // the post-engine re-filter in `maybe_retrigger_completion`, which
         // runs AFTER the key was already handled and so has no binding to be.
         let lines: Vec<&str> = DEFAULTS.lines().filter(|l| !l.is_empty()).collect();

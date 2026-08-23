@@ -111,7 +111,7 @@ pub(crate) const PROVIDERS: &[Provider] = &[
     // editor.nav / editor.insert — the attached CodeEdit, split by mode. First
     // refusal on our own editor, before anything can claim it as a text input.
     editor::PROVIDER,
-    // editor.completion — the autocomplete popup's keys, as an OVERLAY.
+    // editor.completion, the autocomplete popup's keys, as an OVERLAY.
     // Position here is arbitrary and that is a property, not a hole: its
     // probe is `|_| None`, so it is unreachable by classification from ANY
     // position; the `gui_input` transport asks `Forest::overlay` for it per
@@ -920,7 +920,7 @@ mod tests {
         // nothing. Deriving the exclusion from the declaration is what turns
         // a silent exclusion into a declared one, and keeps a second overlay
         // from silently joining an audit it cannot satisfy. Every surface
-        // that DOES probe must still bring one — that is what makes the
+        // that DOES probe must still bring one, which is what makes the
         // partition audit below meaningful rather than decorative.
         for id in forest
             .ids()
