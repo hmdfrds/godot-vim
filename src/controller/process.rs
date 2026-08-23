@@ -22,7 +22,6 @@ use godot::prelude::*;
 use vim_core::execution::host_api::{DeferredAction, WindowNavAction};
 use vim_core::keymap::KeyEvent;
 
-use crate::actions::resolve::Disposition;
 use crate::bridge::port::TextEditorPort;
 
 use super::completion;
@@ -68,13 +67,12 @@ pub(super) fn process_cycle_impl(
     if !plan.candidates.is_empty() {
         let disposition =
             completion::dispatch_overlay(session, editor, &mut ctx.transient.completion, &plan);
-        let outcome = match disposition {
-            Disposition::Consume => Some(PipelineOutcome::CompletionConsumed),
-            Disposition::Handoff => Some(PipelineOutcome::CompletionDeferred),
-            // Falls through to `should_passthrough_key` below, exactly as
-            // `try_handle_completion`'s `None` did.
-            Disposition::Ignore => None,
-        };
+        // `None` falls through to `should_passthrough_key` below, exactly as
+        // `try_handle_completion`'s `None` did. The mapping itself lives in
+        // `pipeline_outcome` because this function is Gd-bound: inline, the
+        // only test possible was a copy of the match, which a mutation of
+        // this line would not have failed.
+        let outcome = super::pipeline_outcome::outcome_for(disposition);
         if let Some(outcome) = outcome {
             log::debug!(
                 "process_cycle: overlay claimed key={key} -> {}",
