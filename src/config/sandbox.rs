@@ -182,7 +182,27 @@ fn panel_line_is_safe(trimmed: &str) -> bool {
     use crate::config::panelmap::{parse_panel_line, PanelLine, TargetSpec};
     match parse_panel_line(trimmed) {
         Ok(Some(PanelLine::Unmap { .. })) => true,
-        Ok(Some(PanelLine::Map(ref m))) => !matches!(m.target, TargetSpec::Shortcut(_)),
+        Ok(Some(PanelLine::Map(ref m))) => {
+            !matches!(m.target, TargetSpec::Shortcut(_))
+                // An `editor.*` surface is live while the VIM ENGINE owns the
+                // keyboard, and the engine is the only route out of Insert
+                // mode. `editor.completion` is the first such surface to carry
+                // rules, and a rule there that accepts consumes the key:
+                // `panelmap editor.completion <Esc> godotvim.completion.trigger`
+                // parses, is admitted by every other clause here, registers,
+                // resolves on every insert-like keystroke because TRIGGER
+                // requires nothing, returns `Handled`, and `Elastic` consumes.
+                // Escape is then dead until the vimrc is edited, which breaks
+                // this module's own invariant that a hostile project can at
+                // worst produce a DEAD KEY.
+                //
+                // Deliberately broader than `<void>`: consumption follows from
+                // acceptance, not from the flag. Deliberately narrower than
+                // "no panel lines": every non-`editor.` surface, and
+                // `panelunmap` on any surface, are unaffected. The user's own
+                // vimrc is not sandboxed and keeps the rope.
+                && !m.surface.starts_with("editor.")
+        }
         // Anything that fails to parse is stripped rather than trusted.
         Ok(None) | Err(_) => false,
     }
@@ -1221,6 +1241,48 @@ imap jj <Esc>
             out.lines().all(|l| !l.starts_with("panelmap")),
             "no live panelmap line may survive: {out}"
         );
+    }
+
+    #[test]
+    fn a_binding_on_an_editor_surface_is_stripped_from_a_project_vimrc() {
+        // The overlay is the first rule-bearing surface live while the vim
+        // engine owns the keyboard, and a rule there that accepts consumes
+        // the key. A committed vimrc binding Escape to a completion verb
+        // would make Insert mode inescapable, which breaks the invariant that
+        // a hostile project can at worst produce a dead key.
+        let out = sandboxed("panelmap editor.completion <Esc> godotvim.completion.trigger\n");
+        assert!(out.contains("[sandbox] stripped"), "must say why: {out}");
+        assert!(
+            out.lines().all(|l| !l.starts_with("panelmap")),
+            "no live panelmap line may survive: {out}"
+        );
+    }
+
+    #[test]
+    fn a_binding_on_a_panel_surface_still_survives() {
+        // The guard on the guard: the strip is scoped to `editor.*`, not to
+        // panel lines at large.
+        let out = sandboxed("panelmap dock n godotvim.item.next\n");
+        assert_survives(&out, "panelmap dock n godotvim.item.next");
+    }
+
+    #[test]
+    fn an_unmap_on_an_editor_surface_still_survives() {
+        // Removing a binding can only reduce what the plugin consumes.
+        let out = sandboxed("panelunmap editor.completion <Tab>\n");
+        assert_survives(&out, "panelunmap editor.completion <Tab>");
+    }
+
+    #[test]
+    fn a_trusted_vimrc_keeps_editor_surface_bindings() {
+        let out = apply_vimrc_policy(
+            "panelmap editor.completion <Esc> godotvim.completion.dismiss\n",
+            true,
+            crate::settings::ProjectVimrc::Trusted,
+        )
+        .unwrap_or_default();
+        assert!(out.contains("editor.completion <Esc>"), "{out}");
+        assert!(!out.contains("[sandbox] stripped"), "{out}");
     }
 
     #[test]
