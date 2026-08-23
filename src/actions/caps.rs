@@ -44,10 +44,26 @@ bitflags! {
         const TEXTENTRY = 1 << 3;
         /// Create / delete / rename / yank paths. The FileSystem dock.
         const FILEOPS = 1 << 4;
+        /// A completion popup is on screen at the moment this key arrived.
+        ///
+        /// Contributed ONLY by an overlay's `grants`; `Caps::of_control` can
+        /// never produce it, which is what makes it sound to gate
+        /// `Consumption::Handoff` on. The one bit whose lifetime is a
+        /// keystroke rather than a focus.
+        const POPUP = 1 << 5;
     }
 }
 
 impl Caps {
+    /// Capabilities that name a state in which the focused control's OWN key
+    /// handling is what the user asked for. Audit A9' is defined against it.
+    #[allow(
+        dead_code,
+        reason = "the A9' audit test is the consumer; it is a test by design, \
+                  like the golden fixture table it reads"
+    )]
+    pub(crate) const HANDOFF_SAFE: Self = Self::POPUP;
+
     /// Whether a control offering `self` can host an action requiring `needs`.
     ///
     /// Subset test: every required bit must be present. An action requiring
@@ -202,6 +218,28 @@ mod tests {
             let hierarchy = Caps::of_control(is_class).satisfies(Caps::HIERARCHY);
             let is_tree = crate::navigation::dock::dock_kind_for(is_class) == Some(DockKind::Tree);
             assert_eq!(hierarchy, is_tree, "{names:?}");
+        }
+    }
+
+    #[test]
+    fn no_widget_class_can_ever_offer_a_handoff_safe_capability() {
+        // An all-true `is_class` probe yields the union of every bit
+        // `of_control` can produce, so this holds for every real control too.
+        // It is the soundness argument for gating `Consumption::Handoff` on
+        // `Caps::POPUP`: a focused widget alone can never open the gate.
+        assert!(Caps::of_control(|_| true)
+            .intersection(Caps::HANDOFF_SAFE)
+            .is_empty());
+    }
+
+    #[test]
+    fn popup_is_absent_from_every_shared_class() {
+        for names in SHARED_CLASSES {
+            let is_class = |q: &str| names.contains(&q);
+            assert!(
+                !Caps::of_control(is_class).contains(Caps::POPUP),
+                "{names:?} must not contribute POPUP"
+            );
         }
     }
 
