@@ -139,11 +139,14 @@ fn wrap(index: i32, count: i32) -> Option<i32> {
 pub(crate) static TRIGGER: ActionSpec = ActionSpec {
     id: "godotvim.completion.trigger",
     desc: "Completion: open the popup",
-    // No capability. `Caps` describes what a focused *control* affords and is
-    // sampled from the focus chain; this surface never classifies, so its
-    // verbs arrive with `Caps::empty()` and anything but `empty` would gate
-    // every one of them off. The real precondition is `completion_enabled`,
-    // asked of the port.
+    // No capability: opening the popup is exactly what must work with none
+    // up. The gate this verb used to ask, `is_code_completion_enabled()`, is
+    // a CodeEdit flag the script editor never sets, so the verb has NEVER
+    // opened a popup; the keystroke fell through to vim-core's i_CTRL-@,
+    // which pastes the previous insert and exits Insert. The live user
+    // preference is `ctx.code_complete_enabled`, a different flag on the
+    // auto-trigger path, deliberately not consulted here: a manual trigger
+    // is the way in when auto-triggering is off.
     requires: Caps::empty(),
     // There is no popup outside the attached editor, and a host request that
     // silently declined would look like a broken keybinding.
@@ -153,12 +156,6 @@ pub(crate) static TRIGGER: ActionSpec = ActionSpec {
         let Some(ops) = ops(cx) else {
             return Outcome::Declined;
         };
-        if !ops.completion_enabled() {
-            // The user turned autocompletion off in EditorSettings. Forcing a
-            // popup they disabled is worse than doing nothing, and declining
-            // lets Ctrl+Space reach the engine as an ordinary chord.
-            return Outcome::Declined;
-        }
         ops.request(true);
         Outcome::Handled
     },
@@ -180,9 +177,6 @@ pub(crate) static NEXT: ActionSpec = ActionSpec {
             };
             ops.select(next);
             return Outcome::Handled;
-        }
-        if !ops.completion_enabled() {
-            return Outcome::Declined;
         }
         // Godot auto-selects index 0 on a fresh request, which is already
         // Vim's `<C-n>` semantics (forward search from the top). Nothing more
@@ -208,9 +202,6 @@ pub(crate) static PREV: ActionSpec = ActionSpec {
             };
             ops.select(prev);
             return Outcome::Handled;
-        }
-        if !ops.completion_enabled() {
-            return Outcome::Declined;
         }
         ops.request(true);
         // Vim's `<C-p>` searches BACKWARD, so a fresh popup must land on the
@@ -353,7 +344,6 @@ mod tests {
     #[derive(Debug, Default, PartialEq, Eq)]
     struct FakePopup {
         visible: bool,
-        enabled: bool,
         options: i32,
         selected: i32,
         /// Every command, in order. Asserting the LOG rather than the end
@@ -364,7 +354,6 @@ mod tests {
     impl FakePopup {
         fn closed() -> Self {
             Self {
-                enabled: true,
                 selected: -1,
                 ..Self::default()
             }
@@ -373,16 +362,8 @@ mod tests {
         fn open(options: i32, selected: i32) -> Self {
             Self {
                 visible: true,
-                enabled: true,
                 options,
                 selected,
-                ..Self::default()
-            }
-        }
-
-        fn disabled() -> Self {
-            Self {
-                selected: -1,
                 ..Self::default()
             }
         }
@@ -391,9 +372,6 @@ mod tests {
     impl CompletionOps for FakePopup {
         fn popup_visible(&self) -> bool {
             self.visible
-        }
-        fn completion_enabled(&self) -> bool {
-            self.enabled
         }
         fn option_count(&self) -> i32 {
             self.options
@@ -406,7 +384,7 @@ mod tests {
             // Godot's request is synchronous and auto-selects index 0 when it
             // finds candidates. The fake reproduces that, because `prev`'s
             // "then jump to the last one" depends on it.
-            if self.enabled && self.options > 0 {
+            if self.options > 0 {
                 self.visible = true;
                 self.selected = 0;
             }
@@ -469,15 +447,14 @@ mod tests {
     }
 
     #[test]
-    fn trigger_declines_when_completion_is_disabled() {
-        // `editor.is_code_completion_enabled()` false → the old code returned
-        // `None` and the chord reached the engine. Same here, via declination.
-        let mut popup = FakePopup::disabled();
-        assert_eq!(
-            fold(&TRIGGER, Params::new(), &mut popup),
-            Disposition::Ignore
-        );
-        assert!(popup.log.is_empty(), "must not force a disabled popup");
+    fn trigger_always_requests_when_a_port_is_lent() {
+        // The deleted gate, `is_code_completion_enabled()`, is a CodeEdit
+        // flag Godot's script editor never sets: it had never once opened a
+        // popup. The verb requests unconditionally now, forced, so it cannot
+        // self-cancel after an open paren.
+        let mut popup = FakePopup::closed();
+        assert_eq!(run(&TRIGGER, Params::new(), &mut popup), Outcome::Handled);
+        assert_eq!(popup.log, vec!["request(force=true)"]);
     }
 
     #[test]

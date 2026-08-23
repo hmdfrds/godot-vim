@@ -65,10 +65,6 @@ impl CompletionOps for CompletionPort<'_> {
         is_completion_active(self.editor)
     }
 
-    fn completion_enabled(&self) -> bool {
-        self.editor.is_code_completion_enabled()
-    }
-
     fn option_count(&self) -> i32 {
         usize_to_i32(self.editor.get_code_completion_options().len())
     }

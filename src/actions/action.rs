@@ -222,7 +222,7 @@ impl std::fmt::Debug for ActionSpec {
 /// only real implementation holds `&mut VimSession<GodotHost>` and
 /// `&mut Gd<CodeEdit>`, and neither can exist under `cargo test` in a
 /// `cdylib`. Behind this seam the `godotvim.completion.*` bodies are pure
-/// decision logic over two booleans and two integers, so the trichotomy they
+/// decision logic over one boolean and two integers, so the trichotomy they
 /// produce — consume / hand to the control / let the engine have it — is
 /// table-tested headlessly, which is the same trick `FocusChain` plays for the
 /// surface plane.
@@ -233,11 +233,13 @@ impl std::fmt::Debug for ActionSpec {
 pub(crate) trait CompletionOps {
     /// Godot returns -1 from `get_code_completion_selected_index` when no
     /// popup is up, which is the only "is it visible" answer it offers.
+    ///
+    /// Read LIVE, where `Caps::POPUP` is sampled once at the keystroke: the
+    /// capability answers "was the popup up when the key arrived", a routing
+    /// precondition; this answers "is it up now", an execution fact. `PREV`
+    /// depends on the two disagreeing within one keystroke: it requests, then
+    /// asks whether the popup came up so it can land on the last candidate.
     fn popup_visible(&self) -> bool;
-    /// `code_complete_enabled` in EditorSettings. False means the user turned
-    /// autocompletion off, and every trigger verb must decline rather than
-    /// force a popup they asked not to see.
-    fn completion_enabled(&self) -> bool;
     fn option_count(&self) -> i32;
     fn selected_index(&self) -> i32;
     /// Ask Godot to (re)build the candidate list. Synchronous: popup state and
