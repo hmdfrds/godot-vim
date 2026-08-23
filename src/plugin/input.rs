@@ -95,6 +95,18 @@ fn plan_effects(plan: &Plan) -> (Disposition, TimerAction) {
     }
 }
 
+/// Perform a disposition on the primary transport.
+///
+/// An exhaustive match, not `== Disposition::Consume`, so a future variant is
+/// a compile error at the two places that commit rather than silently taking
+/// the not-consumed path.
+fn commit(viewport: &mut Gd<Viewport>, disposition: Disposition) {
+    match disposition {
+        Disposition::Consume => viewport.set_input_as_handled(),
+        Disposition::Ignore => {}
+    }
+}
+
 /// Build the cache key from the five facts a re-sample depends on.
 ///
 /// A free function so the field-by-field copy is reachable from a test: every
@@ -296,9 +308,7 @@ impl GodotVimCore {
             // Every other arm is terminal: `plan_effects` has already said
             // everything there is to say about the keystroke.
             Plan::Drop | Plan::Swallow | Plan::Arm | Plan::Clear => {
-                if immediate == Disposition::Consume {
-                    viewport.set_input_as_handled();
-                }
+                commit(&mut viewport, immediate);
                 return;
             }
         };
@@ -317,8 +327,8 @@ impl GodotVimCore {
                 "input: consumed {matched} via {}",
                 candidates.first().map_or("<none>", |c| c.surface)
             );
-            viewport.set_input_as_handled();
         }
+        commit(&mut viewport, disposition);
     }
 
     /// §5.10 step 3 — `Tree`/`ItemList` incremental type-to-search, off for
