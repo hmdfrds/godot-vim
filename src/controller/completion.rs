@@ -47,6 +47,53 @@ fn is_completion_active(editor: &Gd<CodeEdit>) -> bool {
     editor.get_code_completion_selected_index() >= 0
 }
 
+/// Whether the current completion selection was chosen by the user.
+///
+/// Rules, each citing Godot: no popup resets; a moved caret resets, because
+/// typing moves the caret and steering does not, which makes the caret the
+/// episode key; an index EDGE to a NON-ZERO value adopts, because Godot's
+/// only automatic writes are resets to 0 (`code_edit.cpp:3873, 4097`) while
+/// every non-zero write is human-originated; `last_index == None` leaves
+/// `explicit` standing, which is what lets the port's own write survive the
+/// keystroke that opened the popup.
+///
+/// Two documented residuals, both failing toward a newline rather than an
+/// unwanted insert: clicking an already-selected row, and wrapping round to
+/// row 0.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct Provenance {
+    last_index: Option<i32>,
+    last_caret: (i32, i32),
+    pub(crate) explicit: bool,
+}
+
+/// Pure. The Godot reads happen once in `handle_gui_input_impl`; this is the
+/// rule, and it is a `fn` over plain data so it is table-tested headlessly.
+pub(crate) fn advance(
+    prev: Provenance,
+    facts: &crate::actions::surface::OverlayFacts,
+) -> Provenance {
+    if !facts.popup() {
+        return Provenance::default();
+    }
+    if prev.last_index.is_some() && facts.caret != prev.last_caret {
+        return Provenance {
+            last_index: Some(facts.selected_index),
+            last_caret: facts.caret,
+            explicit: false,
+        };
+    }
+    let adopted = matches!(
+        prev.last_index,
+        Some(previous) if previous != facts.selected_index && facts.selected_index != 0
+    );
+    Provenance {
+        last_index: Some(facts.selected_index),
+        last_caret: facts.caret,
+        explicit: prev.explicit || adopted,
+    }
+}
+
 /// The one real [`CompletionOps`], holding the two things no test can build.
 ///
 /// Everything a completion verb decides is decided against this trait; the
@@ -55,9 +102,17 @@ fn is_completion_active(editor: &Gd<CodeEdit>) -> bool {
 /// `Some(false)` / `None` trichotomy has a headless characterization suite at
 /// all — `Gd<CodeEdit>` and `VimSession<GodotHost>` cannot be constructed under
 /// `cargo test` in a `cdylib`.
+///
+/// INVARIANT the provenance write-through depends on:
+/// `maybe_retrigger_completion` calls `request_code_completion_ex()` on the
+/// raw editor and never touches this port, so a port `request` (or `select`)
+/// is reachable only from a user-initiated verb, and marking the selection
+/// explicit there is sound. A future retrigger refactor that routes through
+/// the port breaks this silently; do not.
 struct CompletionPort<'a> {
     session: &'a mut VimSession<GodotHost>,
     editor: &'a mut Gd<CodeEdit>,
+    provenance: &'a mut Provenance,
 }
 
 impl CompletionOps for CompletionPort<'_> {
@@ -74,10 +129,14 @@ impl CompletionOps for CompletionPort<'_> {
     }
 
     fn request(&mut self, force: bool) {
+        // User-initiated by the port invariant above, so the selection Godot
+        // preselects on this request was asked for by name.
+        self.provenance.explicit = true;
         self.editor.request_code_completion_ex().force(force).done();
     }
 
     fn select(&mut self, index: i32) {
+        self.provenance.explicit = true;
         self.editor.set_code_completion_selected_index(index);
     }
 
@@ -87,6 +146,10 @@ impl CompletionOps for CompletionPort<'_> {
 
     fn cancel(&mut self) {
         self.editor.cancel_code_completion();
+    }
+
+    fn selection_is_explicit(&self) -> bool {
+        self.provenance.explicit
     }
 }
 
@@ -101,9 +164,14 @@ impl CompletionOps for CompletionPort<'_> {
 pub(crate) fn dispatch_overlay(
     session: &mut VimSession<GodotHost>,
     editor: &mut Gd<CodeEdit>,
+    provenance: &mut Provenance,
     plan: &crate::actions::resolve::OverlayPlan,
 ) -> Disposition {
-    let mut port = CompletionPort { session, editor };
+    let mut port = CompletionPort {
+        session,
+        editor,
+        provenance,
+    };
     resolve::dispose(&plan.candidates, plan.is_echo, |candidate| {
         let CandidateTarget::Action(_, spec) = &candidate.target else {
             // Unreachable from config: `<Shortcut>` is refused at
@@ -225,3 +293,90 @@ fn confirm_and_reconcile_completion(
 // `resolve::dispose` now, pinned by the truth-table rows in
 // `actions::resolve` and by the `Disposition` -> `PipelineOutcome` table in
 // `controller::pipeline_outcome`.
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::actions::surface::OverlayFacts;
+
+    fn facts(selected_index: i32, caret: (i32, i32)) -> OverlayFacts {
+        OverlayFacts {
+            at_attached_editor: true,
+            mode: Some(vim_core::primitives::Mode::Insert),
+            selected_index,
+            caret,
+        }
+    }
+
+    fn prov(last_index: Option<i32>, last_caret: (i32, i32), explicit: bool) -> Provenance {
+        Provenance {
+            last_index,
+            last_caret,
+            explicit,
+        }
+    }
+
+    #[test]
+    fn advance_is_a_total_table() {
+        // One row per rule, each citing the fact it turns on.
+        let rows: &[(&str, Provenance, OverlayFacts, Provenance)] = &[
+            (
+                "popup absent resets everything",
+                prov(Some(3), (1, 4), true),
+                facts(-1, (1, 4)),
+                Provenance::default(),
+            ),
+            (
+                "a moved caret resets: typing moves the caret, steering does not",
+                prov(Some(3), (1, 4), true),
+                facts(3, (1, 5)),
+                prov(Some(3), (1, 5), false),
+            ),
+            (
+                "an index edge to a non-zero value adopts: Godot's only \
+                 automatic writes are resets to 0",
+                prov(Some(0), (1, 4), false),
+                facts(2, (1, 4)),
+                prov(Some(2), (1, 4), true),
+            ),
+            (
+                "an index edge to zero does not adopt: that is the machine's \
+                 own reset",
+                prov(Some(3), (1, 4), false),
+                facts(0, (1, 4)),
+                prov(Some(0), (1, 4), false),
+            ),
+            (
+                "last_index None leaves explicit standing, so the port's own \
+                 write survives the keystroke that opened the popup",
+                prov(None, (1, 4), true),
+                facts(0, (1, 4)),
+                prov(Some(0), (1, 4), true),
+            ),
+            (
+                "a repeated identical index preserves",
+                prov(Some(2), (1, 4), true),
+                facts(2, (1, 4)),
+                prov(Some(2), (1, 4), true),
+            ),
+        ];
+        for (what, prev, f, want) in rows {
+            assert_eq!(advance(*prev, f), *want, "{what}");
+        }
+    }
+
+    #[test]
+    fn the_regression_this_rule_exists_for() {
+        // `cancel_code_completion` leaves the index and the option list
+        // intact (code_edit.cpp:2711-2719), so a reopened popup can carry a
+        // stale non-zero index the user never touched. Preservation is a
+        // NON-WRITE: no edge, same caret, and explicit must stay false so
+        // Enter gives a newline rather than an insert nobody asked for.
+        let prev = prov(Some(3), (1, 4), false);
+        let next = advance(prev, &facts(3, (1, 4)));
+        assert!(
+            !next.explicit,
+            "a preserved stale selection is not a choice"
+        );
+    }
+}

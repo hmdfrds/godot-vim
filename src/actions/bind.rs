@@ -927,6 +927,30 @@ mod tests {
             false,
             &[],
         ),
+        // Vim's real popup keys (insert.txt:1399-1410). `<C-y>` carries
+        // `require_selection=0` because pressing it IS choosing; both are
+        // POPUP-gated, so with none up they reach vim-core's CopyCharAbove /
+        // CopyCharBelow untouched.
+        (
+            "editor.completion",
+            "<C-y>",
+            "godotvim.completion.confirm",
+            false,
+            Consumption::Elastic,
+            Repeat::Allow,
+            false,
+            &[("require_selection", 0)],
+        ),
+        (
+            "editor.completion",
+            "<C-e>",
+            "godotvim.completion.dismiss",
+            false,
+            Consumption::Elastic,
+            Repeat::Allow,
+            false,
+            &[],
+        ),
         (
             "editor.completion",
             "<Tab>",
@@ -1226,6 +1250,22 @@ mod tests {
             "editor.completion" => "godotvim.completion",
             "searchbox" => "godotvim.searchbox",
             other => unreachable!("no provider ships defaults for '{other}'"),
+        }
+    }
+
+    #[test]
+    fn the_new_defaults_are_legal_on_an_editor_reachable_surface() {
+        // Asserted DIRECTLY rather than through loading, because the failure
+        // mode is a `debug_assert!` in `apply_text` under
+        // `Provenance::Builtin` whose message reads as unrelated. Neither key
+        // starts a vim grammar sequence, so V8 admits both on
+        // `editor.completion`, and with no popup they still reach vim-core's
+        // CopyCharAbove / CopyCharBelow.
+        for c in ['y', 'e'] {
+            assert!(
+                !starts_vim_grammar_sequence(ctrl(c)),
+                "<C-{c}> must not start a grammar sequence"
+            );
         }
     }
 
@@ -1789,6 +1829,7 @@ mod tests {
                 at_attached_editor: true,
                 mode: Some(vim_core::primitives::Mode::Insert),
                 selected_index: 0,
+                caret: (0, 0),
             })
             .expect("popup-open facts activate the overlay");
         let reg = registry();
@@ -1827,12 +1868,12 @@ mod tests {
 
     #[test]
     fn every_shipped_completion_default_still_loads() {
-        // Seven rules, six distinct verbs, and an exact per-verb capability
+        // Nine rules, six distinct verbs, and an exact per-verb capability
         // expectation: the trigger family requires nothing so the popup can
         // be OPENED with none up, while confirm/dismiss/navigate require the
         // popup they act on.
         let index = builtin_index(&registry());
-        assert_eq!(index.rules_on("editor.completion").count(), 7);
+        assert_eq!(index.rules_on("editor.completion").count(), 9);
         let reg = registry();
         for rule in index.rules_on("editor.completion") {
             let RuleTarget::Action(id) = rule.target else {

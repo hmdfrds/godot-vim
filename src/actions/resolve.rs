@@ -453,8 +453,10 @@ pub(crate) fn dispose(
 /// plane (`controller/mod.rs`).
 ///
 /// A flat struct and not an enum: `candidates.is_empty()` IS the settled
-/// case.
+/// case, and `facts` must cross on every keystroke including typed
+/// characters, because the provenance machine advances on all of them.
 pub(crate) struct OverlayPlan {
+    pub(crate) facts: super::surface::OverlayFacts,
     pub(crate) candidates: Vec<Candidate>,
     pub(crate) is_echo: bool,
 }

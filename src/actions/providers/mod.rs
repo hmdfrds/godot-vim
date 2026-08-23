@@ -825,6 +825,7 @@ mod tests {
                         at_attached_editor,
                         mode,
                         selected_index,
+                        caret: (0, 0),
                     };
                     let active = all
                         .iter()

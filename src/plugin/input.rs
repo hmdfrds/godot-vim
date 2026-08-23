@@ -672,12 +672,13 @@ impl GodotVimCore {
                 at_attached_editor: true,
                 mode: self.controller.as_ref().map(VimController::mode),
                 selected_index: ed.get_code_completion_selected_index(),
+                caret: (ed.get_caret_line(), ed.get_caret_column()),
             };
-            match index.forest().overlay(&facts) {
-                None => OverlayPlan {
-                    candidates: Vec::new(),
-                    is_echo: false,
-                },
+            // Candidates only; the facts cross on BOTH arms, because the
+            // provenance machine advances on every keystroke, typed
+            // characters included.
+            let candidates = match index.forest().overlay(&facts) {
+                None => Vec::new(),
                 Some(path) => {
                     // The SAME key vocabulary every other surface uses:
                     // langmap applied and a Latin collapse offered, neither of
@@ -696,7 +697,7 @@ impl GodotVimCore {
                         registry,
                         vim_claims: &claims,
                     };
-                    let candidates = match resolve::resolve(&input) {
+                    match resolve::resolve(&input) {
                         Resolution::Run { candidates, .. } => candidates,
                         // A4': EVERY stop, `Stop::Native` included, hands the
                         // key onward. `native` here is exactly as powerful as
@@ -707,12 +708,13 @@ impl GodotVimCore {
                         // `native` rule carries no `requires` and cannot be
                         // gated.
                         Resolution::None(_) => Vec::new(),
-                    };
-                    OverlayPlan {
-                        candidates,
-                        is_echo: key_event.is_echo(),
                     }
                 }
+            };
+            OverlayPlan {
+                facts,
+                candidates,
+                is_echo: key_event.is_echo(),
             }
         };
 

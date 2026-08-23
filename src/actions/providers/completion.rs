@@ -242,9 +242,23 @@ pub(crate) static CONFIRM: ActionSpec = ActionSpec {
     host_invocable: false,
     default_consume: None,
     run: |cx| {
+        // Read before the `ops` borrow, so the parameter is legible at the
+        // top of the decision rather than buried in it.
+        let want_selection = cx.params.int("require_selection", 1) != 0;
         let Some(ops) = ops(cx) else {
             return Outcome::Declined;
         };
+        if want_selection && !ops.selection_is_explicit() {
+            // Vim's rule (insert.txt:1399-1410): Enter inserts a newline
+            // unless the selection was explicitly moved. Cancel first, or a
+            // <Tab> on the same line meets a popup describing text that no
+            // longer exists; `maybe_retrigger_completion` fires for neither
+            // Key::Tab nor Key::Enter. Cancelling is cleanup, NOT a
+            // consumption decision: consumption is the rule's declared
+            // policy, read by `dispose` downstream of this outcome.
+            ops.cancel();
+            return Outcome::Declined;
+        }
         ops.confirm();
         Outcome::Handled
     },
@@ -310,10 +324,18 @@ const ACTIONS: &[&ActionSpec] = &[&TRIGGER, &NEXT, &PREV, &CONFIRM, &DISMISS, &N
 /// rule would consume the press that should also leave Insert; the engine's
 /// own `SetMode(Normal)` cancels the popup on the way out (`effects/mode.rs`),
 /// so one press still does both. The two-stage Escape is one vimrc line.
+///
+/// `<C-y>` and `<C-e>` are Vim's real popup keys: explicit accept and close
+/// keeping the typed text (insert.txt:1399-1410). Both are claimed only
+/// while a popup is up; with none, `POPUP` misses and vim-core's
+/// `CopyCharAbove` / `CopyCharBelow` run exactly as before. `<C-y>` carries
+/// `require_selection=0` because pressing it IS choosing.
 const DEFAULTS: &str = "\
 panelmap editor.completion <C-@> godotvim.completion.trigger
 panelmap editor.completion <C-n> godotvim.completion.next
 panelmap editor.completion <C-p> godotvim.completion.prev
+panelmap editor.completion <C-y> godotvim.completion.confirm require_selection=0
+panelmap editor.completion <C-e> godotvim.completion.dismiss
 panelmap editor.completion <Tab> godotvim.completion.confirm
 panelmap editor.completion <CR> godotvim.completion.confirm
 panelmap editor.completion <Up> godotvim.completion.navigate
@@ -349,6 +371,8 @@ mod tests {
         /// Every command, in order. Asserting the LOG rather than the end
         /// state is what catches "confirmed, but also cancelled".
         log: Vec<String>,
+        /// The provenance answer the port would give.
+        explicit: bool,
     }
 
     impl FakePopup {
@@ -381,6 +405,9 @@ mod tests {
         }
         fn request(&mut self, force: bool) {
             self.log.push(format!("request(force={force})"));
+            // Mirrors the real port: a port request is user-initiated by the
+            // invariant on `CompletionPort`, so it adopts the selection.
+            self.explicit = true;
             // Godot's request is synchronous and auto-selects index 0 when it
             // finds candidates. The fake reproduces that, because `prev`'s
             // "then jump to the last one" depends on it.
@@ -391,6 +418,7 @@ mod tests {
         }
         fn select(&mut self, index: i32) {
             self.log.push(format!("select({index})"));
+            self.explicit = true;
             self.selected = index;
         }
         fn confirm(&mut self) {
@@ -404,6 +432,10 @@ mod tests {
             // clears `code_completion_active` and leaves the index and the
             // option list intact. Resetting the index here makes the
             // provenance regression test pass vacuously.
+        }
+
+        fn selection_is_explicit(&self) -> bool {
+            self.explicit
         }
     }
 
@@ -513,11 +545,49 @@ mod tests {
     #[test]
     fn confirm_accepts_a_visible_popup_and_consumes() {
         let mut popup = FakePopup::open(2, 1);
+        // The user chose this row; provenance says so.
+        popup.explicit = true;
         assert_eq!(
             fold(&CONFIRM, Params::new(), &mut popup),
             Disposition::Consume
         );
         assert_eq!(popup.log, vec!["confirm"]);
+    }
+
+    #[test]
+    fn confirm_declines_an_unchosen_candidate_and_cancels_it() {
+        // Vim's rule: Enter inserts a newline unless the selection was
+        // explicitly moved. Cancelled first, so a same-line <Tab> cannot meet
+        // a popup describing text that no longer exists; no "confirm" in the
+        // log means no ExternalEdit and no dot-repeat capture.
+        let mut popup = FakePopup::open(3, 3);
+        assert_eq!(run(&CONFIRM, Params::new(), &mut popup), Outcome::Declined);
+        assert_eq!(popup.log, vec!["cancel"]);
+        let mut popup = FakePopup::open(3, 3);
+        assert_eq!(
+            fold(&CONFIRM, Params::new(), &mut popup),
+            Disposition::Ignore
+        );
+    }
+
+    #[test]
+    fn require_selection_zero_restores_the_old_behaviour() {
+        let mut params = Params::new();
+        params.set_int("require_selection", 0);
+        let mut popup = FakePopup::open(3, 3);
+        assert_eq!(run(&CONFIRM, params, &mut popup), Outcome::Handled);
+        assert_eq!(popup.log, vec!["confirm"]);
+    }
+
+    #[test]
+    fn pressing_ctrl_n_first_makes_the_selection_explicit() {
+        // The port-side adoption: NEXT's request marks the selection chosen,
+        // so an immediate default-parameter CONFIRM accepts.
+        let mut popup = FakePopup::closed();
+        popup.options = 3;
+        assert_eq!(run(&NEXT, Params::new(), &mut popup), Outcome::Handled);
+        assert_eq!(run(&CONFIRM, Params::new(), &mut popup), Outcome::Handled);
+        assert!(popup.log.contains(&"confirm".to_string()));
     }
 
     #[test]
@@ -532,6 +602,8 @@ mod tests {
         let rows = [
             ("<CR>", "godotvim.completion.confirm"),
             ("<Tab>", "godotvim.completion.confirm"),
+            ("<C-y>", "godotvim.completion.confirm"),
+            ("<C-e>", "godotvim.completion.dismiss"),
             ("<Up>", "godotvim.completion.navigate"),
             ("<Down>", "godotvim.completion.navigate"),
         ];
@@ -668,6 +740,7 @@ mod tests {
                     at_attached_editor,
                     mode,
                     selected_index: -1,
+                    caret: (0, 0),
                 };
                 let want = at_attached_editor
                     && matches!(
@@ -692,6 +765,7 @@ mod tests {
                 at_attached_editor: true,
                 mode: Some(vim_core::primitives::Mode::Insert),
                 selected_index,
+                caret: (0, 0),
             };
             assert_eq!((overlay.grants)(&facts), want, "index {selected_index}");
         }
@@ -712,6 +786,7 @@ mod tests {
             at_attached_editor: true,
             mode: Some(vim_core::primitives::Mode::Insert),
             selected_index,
+            caret: (0, 0),
         }
     }
 
@@ -877,6 +952,7 @@ mod tests {
                 at_attached_editor: true,
                 mode,
                 selected_index: 0,
+                caret: (0, 0),
             };
             assert!(forest.overlay(&facts).is_none(), "{mode:?}");
         }
@@ -928,8 +1004,10 @@ mod tests {
         // the post-engine re-filter in `maybe_retrigger_completion`, which
         // runs AFTER the key was already handled and so has no binding to be.
         let lines: Vec<&str> = DEFAULTS.lines().filter(|l| !l.is_empty()).collect();
-        assert_eq!(lines.len(), 7);
-        for notation in ["<C-@>", "<C-n>", "<C-p>", "<Tab>", "<CR>", "<Up>", "<Down>"] {
+        assert_eq!(lines.len(), 9);
+        for notation in [
+            "<C-@>", "<C-n>", "<C-p>", "<C-y>", "<C-e>", "<Tab>", "<CR>", "<Up>", "<Down>",
+        ] {
             assert!(
                 lines.iter().any(|l| l.contains(&format!(" {notation} "))),
                 "{notation} is no longer bound"

@@ -331,6 +331,11 @@ pub(crate) struct OverlayFacts {
     /// is up (`controller/completion.rs`); that is the only visibility answer
     /// it offers.
     pub(crate) selected_index: i32,
+    /// `(get_caret_line(), get_caret_column())`. Read by no overlay
+    /// predicate: it is the provenance machine's episode key, carried here
+    /// because the facts cross the plugin/controller seam on every keystroke
+    /// and the machine advances on all of them, typed characters included.
+    pub(crate) caret: (i32, i32),
 }
 
 impl Default for OverlayFacts {
@@ -342,6 +347,7 @@ impl Default for OverlayFacts {
             at_attached_editor: false,
             mode: None,
             selected_index: -1,
+            caret: (0, 0),
         }
     }
 }
@@ -945,15 +951,18 @@ mod tests {
             at_attached_editor: true,
             mode: Some(vim_core::primitives::Mode::Insert),
             selected_index: 0,
+            caret: (2, 5),
         };
         let OverlayFacts {
             at_attached_editor,
             mode,
             selected_index,
+            caret,
         } = facts;
         assert!(at_attached_editor);
         assert!(mode.is_some());
         assert_eq!(selected_index, 0);
+        assert_eq!(caret, (2, 5));
 
         let forest = crate::actions::providers::forest();
         let overlay = forest
@@ -980,6 +989,23 @@ mod tests {
                 ..facts
             }),
             Caps::empty()
+        );
+        // `caret` moves NEITHER predicate: it is the provenance machine's
+        // episode key, consumed by `controller::completion::advance`.
+        let moved = OverlayFacts {
+            caret: (9, 9),
+            ..facts
+        };
+        assert!((overlay.active)(&moved));
+        assert_eq!((overlay.grants)(&moved), Caps::POPUP);
+        let prev = crate::controller::completion::advance(
+            crate::controller::completion::Provenance::default(),
+            &facts,
+        );
+        assert_ne!(
+            crate::controller::completion::advance(prev, &moved),
+            crate::controller::completion::advance(prev, &facts),
+            "a moved caret must move the provenance machine"
         );
     }
 

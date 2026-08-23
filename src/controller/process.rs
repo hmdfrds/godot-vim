@@ -49,6 +49,14 @@ pub(super) fn process_cycle_impl(
         return PipelineOutcome::VimdebugStep;
     }
 
+    // Advances on EVERY keystroke that reaches the editor, typed characters
+    // included, with no early return above it (the vimdebug step intercept
+    // holds no popup: entering step mode leaves Insert). That is what makes
+    // the caret-move reset work: `maybe_retrigger_completion` reopens the
+    // popup on the raw editor as the user types, and typing is exactly what
+    // must clear an inherited selection.
+    ctx.transient.completion = completion::advance(ctx.transient.completion, &plan.facts);
+
     // The overlay fold, at the source line try_handle_completion occupied.
     // The return point does not move, which preserves four obligations:
     // ensure_undo_balanced fires on the same two branches;
@@ -58,7 +66,8 @@ pub(super) fn process_cycle_impl(
     // moves; and the block still precedes should_passthrough_key, so mapping
     // precedence is byte-for-byte today's.
     if !plan.candidates.is_empty() {
-        let disposition = completion::dispatch_overlay(session, editor, &plan);
+        let disposition =
+            completion::dispatch_overlay(session, editor, &mut ctx.transient.completion, &plan);
         let outcome = match disposition {
             Disposition::Consume => Some(PipelineOutcome::CompletionConsumed),
             Disposition::Handoff => Some(PipelineOutcome::CompletionDeferred),
