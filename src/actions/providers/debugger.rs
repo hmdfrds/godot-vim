@@ -213,6 +213,7 @@ pub(crate) static FRAME_NEXT: ActionSpec = ActionSpec {
     // Meaningless without a focused debugger tree, so a `:action` invocation
     // must fail loudly rather than decline invisibly.
     host_invocable: false,
+    default_consume: None,
     run: |cx| {
         let steps = cx.params.count();
         walk(cx, NavDirection::Next, steps)
@@ -224,6 +225,7 @@ pub(crate) static FRAME_PREV: ActionSpec = ActionSpec {
     desc: "Debugger: select the previous stack frame or breakpoint",
     requires: Caps::VNAV,
     host_invocable: false,
+    default_consume: None,
     run: |cx| {
         let steps = cx.params.count();
         walk(cx, NavDirection::Prev, steps)
@@ -235,6 +237,7 @@ pub(crate) static FRAME_LAST: ActionSpec = ActionSpec {
     desc: "Debugger: select the deepest stack frame",
     requires: Caps::VNAV,
     host_invocable: false,
+    default_consume: None,
     run: |cx| walk(cx, NavDirection::Next, MAX_WALK),
 };
 
@@ -247,6 +250,7 @@ pub(crate) static YANK_FRAME: ActionSpec = ActionSpec {
     // not in the closed vocabulary every other surface has to carry.
     requires: Caps::VNAV,
     host_invocable: false,
+    default_consume: None,
     run: |cx| {
         let Some(tree) = cx.debugger_tree() else {
             return Outcome::Declined;

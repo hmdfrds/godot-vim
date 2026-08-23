@@ -127,6 +127,7 @@ pub(crate) static TRIGGER: ActionSpec = ActionSpec {
     // There is no popup outside the attached editor, and a host request that
     // silently declined would look like a broken keybinding.
     host_invocable: false,
+    default_consume: None,
     run: |cx| {
         let Some(ops) = ops(cx) else {
             return Outcome::Declined;
@@ -147,6 +148,7 @@ pub(crate) static NEXT: ActionSpec = ActionSpec {
     desc: "Completion: next candidate, opening the popup if closed",
     requires: Caps::empty(),
     host_invocable: false,
+    default_consume: None,
     run: |cx| {
         let Some(ops) = ops(cx) else {
             return Outcome::Declined;
@@ -174,6 +176,7 @@ pub(crate) static PREV: ActionSpec = ActionSpec {
     desc: "Completion: previous candidate, opening the popup if closed",
     requires: Caps::empty(),
     host_invocable: false,
+    default_consume: None,
     run: |cx| {
         let Some(ops) = ops(cx) else {
             return Outcome::Declined;
@@ -206,6 +209,7 @@ pub(crate) static CONFIRM: ActionSpec = ActionSpec {
     desc: "Completion: accept the selected candidate",
     requires: Caps::empty(),
     host_invocable: false,
+    default_consume: None,
     run: |cx| {
         let Some(ops) = ops(cx) else {
             return Outcome::Declined;
@@ -227,6 +231,7 @@ pub(crate) static DISMISS: ActionSpec = ActionSpec {
     desc: "Completion: close the popup, letting the key through",
     requires: Caps::empty(),
     host_invocable: false,
+    default_consume: None,
     run: |cx| {
         let Some(ops) = ops(cx) else {
             return Outcome::Declined;
@@ -249,6 +254,7 @@ pub(crate) static NAVIGATE: ActionSpec = ActionSpec {
     desc: "Completion: let the editor's own popup handling move the selection",
     requires: Caps::empty(),
     host_invocable: false,
+    default_consume: None,
     run: |cx| {
         let Some(ops) = ops(cx) else {
             return Outcome::Declined;

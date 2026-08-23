@@ -59,6 +59,13 @@ pub(crate) enum Disposition {
     /// Do not consume. Godot's own handling proceeds, which for the primary
     /// transport means the key goes on to `gui_input` and the engine.
     Ignore,
+    /// Not consumed, and the plugin's own remaining stages on THIS transport
+    /// are skipped. On `gui_input` that is the vim engine, so
+    /// `CodeEdit::gui_input` moves its own popup selection. On `_input` there
+    /// is no plugin stage below the resolver, and this variant is unreachable
+    /// there by audit A9': the only verb that can produce it requires
+    /// `Caps::POPUP`, which no classified path grants.
+    Handoff,
 }
 
 /// Where a matched rule sends the keystroke.
@@ -416,10 +423,20 @@ pub(crate) fn dispose(
             // declarative form of the old `input.rs`, where
             // `handle_window_nav`'s result was discarded and the key consumed
             // regardless. Making it conditional leaks Ctrl+H/J/K/L to Godot.
+            //
+            // Tested BEFORE the outcome, so `<void>` keeps meaning "consume
+            // regardless and terminate" on every surface; `Handoff` is tested
+            // INSIDE the `is_consumed()` branch, so a declining `Handoff`
+            // candidate falls through elastically instead of eating the key.
             return Disposition::Consume;
         }
         if outcome.is_consumed() {
-            return Disposition::Consume;
+            // Written as an exhaustive match so a fourth policy is a compile
+            // error here rather than a silent `Consume`.
+            return match candidate.consume {
+                Consumption::Handoff => Disposition::Handoff,
+                Consumption::Elastic | Consumption::Void => Disposition::Consume,
+            };
         }
         // Declined + Elastic → the next candidate, and if there is none, the
         // key is not consumed and reaches Godot. That is what preserves `j`
@@ -923,6 +940,72 @@ mod tests {
             consume: Consumption::Elastic,
             repeat: Repeat::Allow,
         }]
+    }
+
+    fn handoff_plan() -> Vec<Candidate> {
+        vec![Candidate {
+            surface: "editor.completion",
+            target: CandidateTarget::Action(ActionId(0), &specs::ITEM_NEXT),
+            params: Params::new(),
+            consume: Consumption::Handoff,
+            repeat: Repeat::Suppress,
+        }]
+    }
+
+    #[test]
+    fn handoff_hands_the_key_to_the_control_on_acceptance() {
+        // The third routing state: engine skipped, event NOT consumed, the
+        // control's own gui_input gets the key. This is what Up/Down need so
+        // CodeEdit moves its own popup selection.
+        assert_eq!(
+            dispose(&handoff_plan(), false, |_| Outcome::Handled),
+            Disposition::Handoff
+        );
+    }
+
+    #[test]
+    fn handoff_falls_through_on_a_declination() {
+        // A declining Handoff candidate behaves exactly as Elastic: the walk
+        // continues, and with nothing left the key is not consumed.
+        let mut plan = handoff_plan();
+        plan.extend(elastic_plan());
+        let mut ran = Vec::new();
+        let d = dispose(&plan, false, |c| {
+            ran.push(c.surface);
+            Outcome::Declined
+        });
+        assert_eq!(ran, vec!["editor.completion", "dock"], "both must run");
+        assert_eq!(d, Disposition::Ignore);
+    }
+
+    #[test]
+    fn void_beats_handoff() {
+        // A candidate declaring both is impossible: `<void>` wins in
+        // `rule_from`. At the dispose level, a Void candidate ahead of a
+        // Handoff one terminates the walk with Consume.
+        let mut plan = void_plan();
+        plan.extend(handoff_plan());
+        let mut ran = 0;
+        let d = dispose(&plan, false, |_| {
+            ran += 1;
+            Outcome::Handled
+        });
+        assert_eq!(d, Disposition::Consume);
+        assert_eq!(ran, 1, "Void terminates before the Handoff candidate");
+    }
+
+    #[test]
+    fn a_suppressed_echo_beats_handoff() {
+        // The echo suppression arm answers before the consumption policy is
+        // read, so a held key on a norepeat Handoff rule is swallowed rather
+        // than handed to the control ~20 times a second.
+        let mut ran = 0;
+        let d = dispose(&handoff_plan(), true, |_| {
+            ran += 1;
+            Outcome::Handled
+        });
+        assert_eq!(d, Disposition::Consume);
+        assert_eq!(ran, 0);
     }
 
     #[test]

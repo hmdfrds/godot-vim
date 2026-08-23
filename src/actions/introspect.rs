@@ -400,6 +400,10 @@ pub(crate) fn explain_report(
                     Consumption::Elastic => {
                         "consumed only if the action accepts (elastic); otherwise Godot gets the key"
                     }
+                    Consumption::Handoff => {
+                        "not consumed, and the vim engine is skipped, so the editor's own \
+                         handling gets this key (handoff)"
+                    }
                 };
                 let _ = writeln!(out, "runs: {name} on '{}'", candidate.surface);
                 let _ = writeln!(out, "consumption: {consumption}");

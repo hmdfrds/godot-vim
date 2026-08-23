@@ -56,6 +56,22 @@ pub(crate) enum Consumption {
     /// `handle_window_nav`'s result is discarded and `set_input_as_handled()`
     /// fires even with no focus owner and no target found.
     Void,
+    /// NEVER consume, and skip the plugin's own remaining stages. When the
+    /// action declines, behaves exactly as `Elastic`.
+    ///
+    /// NOT spellable in the `panelmap` grammar, and that is a safety property
+    /// rather than a convenience. `config/sandbox.rs` admits any
+    /// non-`Shortcut` `Map` from a committed project vimrc at every trust
+    /// tier, so a spellable handoff flag could be attached to a verb with
+    /// empty `requires` and suppress the vim engine on Escape. Carried by the
+    /// verb through [`super::action::ActionSpec::default_consume`], audit A9'
+    /// can see it.
+    #[allow(
+        dead_code,
+        reason = "declared by godotvim.completion.navigate once the popup keys \
+                  resolve through the one pipeline; until then only tests construct it"
+    )]
+    Handoff,
 }
 
 /// Whether a rule fires on `InputEventKey::is_echo()` repeats.
@@ -692,16 +708,24 @@ fn rule_from(
             CompactString::from(format!("editor shortcut {path}")),
         ),
     };
+    let consume = if map.flags.void {
+        // `<void>` on the rule always wins over the verb default, so a user
+        // can raise consumption. There is no spelling that lowers it back to
+        // `Elastic`; that is a stated residual.
+        Consumption::Void
+    } else {
+        match &target {
+            RuleTarget::Action(id) => registry.get(*id).and_then(|s| s.default_consume),
+            _ => None,
+        }
+        .unwrap_or(Consumption::Elastic)
+    };
     Ok(Rule {
         surface,
         lhs: map.lhs.clone(),
         target,
         params: map.params.clone(),
-        consume: if map.flags.void {
-            Consumption::Void
-        } else {
-            Consumption::Elastic
-        },
+        consume,
         repeat: if map.flags.norepeat {
             Repeat::Suppress
         } else {
@@ -1959,8 +1983,76 @@ mod tests {
         desc: "step over",
         requires: Caps::empty(),
         host_invocable: false,
+        default_consume: None,
         run: |_| Outcome::Declined,
     };
+
+    /// A verb that declares a consumption default, so the fold in `rule_from`
+    /// is observable without any shipped verb carrying one.
+    static HANDS_OFF: ActionSpec = ActionSpec {
+        id: "thirdparty.test.handoff",
+        desc: "declares Handoff as its default consumption",
+        requires: Caps::empty(),
+        host_invocable: false,
+        default_consume: Some(Consumption::Handoff),
+        run: |_| Outcome::Handled,
+    };
+
+    #[test]
+    fn a_verb_default_consumption_reaches_the_rule() {
+        // The verb declares what its rules default to, folded into
+        // `Rule.consume` at REGISTRATION, so `dispose` still reads one field.
+        let mut registry = registry();
+        registry.register(&HANDS_OFF);
+        let mut index = empty_index();
+        let mut diagnostics = Vec::new();
+        apply_text(
+            &mut index,
+            &registry,
+            "panelmap dock <Up> thirdparty.test.handoff",
+            &MappingOwner::User,
+            "test",
+            Provenance::User,
+            &mut diagnostics,
+        );
+        assert_eq!(diagnostics, Vec::new());
+        let rule = resolve(&index, "dock", &[KeyEvent::new(Key::Up, Modifiers::NONE)])
+            .expect("registered");
+        assert_eq!(rule.consume, Consumption::Handoff);
+    }
+
+    #[test]
+    fn void_on_the_rule_beats_the_verb_default() {
+        // `<void>` always raises consumption; the verb default never lowers a
+        // flag the user wrote.
+        let mut registry = registry();
+        registry.register(&HANDS_OFF);
+        let mut index = empty_index();
+        let mut diagnostics = Vec::new();
+        apply_text(
+            &mut index,
+            &registry,
+            "panelmap <void> dock <Up> thirdparty.test.handoff",
+            &MappingOwner::User,
+            "test",
+            Provenance::User,
+            &mut diagnostics,
+        );
+        assert_eq!(diagnostics, Vec::new());
+        let rule = resolve(&index, "dock", &[KeyEvent::new(Key::Up, Modifiers::NONE)])
+            .expect("registered");
+        assert_eq!(rule.consume, Consumption::Void);
+    }
+
+    #[test]
+    fn a_rule_with_no_verb_default_is_elastic() {
+        // A shipped verb with no flag and no `default_consume` stays exactly
+        // what it always was.
+        let mut index = empty_index();
+        user_ok(&mut index, "panelmap dock j godotvim.item.next");
+        let rule = resolve(&index, "dock", &[ch('j')]).expect("registered");
+        assert_eq!(rule.consume, Consumption::Elastic);
+    }
 
     #[test]
     fn a_newly_registered_action_becomes_bindable_with_no_index_changes() {

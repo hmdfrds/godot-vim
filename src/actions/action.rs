@@ -16,6 +16,7 @@ use godot::classes::Control;
 use godot::prelude::*;
 use vim_core::keymap::KeyEvent;
 
+use super::bind::Consumption;
 use super::caps::Caps;
 use super::outcome::Outcome;
 
@@ -194,6 +195,15 @@ pub(crate) struct ActionSpec {
     /// than declining invisibly. `godotvim.fs.*` can locate their own target
     /// and are true; `godotvim.item.*` need a focused control and are false.
     pub(crate) host_invocable: bool,
+    /// The consumption policy a rule gets when it names this verb and
+    /// declares no flag of its own. `None` means `Elastic`; `<void>` on the
+    /// rule always wins.
+    ///
+    /// Folded into `Rule.consume` at REGISTRATION by `bind::rule_from`, so
+    /// `dispose` still reads exactly one field and the invariant in
+    /// `resolve.rs` holds: this is the verb declaring what its rules default
+    /// to, never a body deciding at run time. Constrained by audit A9'.
+    pub(crate) default_consume: Option<Consumption>,
     pub(crate) run: fn(&mut ActionCtx<'_>) -> Outcome,
 }
 

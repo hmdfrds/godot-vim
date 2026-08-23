@@ -104,6 +104,14 @@ fn commit(viewport: &mut Gd<Viewport>, disposition: Disposition) {
     match disposition {
         Disposition::Consume => viewport.set_input_as_handled(),
         Disposition::Ignore => {}
+        // Unreachable here by audit A9': the only verb that can produce it
+        // requires `Caps::POPUP`, which no classified path grants. Logged
+        // rather than folded silently into "not consumed", because the day it
+        // fires is the day someone weakened the audit. NOT a panic: a panic
+        // across the FFI boundary in an input handler is fatal (see ec417b3).
+        Disposition::Handoff => log::error!(
+            "input: Disposition::Handoff on the primary transport; audit A9' was weakened"
+        ),
     }
 }
 
