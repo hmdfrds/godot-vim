@@ -66,11 +66,6 @@ pub(crate) enum Consumption {
     /// empty `requires` and suppress the vim engine on Escape. Carried by the
     /// verb through [`super::action::ActionSpec::default_consume`], audit A9'
     /// can see it.
-    #[allow(
-        dead_code,
-        reason = "declared by godotvim.completion.navigate once the popup keys \
-                  resolve through the one pipeline; until then only tests construct it"
-    )]
     Handoff,
 }
 
@@ -141,21 +136,6 @@ pub(crate) enum RuleReject {
     MultiKeyOnEditorPath(SurfaceId),
     /// The first key starts a vim-core grammar sequence.
     VimGrammarPrefix(KeyEvent),
-    /// The surface is reached by an explicit transport lookup rather than by
-    /// classifying a focus chain, so it never carries a [`super::caps::Caps`]
-    /// grant — and the action needs one.
-    ///
-    /// `editor.completion` is the only such surface today. Its transport
-    /// (`GodotVimCore::completion_binding`) hands the spec straight to
-    /// `process_cycle`, which runs it with `ActionCtx::new(None, …)`; there is
-    /// no walked path, therefore no `caps.satisfies(spec.requires)` gate, and
-    /// the ctx-free FS verbs never read their ctx at all. Without this,
-    /// `panelmap editor.completion <C-y> godotvim.fs.delete` loaded with no
-    /// diagnostic and deleted a file from a keystroke typed in a script.
-    UnsatisfiableCapability {
-        surface: SurfaceId,
-        action: CompactString,
-    },
     /// The target parses and registers, but nothing on this surface's
     /// transport can dispatch it — so the key would be permanently dead while
     /// `:panelmap` reported it as eligible.
@@ -186,12 +166,6 @@ impl std::fmt::Display for RuleReject {
                 "'{}' begins a Vim command sequence; binding it here would \
                  destroy the key that follows it",
                 k.to_vim_notation()
-            ),
-            Self::UnsatisfiableCapability { surface, action } => write!(
-                f,
-                "surface '{surface}' is reached by an explicit transport lookup, never by \
-                 classifying the focus chain, so it grants no capabilities; \
-                 '{action}' declares requirements that can never be satisfied there"
             ),
             Self::UndispatchedTarget { surface, target } => write!(
                 f,
@@ -295,42 +269,13 @@ impl BindingIndex {
             .any(|editor| self.forest.is_ancestor_or_self(surface, editor))
     }
 
-    /// Whether `surface` is reached only by an explicit lookup from a
-    /// transport, never by classifying a focus chain.
-    ///
-    /// Structural rather than a hand-maintained list: an isolated node — no
-    /// declared parent and no declared child — cannot appear on a
-    /// [`super::surface::SurfacePath`] unless its own probe claims the chain,
-    /// and a surface whose probe claims would be the anchor and would carry
-    /// that anchor's grants. `editor.completion` is the only non-`Barrier`
-    /// surface in that position today, and `panel` — the other surface with no
-    /// parent — is excluded correctly because it is the root of everything
-    /// else.
-    ///
-    /// What follows from it is the whole reason it exists: such a surface has
-    /// no `caps`, because there is no classified path to compute them from, so
-    /// an action with a non-empty `requires` bound there can never satisfy its
-    /// own gate — and the transport, having no path either, never asks.
-    fn transport_only(&self, surface: SurfaceId) -> bool {
-        self.forest
-            .get(surface)
-            .is_some_and(|spec| spec.parent.is_none())
-            && !self
-                .forest
-                .ids()
-                .any(|id| self.forest.get(id).and_then(|s| s.parent) == Some(surface))
-    }
-
     /// Validate and install a rule. The only entry point user input reaches.
     ///
-    /// The registry is a parameter rather than a field because the index owns
-    /// no verbs: it is asked here for exactly one thing, whether the target's
-    /// declared `requires` can ever be satisfied where the rule is being put.
-    pub(crate) fn try_insert(
-        &mut self,
-        rule: Rule,
-        registry: &ActionRegistry,
-    ) -> Result<(), RuleReject> {
+    /// It no longer takes the registry: the old capability question it asked
+    /// there ("can this verb's `requires` ever be satisfied on this
+    /// surface?") is the pipeline gate's job now, on every surface alike, so
+    /// registration validates structure only.
+    pub(crate) fn try_insert(&mut self, rule: Rule) -> Result<(), RuleReject> {
         let Some(spec) = self.forest.get(rule.surface) else {
             return Err(RuleReject::UnknownSurface(rule.surface.into()));
         };
@@ -338,37 +283,23 @@ impl BindingIndex {
             return Err(RuleReject::BarrierSurface(rule.surface));
         }
         // V-DISPATCH: refuse at registration what no transport can honour.
-        // The alternative is not "it quietly does nothing" — it is a rule that
-        // `:panelmap` reports as eligible and that either fires with no gate
-        // at all or never fires. Both are the silent dead key this design
-        // exists to prevent, and one of them deletes files.
-        match &rule.target {
-            RuleTarget::Action(id) if self.transport_only(rule.surface) => {
-                let unsatisfiable = registry
-                    .get(*id)
-                    .is_none_or(|action| !action.requires.is_empty());
-                if unsatisfiable {
-                    return Err(RuleReject::UnsatisfiableCapability {
-                        surface: rule.surface,
-                        action: registry.name_of(*id).unwrap_or("<unregistered>").into(),
-                    });
-                }
-            }
-            // `<Shortcut>(path)` is parsed, registered and printed as
-            // eligible, and then `run_candidate` unconditionally declines it
-            // after a `log::warn!` nobody sees — the default Log Level is Off.
-            // With `<void>` that is a permanently dead key the introspector
-            // actively confirms will work. Delegating to Godot's own shortcuts
-            // needs a cycle audit and an injection budget it does not have
-            // yet; until then the honest answer is at registration, not at
-            // dispatch.
-            RuleTarget::Shortcut(path) => {
-                return Err(RuleReject::UndispatchedTarget {
-                    surface: rule.surface,
-                    target: format!("<Shortcut>({path})").into(),
-                });
-            }
-            _ => {}
+        // `<Shortcut>(path)` is parsed, registered and printed as eligible,
+        // and then `run_candidate` unconditionally declines it after a
+        // `log::warn!` nobody sees — the default Log Level is Off. With
+        // `<void>` that is a permanently dead key the introspector actively
+        // confirms will work. Delegating to Godot's own shortcuts needs a
+        // cycle audit and an injection budget it does not have yet; until
+        // then the honest answer is at registration, not at dispatch.
+        //
+        // A capability-bearing verb on the overlay surface is NOT refused
+        // here any more: the overlay resolves through the same pipeline as
+        // every classified surface, so `hit_from`'s capability gate is real
+        // there and such a rule loads, then goes inert with an explain line.
+        if let RuleTarget::Shortcut(path) = &rule.target {
+            return Err(RuleReject::UndispatchedTarget {
+                surface: rule.surface,
+                target: format!("<Shortcut>({path})").into(),
+            });
         }
         if self.editor_reachable(rule.surface) {
             if rule.lhs.len() > 1 {
@@ -766,8 +697,9 @@ pub(crate) fn apply_text(
         let outcome = match parse_panel_line(line) {
             Ok(None) => continue,
             Err(error) => Err(RuleReject::Parse(error)),
-            Ok(Some(PanelLine::Map(map))) => rule_from(&map, registry, index.forest(), owner)
-                .and_then(|r| index.try_insert(r, registry)),
+            Ok(Some(PanelLine::Map(map))) => {
+                rule_from(&map, registry, index.forest(), owner).and_then(|r| index.try_insert(r))
+            }
             Ok(Some(PanelLine::Unmap { surface, lhs })) => {
                 let declared = index.forest().ids().find(|id| *id == surface.as_str());
                 match declared {
@@ -1006,12 +938,15 @@ mod tests {
             Repeat::Allow,
             false,
         ),
+        // `navigate` declares `default_consume: Handoff`, folded into the
+        // rule at registration: acceptance skips the engine without
+        // consuming, so CodeEdit's own popup handling moves the selection.
         (
             "editor.completion",
             "<Up>",
             "godotvim.completion.navigate",
             false,
-            Consumption::Elastic,
+            Consumption::Handoff,
             Repeat::Allow,
             false,
         ),
@@ -1020,7 +955,7 @@ mod tests {
             "<Down>",
             "godotvim.completion.navigate",
             false,
-            Consumption::Elastic,
+            Consumption::Handoff,
             Repeat::Allow,
             false,
         ),
@@ -1793,43 +1728,50 @@ mod tests {
     }
 
     #[test]
-    fn a_transport_only_surface_refuses_a_verb_it_could_never_gate() {
-        // THE file-deleting one. `editor.completion` is reached by an explicit
-        // lookup from `handle_gui_input_impl`, never by classifying a chain,
-        // so there is no `SurfacePath` and therefore no `Caps` — the
-        // capability gate every walked surface gets at `hit_from` structurally
-        // cannot run. `godotvim.fs.delete` is
-        // `run: |_cx| filesystem_explorer::delete_selected()`: it never reads
-        // its ctx and drives Godot's own FileSystem delete, so a `<C-y>` typed
-        // in a script with the popup up deleted a file. It loaded with zero
-        // diagnostics.
+    fn a_capability_bearing_verb_bound_on_an_overlay_is_gated_by_the_pipeline() {
+        // THE file-deleting one, same force, new wall. `godotvim.fs.delete`
+        // is `run: |_cx| filesystem_explorer::delete_selected()`: it never
+        // reads its ctx and drives Godot's own FileSystem delete. On the old
+        // transport-only surface the capability gate structurally could not
+        // run, so this line was refused at registration. The overlay resolves
+        // through the one pipeline now, so the line LOADS, and the gate that
+        // stops it is `hit_from`'s: the overlay's caps are `Caps::POPUP` at
+        // most, never `FILEOPS`, so the walk exhausts and nothing runs.
         let mut index = empty_index();
-        let mut diagnostics = Vec::new();
-        apply_text(
+        user_ok(
             &mut index,
-            &registry(),
             "panelmap editor.completion <C-y> godotvim.fs.delete",
-            &MappingOwner::User,
-            "test",
-            Provenance::User,
-            &mut diagnostics,
-        );
-        assert_eq!(diagnostics.len(), 1, "exactly one diagnostic");
-        assert_eq!(
-            diagnostics[0].reject,
-            RuleReject::UnsatisfiableCapability {
-                surface: "editor.completion",
-                action: "godotvim.fs.delete".into(),
-            }
         );
         assert!(
-            resolve(&index, "editor.completion", &[ctrl('y')]).is_none(),
-            "no rule may be installed"
+            resolve(&index, "editor.completion", &[ctrl('y')]).is_some(),
+            "the rule installs; the pipeline is the gate"
         );
 
-        // …and the verbs that surface is FOR still install. All six shipped
-        // completion verbs declare `requires: Caps::empty()`, which is what
-        // makes the rule "empty requires only" rather than "no rules here".
+        let forest = crate::actions::providers::forest();
+        let path = forest
+            .overlay(&crate::actions::surface::OverlayFacts {
+                at_attached_editor: true,
+                mode: Some(vim_core::primitives::Mode::Insert),
+                selected_index: 0,
+            })
+            .expect("popup-open facts activate the overlay");
+        let reg = registry();
+        let probes = crate::actions::keys::Probes::from_key(ctrl('y'));
+        let claims = |_: KeyEvent| false;
+        let resolution = crate::actions::resolve::resolve(&crate::actions::resolve::ResolveInput {
+            probes: &probes,
+            path: &path,
+            index: &index,
+            registry: &reg,
+            vim_claims: &claims,
+        });
+        assert_eq!(
+            resolution,
+            crate::actions::resolve::Resolution::None(crate::actions::resolve::Stop::Exhausted),
+            "nothing runs and no file is deleted"
+        );
+
+        // …and the verbs that surface is FOR still install and resolve.
         user_ok(
             &mut index,
             "panelmap editor.completion <C-y> godotvim.completion.confirm",
@@ -1839,8 +1781,9 @@ mod tests {
 
     #[test]
     fn a_capability_bearing_verb_is_still_fine_on_a_classified_surface() {
-        // The guard on the guard: `transport_only` must not catch `panel`,
-        // which has no parent either but is the root of the whole forest.
+        // The guard on the guard, retargeted: `panel` has no parent, exactly
+        // as the overlay has none, and its rules must keep installing and
+        // resolving through the classified pipeline.
         let mut index = empty_index();
         user_ok(&mut index, "panelmap panel <C-y> godotvim.item.next");
         assert!(resolve(&index, "panel", &[ctrl('y')]).is_some());

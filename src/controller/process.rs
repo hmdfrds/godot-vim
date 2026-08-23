@@ -7,7 +7,7 @@
 //! gui_input -> process_cycle
 //!   +- clear transient messages
 //!   +- vimdebug step-mode intercept
-//!   +- completion interception (pre-engine)
+//!   +- completion overlay dispatch (pre-engine)
 //!   +- passthrough check
 //!   +- pre-processing: refresh_from_editor, set config
 //!   +- session.process_key(key) -> ProcessResult
@@ -22,6 +22,7 @@ use godot::prelude::*;
 use vim_core::execution::host_api::{DeferredAction, WindowNavAction};
 use vim_core::keymap::KeyEvent;
 
+use crate::actions::resolve::Disposition;
 use crate::bridge::port::TextEditorPort;
 
 use super::completion;
@@ -35,7 +36,7 @@ pub(super) fn process_cycle_impl(
     ctx: &mut ControllerContext,
     key: KeyEvent,
     editor: &mut Gd<CodeEdit>,
-    completion_binding: Option<&'static crate::actions::action::ActionSpec>,
+    plan: crate::actions::resolve::OverlayPlan,
 ) -> PipelineOutcome {
     ctx.transient.operations_this_cycle = 0;
 
@@ -48,22 +49,34 @@ pub(super) fn process_cycle_impl(
         return PipelineOutcome::VimdebugStep;
     }
 
-    if let Some(consumed) = completion::try_handle_completion(session, editor, completion_binding) {
-        log::debug!(
-            "process_cycle: completion intercepted key={} consumed={}",
-            key,
-            consumed
-        );
-        // Note: invalidate_cache() for consumed completions is now called
-        // inside confirm_and_reconcile_completion (Fix 4B), before
-        // reconciliation, so host.text() reflects post-completion state.
-        let mode = session.engine().mode();
-        session.host_mut().ensure_undo_balanced(mode);
-        return if consumed {
-            PipelineOutcome::CompletionConsumed
-        } else {
-            PipelineOutcome::CompletionDeferred
+    // The overlay fold, at the source line try_handle_completion occupied.
+    // The return point does not move, which preserves four obligations:
+    // ensure_undo_balanced fires on the same two branches;
+    // CompletionConsumed.may_have_moved_cursor() stays true (Fix 4C); the
+    // early return still precedes import_godot_carets_into_engine and
+    // sync_multi_cursors_to_godot, so the multi-cursor gap neither widens nor
+    // moves; and the block still precedes should_passthrough_key, so mapping
+    // precedence is byte-for-byte today's.
+    if !plan.candidates.is_empty() {
+        let disposition = completion::dispatch_overlay(session, editor, &plan);
+        let outcome = match disposition {
+            Disposition::Consume => Some(PipelineOutcome::CompletionConsumed),
+            Disposition::Handoff => Some(PipelineOutcome::CompletionDeferred),
+            // Falls through to `should_passthrough_key` below, exactly as
+            // `try_handle_completion`'s `None` did.
+            Disposition::Ignore => None,
         };
+        if let Some(outcome) = outcome {
+            log::debug!(
+                "process_cycle: overlay claimed key={key} -> {}",
+                outcome.log_label()
+            );
+            // Note: invalidate_cache() for consumed completions is called
+            // inside confirm_and_reconcile_completion (Fix 4B).
+            let mode = session.engine().mode();
+            session.host_mut().ensure_undo_balanced(mode);
+            return outcome;
+        }
     }
 
     if should_passthrough_key(session.engine(), &ctx.passthrough_keys, key) {

@@ -445,6 +445,20 @@ pub(crate) fn dispose(
     Disposition::Ignore
 }
 
+/// What the overlay layer decided, owned so no borrow crosses the
+/// plugin/controller seam.
+///
+/// `Candidate` already copies the `&'static ActionSpec` out of the registry,
+/// so `VimController` still "deliberately holds no reference" to the binding
+/// plane (`controller/mod.rs`).
+///
+/// A flat struct and not an enum: `candidates.is_empty()` IS the settled
+/// case.
+pub(crate) struct OverlayPlan {
+    pub(crate) candidates: Vec<Candidate>,
+    pub(crate) is_echo: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

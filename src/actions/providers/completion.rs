@@ -37,11 +37,11 @@
 //!   or defers to an active preedit before any key is interpreted; a CJK user
 //!   composing a word would have `<CR>` stolen by `godotvim.completion.confirm`
 //!   mid-composition.
-//! - `_input` has **no way to express `Some(false)`** — "we made the routing
-//!   decision, the engine must not see this key, and the event must NOT be
-//!   consumed" — which is precisely what Up/Down need so `CodeEdit` moves its
-//!   own popup selection. `Outcome` has three states and none of them is that
-//!   one; [`CompletionOps::hand_to_editor`] is.
+//! - The third routing state, "engine skipped, event deliberately NOT
+//!   consumed", is a `gui_input` fact: it is what Up/Down need so `CodeEdit`
+//!   moves its own popup selection. It is `Consumption::Handoff`, declared by
+//!   [`NAVIGATE`] and folded to `Disposition::Handoff` by the one consumption
+//!   fold; on `_input` the variant is unreachable by audit A9'.
 //!
 //! # What the user gets
 //!
@@ -66,6 +66,7 @@
 //! <Up> godotvim.completion.navigate` restores the Shift+Up half).
 
 use crate::actions::action::{ActionCtx, ActionSpec, CompletionOps};
+use crate::actions::bind::Consumption;
 use crate::actions::caps::Caps;
 use crate::actions::outcome::Outcome;
 use crate::actions::surface::{OverlaySpec, Seal, SurfaceSpec};
@@ -271,24 +272,26 @@ pub(crate) static DISMISS: ActionSpec = ActionSpec {
 
 pub(crate) static NAVIGATE: ActionSpec = ActionSpec {
     id: "godotvim.completion.navigate",
-    desc: "Completion: let the editor's own popup handling move the selection",
+    desc: "Completion: hand this key to CodeEdit's own popup handling",
     requires: Caps::empty(),
     host_invocable: false,
-    default_consume: None,
+    // The third routing state, declared on the verb rather than flagged on a
+    // lent port: `CodeEdit::_gui_input` moves the popup selection on Up/Down
+    // by itself and does it better than we would (it handles scrolling and
+    // page bounds), so acceptance folds to `Disposition::Handoff`: skip the
+    // engine, do not consume, let the control have it.
+    default_consume: Some(Consumption::Handoff),
     run: |cx| {
         let Some(ops) = ops(cx) else {
             return Outcome::Declined;
         };
         if !ops.popup_visible() {
-            // No popup: Up/Down are ordinary cursor movement and belong to the
-            // engine.
+            // No popup: Up/Down are ordinary cursor movement and belong to
+            // the engine. Kept until the popup becomes a capability, because
+            // without it a popup-less <Up> would return Handled, fold to
+            // Handoff, and eat the arrow key.
             return Outcome::Declined;
         }
-        // The `Some(false)` leg. `CodeEdit::_gui_input` moves the popup
-        // selection on Up/Down by itself and does it better than we would
-        // (it handles scrolling and page bounds), so the routing decision is
-        // "skip the engine, do not consume, let the control have it".
-        ops.hand_to_editor();
         Outcome::Handled
     },
 };
@@ -329,6 +332,7 @@ pub(crate) const PROVIDER: Provider = Provider {
 mod tests {
     use super::*;
     use crate::actions::action::Params;
+    use crate::actions::resolve::Disposition;
 
     /// A popup with no Godot in it.
     ///
@@ -347,7 +351,6 @@ mod tests {
         /// Every command, in order. Asserting the LOG rather than the end
         /// state is what catches "confirmed, but also cancelled".
         log: Vec<String>,
-        handed_off: bool,
     }
 
     impl FakePopup {
@@ -416,9 +419,6 @@ mod tests {
             // option list intact. Resetting the index here makes the
             // provenance regression test pass vacuously.
         }
-        fn hand_to_editor(&mut self) {
-            self.handed_off = true;
-        }
     }
 
     /// Run one verb against one popup state, returning the outcome.
@@ -431,18 +431,18 @@ mod tests {
         (spec.run)(&mut cx)
     }
 
-    /// The verdict the transport computes: `Some(true)` consume,
-    /// `Some(false)` hand to the control, `None` let the engine have it.
-    ///
-    /// Duplicated from `controller::completion::verdict` on purpose — this is
-    /// the assertion, and asserting through the implementation would make it
-    /// a tautology.
-    fn verdict(spec: &ActionSpec, popup: &mut FakePopup) -> Option<bool> {
-        let outcome = run(spec, Params::new(), popup);
-        if popup.handed_off {
-            Some(false)
-        } else {
-            outcome.is_consumed().then_some(true)
+    /// The disposition the transport computes, written out here rather than
+    /// called, so the assertion is not a tautology against `resolve::dispose`.
+    fn fold(spec: &ActionSpec, params: Params, popup: &mut FakePopup) -> Disposition {
+        let outcome = run(spec, params, popup);
+        match (
+            spec.default_consume.unwrap_or(Consumption::Elastic),
+            outcome.is_consumed(),
+        ) {
+            (Consumption::Void, _) => Disposition::Consume,
+            (Consumption::Handoff, true) => Disposition::Handoff,
+            (_, true) => Disposition::Consume,
+            (_, false) => Disposition::Ignore,
         }
     }
 
@@ -452,7 +452,10 @@ mod tests {
     fn trigger_opens_the_popup_and_consumes() {
         let mut popup = FakePopup::closed();
         popup.options = 3;
-        assert_eq!(verdict(&TRIGGER, &mut popup), Some(true));
+        assert_eq!(
+            fold(&TRIGGER, Params::new(), &mut popup),
+            Disposition::Consume
+        );
         assert_eq!(popup.log, vec!["request(force=true)"]);
         assert!(popup.visible);
     }
@@ -462,7 +465,10 @@ mod tests {
         // `editor.is_code_completion_enabled()` false → the old code returned
         // `None` and the chord reached the engine. Same here, via declination.
         let mut popup = FakePopup::disabled();
-        assert_eq!(verdict(&TRIGGER, &mut popup), None);
+        assert_eq!(
+            fold(&TRIGGER, Params::new(), &mut popup),
+            Disposition::Ignore
+        );
         assert!(popup.log.is_empty(), "must not force a disabled popup");
     }
 
@@ -470,7 +476,7 @@ mod tests {
     fn next_opens_a_closed_popup_rather_than_moving_nothing() {
         let mut popup = FakePopup::closed();
         popup.options = 4;
-        assert_eq!(verdict(&NEXT, &mut popup), Some(true));
+        assert_eq!(fold(&NEXT, Params::new(), &mut popup), Disposition::Consume);
         // Godot auto-selects 0, which IS Vim's forward search. No extra
         // select() call, and asserting the log is what proves it.
         assert_eq!(popup.log, vec!["request(force=true)"]);
@@ -482,7 +488,7 @@ mod tests {
         // The asymmetry that makes `<C-p>` `<C-p>` and not "`<C-n>` backwards".
         let mut popup = FakePopup::closed();
         popup.options = 4;
-        assert_eq!(verdict(&PREV, &mut popup), Some(true));
+        assert_eq!(fold(&PREV, Params::new(), &mut popup), Disposition::Consume);
         assert_eq!(popup.log, vec!["request(force=true)", "select(3)"]);
         assert_eq!(popup.selected, 3);
     }
@@ -491,7 +497,12 @@ mod tests {
     fn next_and_prev_move_and_wrap_on_a_visible_popup() {
         for (spec, from, want) in [(&NEXT, 0, 1), (&NEXT, 2, 0), (&PREV, 1, 0), (&PREV, 0, 2)] {
             let mut popup = FakePopup::open(3, from);
-            assert_eq!(verdict(spec, &mut popup), Some(true), "{}", spec.id);
+            assert_eq!(
+                fold(spec, Params::new(), &mut popup),
+                Disposition::Consume,
+                "{}",
+                spec.id
+            );
             assert_eq!(popup.selected, want, "{} from {from}", spec.id);
         }
     }
@@ -504,7 +515,12 @@ mod tests {
         // `wrap` makes it structural.
         for spec in [&NEXT, &PREV] {
             let mut popup = FakePopup::open(0, -1);
-            assert_eq!(verdict(spec, &mut popup), None, "{}", spec.id);
+            assert_eq!(
+                fold(spec, Params::new(), &mut popup),
+                Disposition::Ignore,
+                "{}",
+                spec.id
+            );
             assert!(popup.log.is_empty());
         }
     }
@@ -512,7 +528,10 @@ mod tests {
     #[test]
     fn confirm_accepts_a_visible_popup_and_consumes() {
         let mut popup = FakePopup::open(2, 1);
-        assert_eq!(verdict(&CONFIRM, &mut popup), Some(true));
+        assert_eq!(
+            fold(&CONFIRM, Params::new(), &mut popup),
+            Disposition::Consume
+        );
         assert_eq!(popup.log, vec!["confirm"]);
     }
 
@@ -520,7 +539,10 @@ mod tests {
     fn confirm_declines_with_no_popup_so_enter_still_inserts_a_newline() {
         // The regression that would be reported as "Enter stopped working".
         let mut popup = FakePopup::closed();
-        assert_eq!(verdict(&CONFIRM, &mut popup), None);
+        assert_eq!(
+            fold(&CONFIRM, Params::new(), &mut popup),
+            Disposition::Ignore
+        );
         assert!(popup.log.is_empty());
     }
 
@@ -531,7 +553,10 @@ mod tests {
         // the reason `Outcome::Declined` had to keep meaning "the engine gets
         // it" rather than "nothing happened".
         let mut popup = FakePopup::open(3, 1);
-        assert_eq!(verdict(&DISMISS, &mut popup), None);
+        assert_eq!(
+            fold(&DISMISS, Params::new(), &mut popup),
+            Disposition::Ignore
+        );
         assert_eq!(popup.log, vec!["cancel"]);
         assert!(!popup.visible);
     }
@@ -539,30 +564,40 @@ mod tests {
     #[test]
     fn dismiss_with_no_popup_does_nothing_at_all() {
         let mut popup = FakePopup::closed();
-        assert_eq!(verdict(&DISMISS, &mut popup), None);
+        assert_eq!(
+            fold(&DISMISS, Params::new(), &mut popup),
+            Disposition::Ignore
+        );
         assert!(popup.log.is_empty());
     }
 
     #[test]
     fn navigate_hands_the_key_to_the_control_without_consuming_it() {
-        // THE `Some(false)` case, and the whole reason this could not move to
-        // the `_input` registry: "handled by us, engine skipped, event NOT
-        // marked handled" is not expressible as an `Outcome`.
+        // THE third routing state, now declared on the verb rather than
+        // flagged on the port: "handled by us, engine skipped, event NOT
+        // marked handled".
         let mut popup = FakePopup::open(3, 0);
-        assert_eq!(verdict(&NAVIGATE, &mut popup), Some(false));
-        assert!(popup.handed_off);
+        assert_eq!(run(&NAVIGATE, Params::new(), &mut popup), Outcome::Handled);
         assert!(popup.log.is_empty(), "the control does the moving, not us");
         assert_eq!(
             popup.selected, 0,
             "we must not move the selection ourselves"
+        );
+        let mut popup = FakePopup::open(3, 0);
+        assert_eq!(
+            fold(&NAVIGATE, Params::new(), &mut popup),
+            Disposition::Handoff
         );
     }
 
     #[test]
     fn navigate_declines_with_no_popup_so_arrows_move_the_caret() {
         let mut popup = FakePopup::closed();
-        assert_eq!(verdict(&NAVIGATE, &mut popup), None);
-        assert!(!popup.handed_off);
+        assert_eq!(
+            fold(&NAVIGATE, Params::new(), &mut popup),
+            Disposition::Ignore
+        );
+        assert!(popup.log.is_empty());
     }
 
     #[test]
@@ -712,6 +747,129 @@ mod tests {
         let forest = crate::actions::providers::forest();
         let path = forest.overlay(&popup_facts(0)).expect("active");
         assert!(!path.caps.satisfies(Caps::TEXTENTRY));
+    }
+
+    /// The shipped defaults plus `lines`, applied as a user vimrc.
+    fn index_with(lines: &str) -> crate::actions::bind::BindingIndex {
+        let reg = crate::actions::specs::registry();
+        let mut index = crate::actions::bind::builtin_index(&reg);
+        let mut diagnostics = Vec::new();
+        crate::actions::bind::apply_text(
+            &mut index,
+            &reg,
+            lines,
+            &vim_core::keymap::MappingOwner::User,
+            "test",
+            crate::actions::bind::Provenance::User,
+            &mut diagnostics,
+        );
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        index
+    }
+
+    /// Resolve `notation` against the overlay path for `facts`.
+    fn resolve_overlay(
+        index: &crate::actions::bind::BindingIndex,
+        notation: &str,
+        facts: &crate::actions::surface::OverlayFacts,
+    ) -> crate::actions::resolve::Resolution {
+        use crate::actions::resolve::{resolve, ResolveInput};
+        let path = index.forest().overlay(facts).expect("overlay active");
+        let key = crate::actions::keys::parse_lhs(notation).expect("parses")[0];
+        let probes = crate::actions::keys::Probes::from_key(key);
+        let reg = crate::actions::specs::registry();
+        let claims = |_: vim_core::keymap::KeyEvent| false;
+        resolve(&ResolveInput {
+            probes: &probes,
+            path: &path,
+            index,
+            registry: &reg,
+            vim_claims: &claims,
+        })
+    }
+
+    #[test]
+    fn native_on_the_overlay_is_indistinguishable_from_no_rule() {
+        // A4' pinned, and the test that stops the sandbox hole reopening:
+        // `native` carries no `requires` and cannot be gated, so it MUST mean
+        // exactly what no rule means. The transport maps every
+        // `Resolution::None` to an empty plan, and an empty plan folds to
+        // `Ignore`, so the engine gets the key either way. Three `native`
+        // lines in a committed project vimrc therefore cannot suppress the
+        // engine on <Esc>, <C-c> and <C-[>.
+        use crate::actions::resolve::{dispose, Resolution, Stop};
+        let index = index_with("panelmap editor.completion <C-y> native");
+        let resolution = resolve_overlay(&index, "<C-y>", &popup_facts(0));
+        assert_eq!(
+            resolution,
+            Resolution::None(Stop::Native("editor.completion"))
+        );
+        // The transport's mapping: every stop yields empty candidates.
+        assert_eq!(
+            dispose(&[], false, |_| unreachable!("nothing to run")),
+            Disposition::Ignore
+        );
+    }
+
+    #[test]
+    fn a_void_rule_changes_the_disposition_on_the_overlay() {
+        // One of the three capability tests that fail under a patch and pass
+        // only under one pipeline: `<void>` used to parse, register, echo in
+        // `:panelmap`, and do nothing here.
+        use crate::actions::resolve::{dispose, Resolution};
+        let index =
+            index_with("panelmap <void> editor.completion <Esc> godotvim.completion.dismiss");
+        let Resolution::Run { candidates, .. } = resolve_overlay(&index, "<Esc>", &popup_facts(1))
+        else {
+            panic!("the void rule must resolve with the popup open");
+        };
+        assert_eq!(candidates[0].consume, Consumption::Void);
+        let mut popup = FakePopup::open(3, 1);
+        let d = dispose(&candidates, false, |candidate| {
+            let crate::actions::resolve::CandidateTarget::Action(_, spec) = &candidate.target
+            else {
+                panic!("an action rule");
+            };
+            run(spec, candidate.params.clone(), &mut popup)
+        });
+        assert_eq!(d, Disposition::Consume, "void consumes regardless");
+    }
+
+    #[test]
+    fn a_norepeat_rule_consumes_an_echo_without_running() {
+        use crate::actions::resolve::{dispose, Resolution};
+        let index =
+            index_with("panelmap <norepeat> editor.completion <C-n> godotvim.completion.next");
+        let Resolution::Run { candidates, .. } = resolve_overlay(&index, "<C-n>", &popup_facts(0))
+        else {
+            panic!("the norepeat rule must resolve");
+        };
+        let mut popup = FakePopup::open(3, 0);
+        let d = dispose(&candidates, true, |candidate| {
+            let crate::actions::resolve::CandidateTarget::Action(_, spec) = &candidate.target
+            else {
+                panic!("an action rule");
+            };
+            run(spec, candidate.params.clone(), &mut popup)
+        });
+        assert_eq!(d, Disposition::Consume, "an echo must not leak to Godot");
+        assert!(popup.log.is_empty(), "and must not run the verb");
+    }
+
+    #[test]
+    fn a_panelmap_parameter_reaches_the_verb() {
+        // The plumbing the deleted `ActionCtx::new(None, Params::new())`
+        // dropped: the resolved candidate carries the rule's parameters, and
+        // `dispatch_overlay` clones them into the ctx.
+        use crate::actions::resolve::Resolution;
+        let index = index_with(
+            "panelmap editor.completion <C-y> godotvim.completion.confirm require_selection=0",
+        );
+        let Resolution::Run { candidates, .. } = resolve_overlay(&index, "<C-y>", &popup_facts(0))
+        else {
+            panic!("the parameterised rule must resolve");
+        };
+        assert_eq!(candidates[0].params.int("require_selection", 1), 0);
     }
 
     #[test]

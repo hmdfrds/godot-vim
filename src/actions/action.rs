@@ -248,17 +248,6 @@ pub(crate) trait CompletionOps {
     /// engine, so dot-repeat and macro recording capture the completed text.
     fn confirm(&mut self);
     fn cancel(&mut self);
-    /// Route this keystroke to the control's own `gui_input` instead: the vim
-    /// engine does not see it, and the event is **not** consumed.
-    ///
-    /// This is the `Some(false)` leg of `try_handle_completion` — "handled by
-    /// us, but deliberately not marked handled" — and it exists because
-    /// Godot's `CodeEdit` moves the popup selection on Up/Down itself. There
-    /// is no way to express it in [`Outcome`], which is why it is a command on
-    /// the port rather than a fourth variant: `Outcome` is shared with the
-    /// `_input` transport, where "not consumed" and "engine skipped" cannot
-    /// both be true.
-    fn hand_to_editor(&mut self);
 }
 
 /// The focused panel control, as commands.

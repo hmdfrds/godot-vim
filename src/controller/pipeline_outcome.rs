@@ -49,6 +49,36 @@ mod tests {
     }
 
     #[test]
+    fn the_disposition_mapping_is_a_total_truth_table() {
+        // A pure mirror of the match in `process_cycle_impl`, written out
+        // rather than called so the assertion is not a tautology. Exhaustive:
+        // a fourth `Disposition` is a compile error here before it is a
+        // routing surprise there.
+        use crate::actions::resolve::Disposition;
+        const fn map(d: Disposition) -> Option<PipelineOutcome> {
+            match d {
+                Disposition::Consume => Some(PipelineOutcome::CompletionConsumed),
+                Disposition::Handoff => Some(PipelineOutcome::CompletionDeferred),
+                Disposition::Ignore => None,
+            }
+        }
+        assert!(matches!(
+            map(Disposition::Consume),
+            Some(PipelineOutcome::CompletionConsumed)
+        ));
+        assert!(matches!(
+            map(Disposition::Handoff),
+            Some(PipelineOutcome::CompletionDeferred)
+        ));
+        assert!(map(Disposition::Ignore).is_none());
+        // The two obligations the mapping carries downstream: a deferred key
+        // must NOT be marked handled (CodeEdit still needs the event), and a
+        // consumed completion always moved the cursor (Fix 4C).
+        assert!(!PipelineOutcome::CompletionDeferred.should_mark_handled());
+        assert!(PipelineOutcome::CompletionConsumed.may_have_moved_cursor());
+    }
+
+    #[test]
     fn should_mark_handled_truth_table() {
         assert!(PipelineOutcome::VimdebugStep.should_mark_handled());
         assert!(PipelineOutcome::CompletionConsumed.should_mark_handled());

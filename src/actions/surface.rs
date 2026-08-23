@@ -366,11 +366,6 @@ impl OverlayFacts {
 /// An overlay is a STATE OF the focused control, never a different control,
 /// which is why it contributes no anchor and its caps come from `grants`
 /// alone.
-#[allow(
-    dead_code,
-    reason = "read by Forest::overlay, whose production caller is the gui_input \
-              cutover commit; until then only the audits and tests read it"
-)]
 pub(crate) struct OverlaySpec {
     /// Whether this surface exists at all for this keystroke.
     pub(crate) active: fn(&OverlayFacts) -> bool,
@@ -593,11 +588,6 @@ impl Forest {
     /// because there is no anchor; that is what keeps `godotvim.search.accept`
     /// (`requires: Caps::TEXTENTRY`) permanently gated here rather than
     /// merely unlikely.
-    #[allow(
-        dead_code,
-        reason = "the gui_input cutover commit is the production caller; \
-                  shipped one commit apart so each is revertable on its own"
-    )]
     pub(crate) fn overlay(&self, facts: &OverlayFacts) -> Option<SurfacePath> {
         let spec = self
             .specs
