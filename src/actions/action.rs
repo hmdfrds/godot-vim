@@ -16,6 +16,7 @@ use godot::classes::Control;
 use godot::prelude::*;
 use vim_core::keymap::KeyEvent;
 
+use super::bind::Consumption;
 use super::caps::Caps;
 use super::outcome::Outcome;
 
@@ -194,6 +195,15 @@ pub(crate) struct ActionSpec {
     /// than declining invisibly. `godotvim.fs.*` can locate their own target
     /// and are true; `godotvim.item.*` need a focused control and are false.
     pub(crate) host_invocable: bool,
+    /// The consumption policy a rule gets when it names this verb and
+    /// declares no flag of its own. `None` means `Elastic`; `<void>` on the
+    /// rule always wins.
+    ///
+    /// Folded into `Rule.consume` at REGISTRATION by `bind::rule_from`, so
+    /// `dispose` still reads exactly one field and the invariant in
+    /// `resolve.rs` holds: this is the verb declaring what its rules default
+    /// to, never a body deciding at run time. Constrained by audit A9'.
+    pub(crate) default_consume: Option<Consumption>,
     pub(crate) run: fn(&mut ActionCtx<'_>) -> Outcome,
 }
 
@@ -212,7 +222,8 @@ impl std::fmt::Debug for ActionSpec {
 /// only real implementation holds `&mut VimSession<GodotHost>` and
 /// `&mut Gd<CodeEdit>`, and neither can exist under `cargo test` in a
 /// `cdylib`. Behind this seam the `godotvim.completion.*` bodies are pure
-/// decision logic over two booleans and two integers, so the trichotomy they
+/// decision logic over one boolean, two integers and one provenance answer,
+/// so the trichotomy they
 /// produce — consume / hand to the control / let the engine have it — is
 /// table-tested headlessly, which is the same trick `FocusChain` plays for the
 /// surface plane.
@@ -223,11 +234,13 @@ impl std::fmt::Debug for ActionSpec {
 pub(crate) trait CompletionOps {
     /// Godot returns -1 from `get_code_completion_selected_index` when no
     /// popup is up, which is the only "is it visible" answer it offers.
+    ///
+    /// Read LIVE, where `Caps::POPUP` is sampled once at the keystroke: the
+    /// capability answers "was the popup up when the key arrived", a routing
+    /// precondition; this answers "is it up now", an execution fact. `PREV`
+    /// depends on the two disagreeing within one keystroke: it requests, then
+    /// asks whether the popup came up so it can land on the last candidate.
     fn popup_visible(&self) -> bool;
-    /// `code_complete_enabled` in EditorSettings. False means the user turned
-    /// autocompletion off, and every trigger verb must decline rather than
-    /// force a popup they asked not to see.
-    fn completion_enabled(&self) -> bool;
     fn option_count(&self) -> i32;
     fn selected_index(&self) -> i32;
     /// Ask Godot to (re)build the candidate list. Synchronous: popup state and
@@ -238,17 +251,15 @@ pub(crate) trait CompletionOps {
     /// engine, so dot-repeat and macro recording capture the completed text.
     fn confirm(&mut self);
     fn cancel(&mut self);
-    /// Route this keystroke to the control's own `gui_input` instead: the vim
-    /// engine does not see it, and the event is **not** consumed.
+    /// Whether the current selection was chosen by the user rather than
+    /// preselected by Godot.
     ///
-    /// This is the `Some(false)` leg of `try_handle_completion` — "handled by
-    /// us, but deliberately not marked handled" — and it exists because
-    /// Godot's `CodeEdit` moves the popup selection on Up/Down itself. There
-    /// is no way to express it in [`Outcome`], which is why it is a command on
-    /// the port rather than a fourth variant: `Outcome` is shared with the
-    /// `_input` transport, where "not consumed" and "engine skipped" cannot
-    /// both be true.
-    fn hand_to_editor(&mut self);
+    /// Answered from the provenance machine on the port. Sound because
+    /// `controller::completion::maybe_retrigger_completion` calls
+    /// `request_code_completion_ex()` on the raw editor and never touches
+    /// this port, so a port `request` is reachable only from a user-initiated
+    /// verb.
+    fn selection_is_explicit(&self) -> bool;
 }
 
 /// The focused panel control, as commands.

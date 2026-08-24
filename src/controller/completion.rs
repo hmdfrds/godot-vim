@@ -2,39 +2,42 @@
 //!
 //! Godot's CodeEdit autocomplete is driven by `_gui_input()`, which never
 //! fires when Vim consumes the key via `set_input_as_handled()`. This module
-//! intercepts completion-relevant keys *before* the engine so the popup can
-//! trigger, filter, navigate, and confirm — all without engine changes.
+//! dispatches completion-relevant keys *before* the engine so the popup can
+//! trigger, filter, navigate, and confirm, all without engine changes.
 //!
-//! The interception has two phases:
-//! - **Pre-engine** ([`try_handle_completion`]): routes whatever the user has
-//!   bound on the `editor.completion` surface — by default Ctrl+@, Ctrl+N/P,
-//!   Tab, Enter, Escape and the arrow keys.
+//! Two phases:
+//! - **Pre-engine** ([`dispatch_overlay`]): runs whatever the
+//!   `editor.completion` overlay resolved for this keystroke, folded by the
+//!   SAME `resolve::dispose` every other surface uses, so flags, params and
+//!   the decline-and-fall-through rule mean the same thing here.
 //! - **Post-engine** ([`maybe_retrigger_completion`]): re-triggers the popup
 //!   after printable/backspace keystrokes so filtering stays in sync.
 //!
-//! # Rebindable, and still on this transport (P9)
+//! # One pipeline, and still on this transport
 //!
-//! The key table used to be a `match` on literals here. It is now eight
-//! `panelmap` lines in `actions::providers::completion`, resolved by
-//! `GodotVimCore::handle_gui_input_impl` against the same `BindingIndex` the
-//! panel keys use, and handed down as an `&'static ActionSpec`.
+//! The key table is `panelmap` lines in `actions::providers::completion`,
+//! resolved by `GodotVimCore::handle_gui_input_impl` against the overlay path
+//! `Forest::overlay` builds, and handed down as an owned
+//! [`crate::actions::resolve::OverlayPlan`].
 //!
 //! What did **not** move is the transport. These keys stay on `gui_input`, for
-//! three reasons that were each load-bearing and none of which a rebindable
-//! table changes: `_input` is registered per viewport and never fires for a
+//! three reasons that were each load-bearing and none of which the overlay
+//! changes: `_input` is registered per viewport and never fires for a
 //! floated script editor; `_input` runs outside the IME guard above this call,
-//! so a CJK preedit would lose `<CR>`; and `_input`'s consumption model cannot
-//! express `Some(false)` — "handled by us, engine skipped, event deliberately
-//! NOT consumed" — which is what Up/Down need. [`CompletionPort`] carries that
-//! third state; see [`verdict`].
+//! so a CJK preedit would lose `<CR>`; and the third routing state, "engine
+//! skipped, event deliberately NOT consumed", is a `gui_input` fact.
+//! It is now `Disposition::Handoff`, declared by the verb through
+//! `Consumption::Handoff` and folded by `dispose`, rather than a flag on a
+//! lent port folded by a second, transport-private verdict.
 
 use godot::classes::CodeEdit;
 use godot::prelude::*;
 use vim_core::execution::{VimEngine, VimSession};
 use vim_core::keymap::{Key, KeyEvent, Modifiers};
 
-use crate::actions::action::{ActionCtx, ActionSpec, CompletionOps, Params};
+use crate::actions::action::{ActionCtx, CompletionOps};
 use crate::actions::outcome::Outcome;
+use crate::actions::resolve::{self, CandidateTarget, Disposition};
 use crate::bridge;
 use crate::bridge::codec::usize_to_i32;
 use crate::bridge::godot_host::GodotHost;
@@ -42,6 +45,53 @@ use crate::bridge::godot_host::GodotHost;
 /// Godot returns -1 when no completion popup is visible.
 fn is_completion_active(editor: &Gd<CodeEdit>) -> bool {
     editor.get_code_completion_selected_index() >= 0
+}
+
+/// Whether the current completion selection was chosen by the user.
+///
+/// Rules, each citing Godot: no popup resets; a moved caret resets, because
+/// typing moves the caret and steering does not, which makes the caret the
+/// episode key; an index EDGE to a NON-ZERO value adopts, because Godot's
+/// only automatic writes are resets to 0 (`code_edit.cpp:3873, 4097`) while
+/// every non-zero write is human-originated; `last_index == None` leaves
+/// `explicit` standing, which is what lets the port's own write survive the
+/// keystroke that opened the popup.
+///
+/// Two documented residuals, both failing toward a newline rather than an
+/// unwanted insert: clicking an already-selected row, and wrapping round to
+/// row 0.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct Provenance {
+    last_index: Option<i32>,
+    last_caret: (i32, i32),
+    pub(crate) explicit: bool,
+}
+
+/// Pure. The Godot reads happen once in `handle_gui_input_impl`; this is the
+/// rule, and it is a `fn` over plain data so it is table-tested headlessly.
+pub(crate) fn advance(
+    prev: Provenance,
+    facts: &crate::actions::surface::OverlayFacts,
+) -> Provenance {
+    if !facts.popup() {
+        return Provenance::default();
+    }
+    if prev.last_index.is_some() && facts.caret != prev.last_caret {
+        return Provenance {
+            last_index: Some(facts.selected_index),
+            last_caret: facts.caret,
+            explicit: false,
+        };
+    }
+    let adopted = matches!(
+        prev.last_index,
+        Some(previous) if previous != facts.selected_index && facts.selected_index != 0
+    );
+    Provenance {
+        last_index: Some(facts.selected_index),
+        last_caret: facts.caret,
+        explicit: prev.explicit || adopted,
+    }
 }
 
 /// The one real [`CompletionOps`], holding the two things no test can build.
@@ -52,20 +102,22 @@ fn is_completion_active(editor: &Gd<CodeEdit>) -> bool {
 /// `Some(false)` / `None` trichotomy has a headless characterization suite at
 /// all — `Gd<CodeEdit>` and `VimSession<GodotHost>` cannot be constructed under
 /// `cargo test` in a `cdylib`.
+///
+/// INVARIANT the provenance write-through depends on:
+/// `maybe_retrigger_completion` calls `request_code_completion_ex()` on the
+/// raw editor and never touches this port, so a port `request` (or `select`)
+/// is reachable only from a user-initiated verb, and marking the selection
+/// explicit there is sound. A future retrigger refactor that routes through
+/// the port breaks this silently; do not.
 struct CompletionPort<'a> {
     session: &'a mut VimSession<GodotHost>,
     editor: &'a mut Gd<CodeEdit>,
-    /// Set by [`CompletionOps::hand_to_editor`]. Read by [`verdict`].
-    handed_off: bool,
+    provenance: &'a mut Provenance,
 }
 
 impl CompletionOps for CompletionPort<'_> {
     fn popup_visible(&self) -> bool {
         is_completion_active(self.editor)
-    }
-
-    fn completion_enabled(&self) -> bool {
-        self.editor.is_code_completion_enabled()
     }
 
     fn option_count(&self) -> i32 {
@@ -77,10 +129,14 @@ impl CompletionOps for CompletionPort<'_> {
     }
 
     fn request(&mut self, force: bool) {
+        // User-initiated by the port invariant above, so the selection Godot
+        // preselects on this request was asked for by name.
+        self.provenance.explicit = true;
         self.editor.request_code_completion_ex().force(force).done();
     }
 
     fn select(&mut self, index: i32) {
+        self.provenance.explicit = true;
         self.editor.set_code_completion_selected_index(index);
     }
 
@@ -92,78 +148,47 @@ impl CompletionOps for CompletionPort<'_> {
         self.editor.cancel_code_completion();
     }
 
-    fn hand_to_editor(&mut self) {
-        self.handed_off = true;
+    fn selection_is_explicit(&self) -> bool {
+        self.provenance.explicit
     }
 }
 
-/// Fold an action's [`Outcome`] and the port's routing flag into the
-/// transport's tri-state.
+/// Pre-engine dispatch: run the overlay's plan through the one consumption
+/// fold.
 ///
-/// - `Some(true)` — consumed here; `set_input_as_handled()` fires.
-/// - `Some(false)` — engine skipped, event deliberately **not** consumed, so
-///   `CodeEdit::_gui_input` moves its own popup selection.
-/// - `None` — not ours; the vim engine processes the key normally.
-///
-/// The third case falls straight out of [`Outcome::Declined`], which is why no
-/// fourth `Outcome` variant was needed: a verb that cannot act (no popup up)
-/// declines, and declining on this transport already means "the engine gets
-/// it". `godotvim.completion.dismiss` uses exactly that to cancel the popup
-/// *and* let `<Esc>` leave insert mode in one keypress.
-const fn verdict(outcome: Outcome, handed_off: bool) -> Option<bool> {
-    if handed_off {
-        return Some(false);
-    }
-    if outcome.is_consumed() {
-        Some(true)
-    } else {
-        None
-    }
-}
-
-/// Pre-engine interception for completion and trigger keys.
-///
-/// `binding` is whatever the `editor.completion` surface resolved this key to,
-/// or `None` when the user has nothing bound — in which case there is nothing
-/// to intercept and the engine gets the key untouched.
-///
-/// Returns `Some(consumed)` if the key was handled here (skip engine).
-/// Returns `None` if the engine should process the key normally.
-pub(crate) fn try_handle_completion(
+/// The plan is resolved by the transport against the overlay path
+/// `Forest::overlay` builds, so the mode gate the old interception asked
+/// imperatively lives in the overlay's `active` predicate now: an empty plan
+/// is the not-insert-like case and the not-bound case alike, and the caller
+/// skips the call entirely.
+pub(crate) fn dispatch_overlay(
     session: &mut VimSession<GodotHost>,
     editor: &mut Gd<CodeEdit>,
-    binding: Option<&'static ActionSpec>,
-) -> Option<bool> {
-    let spec = binding?;
-
-    // The mode gate stays on the transport rather than moving into the verbs,
-    // and stays exactly where it was: `in_insert` guarded every arm of the old
-    // table. It is not a capability and not a surface predicate — `Caps` is
-    // sampled from a focus chain this surface never classifies — so the one
-    // place that can honestly ask is the one place holding the session.
-    let mode = session.engine().mode();
-    if !mode.is_insert() && !mode.is_replace() {
-        return None;
-    }
-
+    provenance: &mut Provenance,
+    plan: &crate::actions::resolve::OverlayPlan,
+) -> Disposition {
     let mut port = CompletionPort {
         session,
         editor,
-        handed_off: false,
+        provenance,
     };
-    let outcome = {
-        // The action borrows the port; the verdict reads it back. Scoped so no
-        // borrow of `port` outlives the call, mirroring `run_candidate`'s
-        // copy-out-the-spec discipline in `plugin::input`.
-        let mut cx = ActionCtx::new(None, Params::new()).with_completion(&mut port);
-        (spec.run)(&mut cx)
-    };
-    let handed_off = port.handed_off;
-    log::trace!(
-        "completion: {} -> {outcome:?} handed_off={handed_off}",
-        spec.id
-    );
-    verdict(outcome, handed_off)
+    resolve::dispose(&plan.candidates, plan.is_echo, |candidate| {
+        let CandidateTarget::Action(_, spec) = &candidate.target else {
+            // Unreachable from config: `<Shortcut>` is refused at
+            // registration on every surface (`bind.rs`). Kept as the seam,
+            // and it declines rather than consuming.
+            log::warn!("completion: <Shortcut> targets are not dispatched yet");
+            return Outcome::Declined;
+        };
+        // `target: None` is CONSISTENT with the overlay's grants-only caps
+        // rather than a lie the gate believes, and it is byte-parity with the
+        // `ActionCtx::new(None, ...)` this replaces. `candidate.params` is
+        // the parameter plumbing the deleted `Params::new()` dropped.
+        let mut cx = ActionCtx::new(None, candidate.params.clone()).with_completion(&mut port);
+        let outcome = (spec.run)(&mut cx);
+        log::trace!("completion: {} -> {outcome:?}", spec.id);
+        outcome
+    })
 }
 
 /// After the engine processes an insert-mode key, re-trigger or dismiss
@@ -174,7 +199,10 @@ pub(crate) fn try_handle_completion(
 /// popup when the word prefix is empty. We replicate that cancel logic here:
 /// word chars and completion-prefix chars (`.`, etc.) retrigger; everything
 /// else (`;`, `)`, space) cancels. Prefix chars come from CodeEdit's
-/// `code_completion_prefixes` — a per-language set, not a hardcoded list.
+/// `code_completion_prefixes`, which for the script editor is the hardcoded
+/// per-editor set `{".", ",", "(", "=", "$", "@", quote, apostrophe}` written
+/// by `CodeTextEditor` (godot editor/gui/code_editor.cpp), not a per-language
+/// list.
 ///
 /// Gated on `code_complete_enabled` so typing doesn't auto-trigger the popup
 /// when the user has disabled auto-completion in EditorSettings.
@@ -209,8 +237,8 @@ pub(crate) fn maybe_retrigger_completion(
 }
 
 /// Check if `ch` is in CodeEdit's `code_completion_prefixes` (e.g., `.` for
-/// member access). These are per-language trigger characters configured by
-/// Godot's script language providers.
+/// member access). A per-editor set: the script editor's is hardcoded by
+/// `CodeTextEditor`, not configured per language.
 fn is_completion_prefix(editor: &Gd<CodeEdit>, ch: char) -> bool {
     let prefixes = editor.get_code_completion_prefixes();
     let mut buf = [0u8; 4];
@@ -261,38 +289,94 @@ fn confirm_and_reconcile_completion(
     super::sync_undo_nodes_after_external_edit(session, &before_text);
 }
 
+// The consumption fold that used to be tested here as `verdict` lives in
+// `resolve::dispose` now, pinned by the truth-table rows in
+// `actions::resolve` and by the `Disposition` -> `PipelineOutcome` table in
+// `controller::pipeline_outcome`.
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::actions::surface::OverlayFacts;
 
-    // The transport-side half of the P9 characterization suite. The verb-side
-    // half lives in `actions::providers::completion`, driven by a fake popup;
-    // this pins the fold that turns an `Outcome` plus one flag back into the
-    // `Option<bool>` `process_cycle` has always spoken.
+    fn facts(selected_index: i32, caret: (i32, i32)) -> OverlayFacts {
+        OverlayFacts {
+            at_attached_editor: true,
+            mode: Some(vim_core::primitives::Mode::Insert),
+            selected_index,
+            caret,
+        }
+    }
 
-    #[test]
-    fn a_handled_verb_consumes_the_key() {
-        assert_eq!(verdict(Outcome::Handled, false), Some(true));
-        assert_eq!(verdict(Outcome::FocusChanged, false), Some(true));
+    fn prov(last_index: Option<i32>, last_caret: (i32, i32), explicit: bool) -> Provenance {
+        Provenance {
+            last_index,
+            last_caret,
+            explicit,
+        }
     }
 
     #[test]
-    fn a_declined_verb_hands_the_key_to_the_vim_engine() {
-        // Not "nothing happened". `godotvim.completion.dismiss` cancels the
-        // popup and THEN declines, so `<Esc>` closes the popup and leaves
-        // insert mode on one press. Collapsing this to `Some(false)` would
-        // trap the user in insert mode; collapsing it to `Some(true)` would
-        // stop `<CR>` inserting a newline whenever nothing was bound.
-        assert_eq!(verdict(Outcome::Declined, false), None);
+    fn advance_is_a_total_table() {
+        // One row per rule, each citing the fact it turns on.
+        let rows: &[(&str, Provenance, OverlayFacts, Provenance)] = &[
+            (
+                "popup absent resets everything",
+                prov(Some(3), (1, 4), true),
+                facts(-1, (1, 4)),
+                Provenance::default(),
+            ),
+            (
+                "a moved caret resets: typing moves the caret, steering does not",
+                prov(Some(3), (1, 4), true),
+                facts(3, (1, 5)),
+                prov(Some(3), (1, 5), false),
+            ),
+            (
+                "an index edge to a non-zero value adopts: Godot's only \
+                 automatic writes are resets to 0",
+                prov(Some(0), (1, 4), false),
+                facts(2, (1, 4)),
+                prov(Some(2), (1, 4), true),
+            ),
+            (
+                "an index edge to zero does not adopt: that is the machine's \
+                 own reset",
+                prov(Some(3), (1, 4), false),
+                facts(0, (1, 4)),
+                prov(Some(0), (1, 4), false),
+            ),
+            (
+                "last_index None leaves explicit standing, so the port's own \
+                 write survives the keystroke that opened the popup",
+                prov(None, (1, 4), true),
+                facts(0, (1, 4)),
+                prov(Some(0), (1, 4), true),
+            ),
+            (
+                "a repeated identical index preserves",
+                prov(Some(2), (1, 4), true),
+                facts(2, (1, 4)),
+                prov(Some(2), (1, 4), true),
+            ),
+        ];
+        for (what, prev, f, want) in rows {
+            assert_eq!(advance(*prev, f), *want, "{what}");
+        }
     }
 
     #[test]
-    fn handing_off_beats_the_outcome_in_both_directions() {
-        // `Some(false)` is the state `Outcome` cannot express: engine skipped,
-        // event NOT consumed, control gets the key. The flag therefore has to
-        // win over whatever the verb returned, and asserting BOTH rows is what
-        // makes that a decision rather than an accident of ordering.
-        assert_eq!(verdict(Outcome::Handled, true), Some(false));
-        assert_eq!(verdict(Outcome::Declined, true), Some(false));
+    fn the_regression_this_rule_exists_for() {
+        // `cancel_code_completion` leaves the index and the option list
+        // intact (code_edit.cpp:2711-2719), so a reopened popup can carry a
+        // stale non-zero index the user never touched. Preservation is a
+        // NON-WRITE: no edge, same caret, and explicit must stay false so
+        // Enter gives a newline rather than an insert nobody asked for.
+        let prev = prov(Some(3), (1, 4), false);
+        let next = advance(prev, &facts(3, (1, 4)));
+        assert!(
+            !next.explicit,
+            "a preserved stale selection is not a choice"
+        );
     }
 }

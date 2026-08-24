@@ -120,12 +120,12 @@ Vim's stay in sync. The status bar shows the count, for example
 - **FileSystem dock**: `a` create file or directory, `d` delete, `r` rename, `y` yank path, `R` refresh
 - **Debugger dock**: `J` and `K` walk stack frames and breakpoints, `G` jumps to the deepest frame, `y` yanks the row
 - **`gd`** goes to a definition, **`K`** opens Godot's documentation tooltip for the symbol under the cursor
-- **`Ctrl-N`**, **`Ctrl-P`** and **`Ctrl-Space`** drive the completion popup
+- **`Ctrl-N`**, **`Ctrl-P`** and **`Ctrl-Space`** drive the completion popup; **`Ctrl-Y`** accepts and **`Ctrl-E`** dismisses it
 - **`Ctrl-O`** and **`Ctrl-I`** follow the jump list across tabs, not just inside one file
 - **`Ctrl-W h/j/k/l`** and **`Ctrl-W w`** move and cycle focus from the script editor
 - **`:zen`** toggles distraction-free mode
 
-All 30 of the panel, dock, FileSystem, debugger, searchbox and completion
+All 31 of the panel, dock, FileSystem, debugger, searchbox and completion
 bindings ship as config lines rather than hardcoded match arms, so `panelunmap`
 and `panelmap` in your `.godot-vimrc` replace any of them. `:panelmap` prints
 every live binding in the exact syntax you would paste back into a vimrc.

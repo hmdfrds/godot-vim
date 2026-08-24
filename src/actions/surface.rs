@@ -294,14 +294,95 @@ impl FocusChain {
 pub(crate) enum Anchor {
     /// Anchored at `chain.nodes[idx]`.
     Node(usize),
-    /// Matched with NO focus owner. Only `unknown` may return this, and
-    /// `ActionCtx::target` is then `None`.
+    /// Matched with no anchored node. Produced by `unknown`'s probe, which is
+    /// the no-focus-owner state, and by every OVERLAY, which is a state of
+    /// the focused control rather than a different control and therefore
+    /// contributes no anchor of its own. `ActionCtx::target` is `None` in
+    /// both cases, and an overlay's `caps` come from its `grants` alone.
     Rootless,
 }
 
 /// A pure predicate over the sampled chain. No `Gd<T>`, so it is unit-testable
 /// from literals with no Godot runtime.
 pub(crate) type Probe = fn(&FocusChain) -> Option<Anchor>;
+
+/// Facts that change between keystrokes without the focus chain moving.
+///
+/// Deliberately NOT a `FocusChain` and deliberately not read from
+/// `ChainCache`. `_input` samples against the base control's viewport
+/// (`plugin/input.rs`) and caches on that viewport's focus owner; a floated
+/// script editor is a different viewport, which is reason one that these keys
+/// are on `gui_input` at all (`providers/completion.rs`). A predicate reading
+/// the cached chain from `gui_input` would answer about the wrong window, or
+/// make the two transports fight over one cache key at the OS key-repeat
+/// rate.
+///
+/// Plain data, `Copy`, no `Gd<T>`: an overlay's predicates are testable from
+/// literals for the same reason a probe is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct OverlayFacts {
+    /// The transport is standing ON the attached editor and it has focus.
+    /// Established by `handle_gui_input_impl`'s own guards at the top of
+    /// `plugin/input.rs`, recorded here as data rather than assumed.
+    pub(crate) at_attached_editor: bool,
+    /// The vim engine's mode. `None` means no controller.
+    pub(crate) mode: Option<vim_core::primitives::Mode>,
+    /// `get_code_completion_selected_index()`. Godot returns -1 when no popup
+    /// is up (`controller/completion.rs`); that is the only visibility answer
+    /// it offers.
+    pub(crate) selected_index: i32,
+    /// `(get_caret_line(), get_caret_column())`. Read by no overlay
+    /// predicate: it is the provenance machine's episode key, carried here
+    /// because the facts cross the plugin/controller seam on every keystroke
+    /// and the machine advances on all of them, typed characters included.
+    pub(crate) caret: (i32, i32),
+}
+
+impl Default for OverlayFacts {
+    /// Hand-written, not derived. A derived `Default` gives
+    /// `selected_index: 0`, which reads as "a popup is up with row 0
+    /// selected". The only safe default is the absent popup.
+    fn default() -> Self {
+        Self {
+            at_attached_editor: false,
+            mode: None,
+            selected_index: -1,
+            caret: (0, 0),
+        }
+    }
+}
+
+impl OverlayFacts {
+    pub(crate) const fn popup(&self) -> bool {
+        self.selected_index >= 0
+    }
+
+    /// Verbatim the gate `try_handle_completion` asked imperatively in
+    /// `controller/completion.rs`. `Mode::is_insert()` is `Insert` alone and
+    /// `is_replace()` is `Replace | VirtualReplace`, so this is strictly
+    /// narrower than `editor.insert`'s probe, which also claims `CommandLine`
+    /// and `Select`.
+    pub(crate) fn insert_like(&self) -> bool {
+        matches!(self.mode, Some(m) if m.is_insert() || m.is_replace())
+    }
+}
+
+/// How a surface joins a path without probing.
+///
+/// An overlay is a STATE OF the focused control, never a different control,
+/// which is why it contributes no anchor and its caps come from `grants`
+/// alone.
+pub(crate) struct OverlaySpec {
+    /// Whether this surface exists at all for this keystroke.
+    pub(crate) active: fn(&OverlayFacts) -> bool,
+    /// Capabilities the overlay contributes. `dock.filesystem`'s FILEOPS
+    /// grant is the precedent: a capability that is a property of the PLACE
+    /// and that `Caps::of_control` can never produce. This one has the same
+    /// shape and a shorter lifetime.
+    pub(crate) grants: fn(&OverlayFacts) -> Caps,
+    /// One clause for `:panelmap`'s surface header.
+    pub(crate) when: &'static str,
+}
 
 /// How a surface terminates the upward walk.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -335,6 +416,12 @@ pub(crate) struct SurfaceSpec {
     pub(crate) grants: fn(&FocusChain) -> Caps,
     /// Probes run in `providers::PROVIDERS` order; the first `Some` wins.
     pub(crate) probe: Probe,
+    /// `None` on every classified surface. `Some` makes this an OVERLAY:
+    /// never on a path `Forest::classify` produces, built per keystroke by
+    /// [`Forest::overlay`] for the one transport that holds
+    /// [`OverlayFacts`]. Exactly one of `probe`/`overlay` is live, audited
+    /// rather than typed (see V-O2).
+    pub(crate) overlay: Option<OverlaySpec>,
     /// Runs once per keystroke for every surface on the active path, before
     /// any lookup and regardless of whether a binding matches. Must be
     /// idempotent and cheap — key-repeat echo events reach it too.
@@ -494,6 +581,36 @@ impl Forest {
         })
     }
 
+    /// The overlay this transport may lend for these facts, as an ordinary
+    /// one-element [`SurfacePath`].
+    ///
+    /// Deliberately NOT called by `classify`, and never called by `_input`:
+    /// an overlay describes a state of a control, so only a transport
+    /// standing on that control can answer for it. That is the entire parity
+    /// mechanism for the primary transport. First active wins, in
+    /// `PROVIDERS` order, mirroring `classify`.
+    ///
+    /// `caps` are the overlay's `grants` and NOTHING else. No widget caps,
+    /// because there is no anchor; that is what keeps `godotvim.search.accept`
+    /// (`requires: Caps::TEXTENTRY`) permanently gated here rather than
+    /// merely unlikely.
+    pub(crate) fn overlay(&self, facts: &OverlayFacts) -> Option<SurfacePath> {
+        let spec = self
+            .specs
+            .iter()
+            .copied()
+            .find(|s| s.overlay.as_ref().is_some_and(|o| (o.active)(facts)))?;
+        let overlay = spec.overlay.as_ref()?;
+        Some(SurfacePath {
+            ids: self.path_from(spec.id), // audited to be exactly [spec.id]
+            anchor: Anchor::Rootless,
+            caps: (overlay.grants)(facts),
+            seal: spec.seal,                                    // audited Open
+            anchor_yields_to_engine: spec.yields_to_engine,     // audited false
+            anchor_refuses_positional: spec.refuses_positional, // audited true
+        })
+    }
+
     /// Structural validation, as human-readable errors.
     ///
     /// Run by [`crate::actions::providers::forest`] on every construction of
@@ -517,6 +634,40 @@ impl Forest {
             // overwrite, or a third party could silently redefine `dock`.
             if self.specs[..i].iter().any(|s| s.id == spec.id) {
                 errors.push(format!("surface '{}' is declared twice", spec.id));
+            }
+            // V-O1/V-O3: an overlay is rootless, Open, yields to nobody,
+            // refuses the positional probe and runs no hook. Each is what
+            // makes the one-element path `Forest::overlay` builds correct
+            // rather than merely convenient.
+            if spec.overlay.is_some() {
+                if spec.parent.is_some() {
+                    errors.push(format!("overlay '{}' declares a parent", spec.id));
+                }
+                if self.specs.iter().any(|s| s.parent == Some(spec.id)) {
+                    errors.push(format!("overlay '{}' is a declared parent", spec.id));
+                }
+                if spec.seal != Seal::Open {
+                    errors.push(format!("overlay '{}' must be Seal::Open", spec.id));
+                }
+                if spec.yields_to_engine {
+                    errors.push(format!(
+                        "overlay '{}' must not yield to the engine",
+                        spec.id
+                    ));
+                }
+                if !spec.refuses_positional {
+                    errors.push(format!(
+                        "overlay '{}' must refuse the positional probe; a Dvorak Ctrl+p \
+                         would otherwise become a completion key",
+                        spec.id
+                    ));
+                }
+                if spec.on_key.is_some() {
+                    errors.push(format!(
+                        "overlay '{}' declares an on_key hook, which only `_input` runs",
+                        spec.id
+                    ));
+                }
             }
             let Some(parent) = spec.parent else { continue };
             // V3 — a typo'd parent yields a one-element path with no `panel`,
@@ -725,6 +876,7 @@ mod tests {
         seal: Seal::Open,
         grants: |_| Caps::empty(),
         probe: |_| None,
+        overlay: None,
         on_key: None,
         yields_to_engine: false,
         refuses_positional: false,
@@ -735,6 +887,7 @@ mod tests {
         seal: Seal::Open,
         grants: |_| Caps::VNAV,
         probe: |chain| chain.focus().map(|_| Anchor::Node(0)),
+        overlay: None,
         on_key: None,
         yields_to_engine: false,
         refuses_positional: false,
@@ -745,6 +898,7 @@ mod tests {
         seal: Seal::Open,
         grants: |_| Caps::empty(),
         probe: |_| None,
+        overlay: None,
         on_key: None,
         yields_to_engine: false,
         refuses_positional: false,
@@ -784,6 +938,155 @@ mod tests {
     fn a_forest_with_no_total_probe_can_fail_to_classify() {
         let forest = Forest::new(&[&ROOT]);
         assert!(forest.classify(&no_focus_owner()).is_none());
+    }
+
+    // ── Overlays ─────────────────────────────────────────────────────
+
+    #[test]
+    fn every_overlay_fact_moves_something() {
+        // The exhaustive destructure is the fence: a new volatile fact cannot
+        // be added to `OverlayFacts` without deciding which consumer fills it
+        // and which predicate reads it.
+        let facts = OverlayFacts {
+            at_attached_editor: true,
+            mode: Some(vim_core::primitives::Mode::Insert),
+            selected_index: 0,
+            caret: (2, 5),
+        };
+        let OverlayFacts {
+            at_attached_editor,
+            mode,
+            selected_index,
+            caret,
+        } = facts;
+        assert!(at_attached_editor);
+        assert!(mode.is_some());
+        assert_eq!(selected_index, 0);
+        assert_eq!(caret, (2, 5));
+
+        let forest = crate::actions::providers::forest();
+        let overlay = forest
+            .get("editor.completion")
+            .and_then(|s| s.overlay.as_ref())
+            .expect("the shipped overlay");
+
+        // `at_attached_editor` moves `active`.
+        assert!((overlay.active)(&facts));
+        assert!(!(overlay.active)(&OverlayFacts {
+            at_attached_editor: false,
+            ..facts
+        }));
+        // `mode` moves `active`.
+        assert!(!(overlay.active)(&OverlayFacts {
+            mode: None,
+            ..facts
+        }));
+        // `selected_index` moves `grants`.
+        assert_eq!((overlay.grants)(&facts), Caps::POPUP);
+        assert_eq!(
+            (overlay.grants)(&OverlayFacts {
+                selected_index: -1,
+                ..facts
+            }),
+            Caps::empty()
+        );
+        // `caret` moves NEITHER predicate: it is the provenance machine's
+        // episode key, consumed by `controller::completion::advance`.
+        let moved = OverlayFacts {
+            caret: (9, 9),
+            ..facts
+        };
+        assert!((overlay.active)(&moved));
+        assert_eq!((overlay.grants)(&moved), Caps::POPUP);
+        let prev = crate::controller::completion::advance(
+            crate::controller::completion::Provenance::default(),
+            &facts,
+        );
+        assert_ne!(
+            crate::controller::completion::advance(prev, &moved),
+            crate::controller::completion::advance(prev, &facts),
+            "a moved caret must move the provenance machine"
+        );
+    }
+
+    #[test]
+    fn an_overlay_never_appears_on_a_classified_path() {
+        // The parity mechanism for `_input`: `classify` and `overlay` are
+        // disjoint entry points, so the primary transport cannot reach an
+        // overlay by accident.
+        let forest = crate::actions::providers::forest();
+        let chains = [
+            no_focus_owner(),
+            FocusChain {
+                nodes: vec![code_edit(7)],
+                attached_editor: Some(id(7)),
+                editor_mode: Some(vim_core::primitives::Mode::Insert),
+                ..Default::default()
+            },
+        ];
+        for chain in chains {
+            let path = forest.classify(&chain).expect("total");
+            for surface in &path.ids {
+                assert!(
+                    forest.get(surface).is_none_or(|s| s.overlay.is_none()),
+                    "overlay '{surface}' on a classified path"
+                );
+            }
+        }
+    }
+
+    static OVERLAY_WITH_PARENT: SurfaceSpec = SurfaceSpec {
+        id: "t.overlay_parented",
+        parent: Some("t.root"),
+        seal: Seal::Open,
+        grants: |_| Caps::empty(),
+        probe: |_| None,
+        overlay: Some(OverlaySpec {
+            active: |_| false,
+            grants: |_| Caps::empty(),
+            when: "under test",
+        }),
+        on_key: None,
+        yields_to_engine: false,
+        refuses_positional: true,
+    };
+
+    static OVERLAY_TAKES_POSITIONAL: SurfaceSpec = SurfaceSpec {
+        id: "t.overlay_positional",
+        parent: None,
+        seal: Seal::Open,
+        grants: |_| Caps::empty(),
+        probe: |_| None,
+        overlay: Some(OverlaySpec {
+            active: |_| false,
+            grants: |_| Caps::empty(),
+            when: "under test",
+        }),
+        on_key: None,
+        yields_to_engine: false,
+        refuses_positional: false,
+    };
+
+    #[test]
+    fn the_audit_names_an_overlay_that_declares_a_parent() {
+        // Membership is stacking, not parenthood: a parent would invite an
+        // upward walk into rules that were never meant to fire mid-Insert.
+        let errors = Forest::new(&[&OVERLAY_WITH_PARENT, &ROOT]).audit();
+        assert!(
+            errors.iter().any(|e| e.contains("declares a parent")),
+            "{errors:?}"
+        );
+    }
+
+    #[test]
+    fn the_audit_names_an_overlay_that_does_not_refuse_positional() {
+        let errors = Forest::new(&[&OVERLAY_TAKES_POSITIONAL]).audit();
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("must refuse the positional probe")),
+            "{errors:?}"
+        );
     }
 
     #[test]

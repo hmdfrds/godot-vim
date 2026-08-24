@@ -39,12 +39,13 @@
 //!
 //! Two surfaces never probe at all, and their positions are therefore free.
 //! `panel` is the forest root, reached only by following parent links, so no
-//! total probe can shadow it. `editor.completion` is reached by an explicit
-//! lookup from the `gui_input` transport, because whether the autocomplete
-//! popup is visible is a per-keystroke fact and the sampled `FocusChain` is
-//! cached per focus change. Both are excluded from the golden-fixture coverage
-//! audit for the same reason: a fixture for a surface that cannot be
-//! classified would prove nothing.
+//! total probe can shadow it. `editor.completion` is an OVERLAY: it declares
+//! an `OverlaySpec` instead of a probe, and `Forest::overlay` materialises it
+//! per keystroke for the `gui_input` transport, because whether the
+//! autocomplete popup is visible is a per-keystroke fact and the sampled
+//! `FocusChain` is cached per focus change. Both are excluded from the
+//! golden-fixture coverage audit for the same reason: a fixture for a surface
+//! that cannot be classified would prove nothing.
 //!
 //! Every clause above is a test in this module's `ordering` block, each
 //! written so that reordering the array fails the suite rather than a user's
@@ -110,11 +111,12 @@ pub(crate) const PROVIDERS: &[Provider] = &[
     // editor.nav / editor.insert — the attached CodeEdit, split by mode. First
     // refusal on our own editor, before anything can claim it as a text input.
     editor::PROVIDER,
-    // editor.completion — the autocomplete popup's keys. Position here is
-    // arbitrary and that is a property, not a hole: its probe is `|_| None`,
-    // so it is unreachable by classification from ANY position. The
-    // `gui_input` transport looks it up by name. It sits beside the other
-    // editor surfaces so a reader finds it where they expect.
+    // editor.completion, the autocomplete popup's keys, as an OVERLAY.
+    // Position here is arbitrary and that is a property, not a hole: its
+    // probe is `|_| None`, so it is unreachable by classification from ANY
+    // position; the `gui_input` transport asks `Forest::overlay` for it per
+    // keystroke instead. It sits beside the other editor surfaces so a
+    // reader finds it where they expect.
     completion::PROVIDER,
     // prompt — our own LineEdit, by instance identity. Ahead of `searchbox`
     // and `foreign`, both of which could otherwise claim it.
@@ -760,6 +762,107 @@ mod tests {
     }
 
     #[test]
+    fn a_handoff_default_is_gated_on_a_capability_no_classified_path_can_satisfy() {
+        // Audit A9'. `Disposition::Handoff` deletes the vim engine from the
+        // pipeline, and the engine is the only route out of Insert mode. This
+        // is what makes "Handoff implies the popup was up" a theorem rather
+        // than a habit, and what makes the variant unreachable on `_input`.
+        //
+        // Strictly stronger than "requires must be non-empty": `TEXTENTRY` is
+        // non-empty and `Caps::of_control` contributes it for any LineEdit or
+        // TextEdit, so the weaker form would admit a verb that fires on a
+        // dock filter box with no downstream stage to skip.
+        //
+        // Lives here rather than in `specs.rs` because it reads the golden
+        // fixture table, which is this module's.
+        use crate::actions::bind::Consumption;
+        let forest = forest();
+        let reachable = golden()
+            .iter()
+            .map(|case| forest.classify(&case.chain).expect("total").caps)
+            .fold(Caps::empty(), |a, b| a | b);
+        for (_, spec) in crate::actions::specs::registry().iter() {
+            if spec.default_consume == Some(Consumption::Handoff) {
+                assert!(
+                    !reachable.satisfies(spec.requires),
+                    "{}: Handoff skips the vim engine, so it must require a capability no \
+                     classified path can grant; the fixture table grants {reachable:?}",
+                    spec.id
+                );
+                assert!(
+                    !spec.requires.intersection(Caps::HANDOFF_SAFE).is_empty(),
+                    "{}: and that capability must be HANDOFF_SAFE",
+                    spec.id
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn at_most_one_overlay_is_active_for_any_facts() {
+        // V-O4. `Forest::overlay` is first-active-wins in PROVIDERS order,
+        // exactly as `classify` is; with one shipped overlay this can only
+        // fail when a second one arrives with an overlapping predicate, which
+        // is exactly when someone must decide the order on purpose.
+        use crate::actions::surface::OverlayFacts;
+        use vim_core::primitives::{Mode, Operator, VisualType};
+        let all = surfaces();
+        let modes = [
+            None,
+            Some(Mode::Normal),
+            Some(Mode::Insert),
+            Some(Mode::Replace),
+            Some(Mode::VirtualReplace),
+            Some(Mode::CommandLine),
+            Some(Mode::Visual(VisualType::Char)),
+            Some(Mode::Select(VisualType::Char)),
+            Some(Mode::OperatorPending(Operator::Delete)),
+        ];
+        for at_attached_editor in [false, true] {
+            for mode in modes {
+                for selected_index in [-1, 0] {
+                    let facts = OverlayFacts {
+                        at_attached_editor,
+                        mode,
+                        selected_index,
+                        caret: (0, 0),
+                    };
+                    let active = all
+                        .iter()
+                        .filter(|s| s.overlay.as_ref().is_some_and(|o| (o.active)(&facts)))
+                        .count();
+                    assert!(active <= 1, "{facts:?} activates {active} overlays");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_shipped_forest_declares_exactly_one_overlay() {
+        // Named, so a second overlay is a deliberate edit here rather than a
+        // silent join.
+        let overlays: Vec<_> = surfaces()
+            .iter()
+            .filter(|s| s.overlay.is_some())
+            .map(|s| s.id)
+            .collect();
+        assert_eq!(overlays, vec!["editor.completion"]);
+    }
+
+    #[test]
+    fn no_overlay_surface_can_reserve_a_prefix() {
+        // This is what keeps `Pending.caps` (`sequence.rs`) from ever
+        // snapshotting `Caps::POPUP`, and it is now asserted rather than
+        // coincidental: `editor_reachable` keeps multi-key LHSs refused at
+        // registration, so no reservation can exist for the pending layer to
+        // hold across keystrokes.
+        let registry = crate::actions::specs::registry();
+        let index = crate::actions::bind::builtin_index(&registry);
+        assert!(!index.reserves_any("editor.completion"));
+        assert!(index.editor_reachable("editor.completion"));
+    }
+
+    #[test]
     fn every_provider_verb_is_registered_and_namespaced_to_its_owner() {
         // The other half of the "one file plus one line" claim. A provider
         // that declares an `ActionSpec` nobody registers ships defaults that
@@ -810,16 +913,18 @@ mod tests {
         let forest = forest();
         let table = golden();
         assert!(table.len() >= 40, "table has only {} rows", table.len());
-        // `panel` and `editor.completion` are excluded, and for the same
-        // reason: neither probes. `panel` is reached by following parent
-        // links, `editor.completion` by an explicit lookup from the
-        // `gui_input` transport, so neither can have a fixture and a fixture
-        // for either would prove nothing. Every surface that DOES probe must
-        // still bring one — that is what makes the partition audit below
-        // meaningful rather than decorative.
+        // `panel` and every overlay are excluded, and for the same reason:
+        // neither probes. `panel` is reached by following parent links, an
+        // overlay is lent by `Forest::overlay` to the `gui_input` transport,
+        // so neither can have a fixture and a fixture for either would prove
+        // nothing. Deriving the exclusion from the declaration is what turns
+        // a silent exclusion into a declared one, and keeps a second overlay
+        // from silently joining an audit it cannot satisfy. Every surface
+        // that DOES probe must still bring one, which is what makes the
+        // partition audit below meaningful rather than decorative.
         for id in forest
             .ids()
-            .filter(|id| *id != "panel" && *id != "editor.completion")
+            .filter(|id| *id != "panel" && forest.get(id).is_none_or(|s| s.overlay.is_none()))
         {
             assert!(
                 table.iter().any(|c| c.ids.first() == Some(&id)),
@@ -1172,6 +1277,7 @@ mod tests {
                 seal: Seal::Open,
                 grants: |_| Caps::empty(),
                 probe: |_| None,
+                overlay: None,
                 on_key: None,
                 yields_to_engine: false,
                 refuses_positional: false,
@@ -1183,6 +1289,7 @@ mod tests {
                 seal: Seal::Open,
                 grants: |_| Caps::empty(),
                 probe: |_| None,
+                overlay: None,
                 on_key: None,
                 yields_to_engine: false,
                 refuses_positional: false,

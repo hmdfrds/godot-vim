@@ -56,6 +56,17 @@ pub(crate) enum Consumption {
     /// `handle_window_nav`'s result is discarded and `set_input_as_handled()`
     /// fires even with no focus owner and no target found.
     Void,
+    /// NEVER consume, and skip the plugin's own remaining stages. When the
+    /// action declines, behaves exactly as `Elastic`.
+    ///
+    /// NOT spellable in the `panelmap` grammar, and that is a safety property
+    /// rather than a convenience. `config/sandbox.rs` admits any
+    /// non-`Shortcut` `Map` from a committed project vimrc at every trust
+    /// tier, so a spellable handoff flag could be attached to a verb with
+    /// empty `requires` and suppress the vim engine on Escape. Carried by the
+    /// verb through [`super::action::ActionSpec::default_consume`], audit A9'
+    /// can see it.
+    Handoff,
 }
 
 /// Whether a rule fires on `InputEventKey::is_echo()` repeats.
@@ -125,21 +136,6 @@ pub(crate) enum RuleReject {
     MultiKeyOnEditorPath(SurfaceId),
     /// The first key starts a vim-core grammar sequence.
     VimGrammarPrefix(KeyEvent),
-    /// The surface is reached by an explicit transport lookup rather than by
-    /// classifying a focus chain, so it never carries a [`super::caps::Caps`]
-    /// grant — and the action needs one.
-    ///
-    /// `editor.completion` is the only such surface today. Its transport
-    /// (`GodotVimCore::completion_binding`) hands the spec straight to
-    /// `process_cycle`, which runs it with `ActionCtx::new(None, …)`; there is
-    /// no walked path, therefore no `caps.satisfies(spec.requires)` gate, and
-    /// the ctx-free FS verbs never read their ctx at all. Without this,
-    /// `panelmap editor.completion <C-y> godotvim.fs.delete` loaded with no
-    /// diagnostic and deleted a file from a keystroke typed in a script.
-    UnsatisfiableCapability {
-        surface: SurfaceId,
-        action: CompactString,
-    },
     /// The target parses and registers, but nothing on this surface's
     /// transport can dispatch it — so the key would be permanently dead while
     /// `:panelmap` reported it as eligible.
@@ -170,12 +166,6 @@ impl std::fmt::Display for RuleReject {
                 "'{}' begins a Vim command sequence; binding it here would \
                  destroy the key that follows it",
                 k.to_vim_notation()
-            ),
-            Self::UnsatisfiableCapability { surface, action } => write!(
-                f,
-                "surface '{surface}' is reached by an explicit transport lookup, never by \
-                 classifying the focus chain, so it grants no capabilities; \
-                 '{action}' declares requirements that can never be satisfied there"
             ),
             Self::UndispatchedTarget { surface, target } => write!(
                 f,
@@ -279,42 +269,13 @@ impl BindingIndex {
             .any(|editor| self.forest.is_ancestor_or_self(surface, editor))
     }
 
-    /// Whether `surface` is reached only by an explicit lookup from a
-    /// transport, never by classifying a focus chain.
-    ///
-    /// Structural rather than a hand-maintained list: an isolated node — no
-    /// declared parent and no declared child — cannot appear on a
-    /// [`super::surface::SurfacePath`] unless its own probe claims the chain,
-    /// and a surface whose probe claims would be the anchor and would carry
-    /// that anchor's grants. `editor.completion` is the only non-`Barrier`
-    /// surface in that position today, and `panel` — the other surface with no
-    /// parent — is excluded correctly because it is the root of everything
-    /// else.
-    ///
-    /// What follows from it is the whole reason it exists: such a surface has
-    /// no `caps`, because there is no classified path to compute them from, so
-    /// an action with a non-empty `requires` bound there can never satisfy its
-    /// own gate — and the transport, having no path either, never asks.
-    fn transport_only(&self, surface: SurfaceId) -> bool {
-        self.forest
-            .get(surface)
-            .is_some_and(|spec| spec.parent.is_none())
-            && !self
-                .forest
-                .ids()
-                .any(|id| self.forest.get(id).and_then(|s| s.parent) == Some(surface))
-    }
-
     /// Validate and install a rule. The only entry point user input reaches.
     ///
-    /// The registry is a parameter rather than a field because the index owns
-    /// no verbs: it is asked here for exactly one thing, whether the target's
-    /// declared `requires` can ever be satisfied where the rule is being put.
-    pub(crate) fn try_insert(
-        &mut self,
-        rule: Rule,
-        registry: &ActionRegistry,
-    ) -> Result<(), RuleReject> {
+    /// It no longer takes the registry: the old capability question it asked
+    /// there ("can this verb's `requires` ever be satisfied on this
+    /// surface?") is the pipeline gate's job now, on every surface alike, so
+    /// registration validates structure only.
+    pub(crate) fn try_insert(&mut self, rule: Rule) -> Result<(), RuleReject> {
         let Some(spec) = self.forest.get(rule.surface) else {
             return Err(RuleReject::UnknownSurface(rule.surface.into()));
         };
@@ -322,37 +283,23 @@ impl BindingIndex {
             return Err(RuleReject::BarrierSurface(rule.surface));
         }
         // V-DISPATCH: refuse at registration what no transport can honour.
-        // The alternative is not "it quietly does nothing" — it is a rule that
-        // `:panelmap` reports as eligible and that either fires with no gate
-        // at all or never fires. Both are the silent dead key this design
-        // exists to prevent, and one of them deletes files.
-        match &rule.target {
-            RuleTarget::Action(id) if self.transport_only(rule.surface) => {
-                let unsatisfiable = registry
-                    .get(*id)
-                    .is_none_or(|action| !action.requires.is_empty());
-                if unsatisfiable {
-                    return Err(RuleReject::UnsatisfiableCapability {
-                        surface: rule.surface,
-                        action: registry.name_of(*id).unwrap_or("<unregistered>").into(),
-                    });
-                }
-            }
-            // `<Shortcut>(path)` is parsed, registered and printed as
-            // eligible, and then `run_candidate` unconditionally declines it
-            // after a `log::warn!` nobody sees — the default Log Level is Off.
-            // With `<void>` that is a permanently dead key the introspector
-            // actively confirms will work. Delegating to Godot's own shortcuts
-            // needs a cycle audit and an injection budget it does not have
-            // yet; until then the honest answer is at registration, not at
-            // dispatch.
-            RuleTarget::Shortcut(path) => {
-                return Err(RuleReject::UndispatchedTarget {
-                    surface: rule.surface,
-                    target: format!("<Shortcut>({path})").into(),
-                });
-            }
-            _ => {}
+        // `<Shortcut>(path)` is parsed, registered and printed as eligible,
+        // and then `run_candidate` unconditionally declines it after a
+        // `log::warn!` nobody sees, since the default Log Level is Off. With
+        // `<void>` that is a permanently dead key the introspector actively
+        // confirms will work. Delegating to Godot's own shortcuts needs a
+        // cycle audit and an injection budget it does not have yet; until
+        // then the honest answer is at registration, not at dispatch.
+        //
+        // A capability-bearing verb on the overlay surface is NOT refused
+        // here any more: the overlay resolves through the same pipeline as
+        // every classified surface, so `hit_from`'s capability gate is real
+        // there and such a rule loads, then goes inert with an explain line.
+        if let RuleTarget::Shortcut(path) = &rule.target {
+            return Err(RuleReject::UndispatchedTarget {
+                surface: rule.surface,
+                target: format!("<Shortcut>({path})").into(),
+            });
         }
         if self.editor_reachable(rule.surface) {
             if rule.lhs.len() > 1 {
@@ -692,16 +639,24 @@ fn rule_from(
             CompactString::from(format!("editor shortcut {path}")),
         ),
     };
+    let consume = if map.flags.void {
+        // `<void>` on the rule always wins over the verb default, so a user
+        // can raise consumption. There is no spelling that lowers it back to
+        // `Elastic`; that is a stated residual.
+        Consumption::Void
+    } else {
+        match &target {
+            RuleTarget::Action(id) => registry.get(*id).and_then(|s| s.default_consume),
+            _ => None,
+        }
+        .unwrap_or(Consumption::Elastic)
+    };
     Ok(Rule {
         surface,
         lhs: map.lhs.clone(),
         target,
         params: map.params.clone(),
-        consume: if map.flags.void {
-            Consumption::Void
-        } else {
-            Consumption::Elastic
-        },
+        consume,
         repeat: if map.flags.norepeat {
             Repeat::Suppress
         } else {
@@ -742,8 +697,9 @@ pub(crate) fn apply_text(
         let outcome = match parse_panel_line(line) {
             Ok(None) => continue,
             Err(error) => Err(RuleReject::Parse(error)),
-            Ok(Some(PanelLine::Map(map))) => rule_from(&map, registry, index.forest(), owner)
-                .and_then(|r| index.try_insert(r, registry)),
+            Ok(Some(PanelLine::Map(map))) => {
+                rule_from(&map, registry, index.forest(), owner).and_then(|r| index.try_insert(r))
+            }
             Ok(Some(PanelLine::Unmap { surface, lhs })) => {
                 let declared = index.forest().ids().find(|id| *id == surface.as_str());
                 match declared {
@@ -881,7 +837,16 @@ mod tests {
     /// provider files. Columns: surface, LHS, action id, `<physical>`,
     /// consumption, repeat, `<shift>`.
     #[allow(clippy::type_complexity, reason = "a golden table is a table")]
-    const SHIPPED_DEFAULTS: &[(SurfaceId, &str, &str, bool, Consumption, Repeat, bool)] = &[
+    const SHIPPED_DEFAULTS: &[(
+        SurfaceId,
+        &str,
+        &str,
+        bool,
+        Consumption,
+        Repeat,
+        bool,
+        &[(&str, i64)],
+    )] = &[
         // Cross-panel focus. `<void>` reproduces input.rs, where
         // handle_window_nav's result is discarded and set_input_as_handled()
         // fires even when nothing was found. `<norepeat>` keeps a held Ctrl+J
@@ -894,6 +859,7 @@ mod tests {
             Consumption::Void,
             Repeat::Suppress,
             false,
+            &[],
         ),
         (
             "panel",
@@ -903,6 +869,7 @@ mod tests {
             Consumption::Void,
             Repeat::Suppress,
             false,
+            &[],
         ),
         (
             "panel",
@@ -912,6 +879,7 @@ mod tests {
             Consumption::Void,
             Repeat::Suppress,
             false,
+            &[],
         ),
         (
             "panel",
@@ -921,6 +889,7 @@ mod tests {
             Consumption::Void,
             Repeat::Suppress,
             false,
+            &[],
         ),
         // The autocomplete popup (P9). Every one is elastic and none carries
         // `<physical>`: the verdict on the `gui_input` transport IS the
@@ -936,6 +905,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "editor.completion",
@@ -945,6 +915,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "editor.completion",
@@ -954,6 +925,31 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
+        ),
+        // Vim's real popup keys (insert.txt:1399-1410). `<C-y>` carries
+        // `require_selection=0` because pressing it IS choosing; both are
+        // POPUP-gated, so with none up they reach vim-core's CopyCharAbove /
+        // CopyCharBelow untouched.
+        (
+            "editor.completion",
+            "<C-y>",
+            "godotvim.completion.confirm",
+            false,
+            Consumption::Elastic,
+            Repeat::Allow,
+            false,
+            &[("require_selection", 0)],
+        ),
+        (
+            "editor.completion",
+            "<C-e>",
+            "godotvim.completion.dismiss",
+            false,
+            Consumption::Elastic,
+            Repeat::Allow,
+            false,
+            &[],
         ),
         (
             "editor.completion",
@@ -963,6 +959,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "editor.completion",
@@ -972,33 +969,30 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
-        (
-            "editor.completion",
-            "<Esc>",
-            "godotvim.completion.dismiss",
-            false,
-            Consumption::Elastic,
-            Repeat::Allow,
-            false,
-        ),
+        // `navigate` declares `default_consume: Handoff`, folded into the
+        // rule at registration: acceptance skips the engine without
+        // consuming, so CodeEdit's own popup handling moves the selection.
         (
             "editor.completion",
             "<Up>",
             "godotvim.completion.navigate",
             false,
-            Consumption::Elastic,
+            Consumption::Handoff,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "editor.completion",
             "<Down>",
             "godotvim.completion.navigate",
             false,
-            Consumption::Elastic,
+            Consumption::Handoff,
             Repeat::Allow,
             false,
+            &[],
         ),
         // Dock item navigation. Elastic: `j` at the end of a list declines and
         // the key falls through, exactly as dock.rs does today.
@@ -1010,6 +1004,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "dock",
@@ -1019,6 +1014,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "dock",
@@ -1028,6 +1024,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "dock",
@@ -1037,6 +1034,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "dock",
@@ -1046,6 +1044,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         // Enter and Escape complete the dock keyset — `dock_action_for` binds
         // seven keys, not five. Neither carries `<physical>`: a named key
@@ -1058,6 +1057,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "dock",
@@ -1067,6 +1067,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         // The filter box. Shift-tolerant, and the ONLY two rules that are:
         // handle_search_input rejects ctrl/alt/meta but not shift, while a
@@ -1079,6 +1080,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             true,
+            &[],
         ),
         (
             "searchbox",
@@ -1088,6 +1090,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             true,
+            &[],
         ),
         // nvim-tree-flavoured file operations. `R` refreshes while `r`
         // renames: Shift is a discriminant here, carried by the character
@@ -1100,6 +1103,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "dock.filesystem",
@@ -1109,6 +1113,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "dock.filesystem",
@@ -1118,6 +1123,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "dock.filesystem",
@@ -1127,6 +1133,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "dock.filesystem",
@@ -1136,6 +1143,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         // The debugger provider (P9). Transcribed from `providers/debugger.rs`
         // independently, which is the point of this table: a provider that
@@ -1150,6 +1158,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "dock.debugger",
@@ -1159,6 +1168,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "dock.debugger",
@@ -1168,6 +1178,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
         (
             "dock.debugger",
@@ -1177,6 +1188,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
+            &[],
         ),
     ];
 
@@ -1199,7 +1211,9 @@ mod tests {
                 .collect::<Vec<_>>()
         );
 
-        for (surface, notation, action, physical, consume, repeat, shift) in SHIPPED_DEFAULTS {
+        for (surface, notation, action, physical, consume, repeat, shift, params) in
+            SHIPPED_DEFAULTS
+        {
             let lhs = crate::actions::keys::parse_lhs(notation).expect(notation);
             let rule = resolve(&index, surface, &lhs)
                 .unwrap_or_else(|| panic!("no rule at {surface} {notation}"));
@@ -1209,6 +1223,11 @@ mod tests {
             assert_eq!(rule.consume, *consume, "{surface} {notation} consumption");
             assert_eq!(rule.repeat, *repeat, "{surface} {notation} repeat");
             assert_eq!(rule.shift_tolerant, *shift, "{surface} {notation} <shift>");
+            assert_eq!(
+                rule.params.iter().collect::<Vec<_>>(),
+                *params,
+                "{surface} {notation} params"
+            );
             assert!(
                 !rule.nowait,
                 "{surface} {notation} — nothing ships <nowait>"
@@ -1231,6 +1250,22 @@ mod tests {
             "editor.completion" => "godotvim.completion",
             "searchbox" => "godotvim.searchbox",
             other => unreachable!("no provider ships defaults for '{other}'"),
+        }
+    }
+
+    #[test]
+    fn the_new_defaults_are_legal_on_an_editor_reachable_surface() {
+        // Asserted DIRECTLY rather than through loading, because the failure
+        // mode is a `debug_assert!` in `apply_text` under
+        // `Provenance::Builtin` whose message reads as unrelated. Neither key
+        // starts a vim grammar sequence, so V8 admits both on
+        // `editor.completion`, and with no popup they still reach vim-core's
+        // CopyCharAbove / CopyCharBelow.
+        for c in ['y', 'e'] {
+            assert!(
+                !starts_vim_grammar_sequence(ctrl(c)),
+                "<C-{c}> must not start a grammar sequence"
+            );
         }
     }
 
@@ -1461,9 +1496,9 @@ mod tests {
         // ancestor of any editor surface, and must not be.
         let index = empty_index();
         // `editor.completion` is reachable by its own name and by nothing
-        // else — it is a root with no probe, dispatched by direct lookup from
-        // `gui_input`. It must still be caught, because V8's multi-key and
-        // grammar-prefix rejections are exactly what stop a user binding
+        // else: it is an overlay, lent to `gui_input` per keystroke by
+        // `Forest::overlay`. It must still be caught, because V8's multi-key
+        // and grammar-prefix rejections are exactly what stop a user binding
         // `<C-w>` there and breaking `<C-w>s` inside the editor.
         for surface in ["panel", "editor.nav", "editor.insert", "editor.completion"] {
             assert!(index.editor_reachable(surface), "{surface}");
@@ -1769,43 +1804,51 @@ mod tests {
     }
 
     #[test]
-    fn a_transport_only_surface_refuses_a_verb_it_could_never_gate() {
-        // THE file-deleting one. `editor.completion` is reached by an explicit
-        // lookup from `handle_gui_input_impl`, never by classifying a chain,
-        // so there is no `SurfacePath` and therefore no `Caps` — the
-        // capability gate every walked surface gets at `hit_from` structurally
-        // cannot run. `godotvim.fs.delete` is
-        // `run: |_cx| filesystem_explorer::delete_selected()`: it never reads
-        // its ctx and drives Godot's own FileSystem delete, so a `<C-y>` typed
-        // in a script with the popup up deleted a file. It loaded with zero
-        // diagnostics.
+    fn a_capability_bearing_verb_bound_on_an_overlay_is_gated_by_the_pipeline() {
+        // THE file-deleting one, same force, new wall. `godotvim.fs.delete`
+        // is `run: |_cx| filesystem_explorer::delete_selected()`: it never
+        // reads its ctx and drives Godot's own FileSystem delete. On the old
+        // transport-only surface the capability gate structurally could not
+        // run, so this line was refused at registration. The overlay resolves
+        // through the one pipeline now, so the line LOADS, and the gate that
+        // stops it is `hit_from`'s: the overlay's caps are `Caps::POPUP` at
+        // most, never `FILEOPS`, so the walk exhausts and nothing runs.
         let mut index = empty_index();
-        let mut diagnostics = Vec::new();
-        apply_text(
+        user_ok(
             &mut index,
-            &registry(),
             "panelmap editor.completion <C-y> godotvim.fs.delete",
-            &MappingOwner::User,
-            "test",
-            Provenance::User,
-            &mut diagnostics,
-        );
-        assert_eq!(diagnostics.len(), 1, "exactly one diagnostic");
-        assert_eq!(
-            diagnostics[0].reject,
-            RuleReject::UnsatisfiableCapability {
-                surface: "editor.completion",
-                action: "godotvim.fs.delete".into(),
-            }
         );
         assert!(
-            resolve(&index, "editor.completion", &[ctrl('y')]).is_none(),
-            "no rule may be installed"
+            resolve(&index, "editor.completion", &[ctrl('y')]).is_some(),
+            "the rule installs; the pipeline is the gate"
         );
 
-        // …and the verbs that surface is FOR still install. All six shipped
-        // completion verbs declare `requires: Caps::empty()`, which is what
-        // makes the rule "empty requires only" rather than "no rules here".
+        let forest = crate::actions::providers::forest();
+        let path = forest
+            .overlay(&crate::actions::surface::OverlayFacts {
+                at_attached_editor: true,
+                mode: Some(vim_core::primitives::Mode::Insert),
+                selected_index: 0,
+                caret: (0, 0),
+            })
+            .expect("popup-open facts activate the overlay");
+        let reg = registry();
+        let probes = crate::actions::keys::Probes::from_key(ctrl('y'));
+        let claims = |_: KeyEvent| false;
+        let resolution = crate::actions::resolve::resolve(&crate::actions::resolve::ResolveInput {
+            probes: &probes,
+            path: &path,
+            index: &index,
+            registry: &reg,
+            vim_claims: &claims,
+        });
+        assert_eq!(
+            resolution,
+            crate::actions::resolve::Resolution::None(crate::actions::resolve::Stop::Exhausted),
+            "nothing runs and no file is deleted"
+        );
+
+        // …and the verbs that surface is FOR still install and resolve.
         user_ok(
             &mut index,
             "panelmap editor.completion <C-y> godotvim.completion.confirm",
@@ -1815,8 +1858,9 @@ mod tests {
 
     #[test]
     fn a_capability_bearing_verb_is_still_fine_on_a_classified_surface() {
-        // The guard on the guard: `transport_only` must not catch `panel`,
-        // which has no parent either but is the root of the whole forest.
+        // The guard on the guard, retargeted: `panel` has no parent, exactly
+        // as the overlay has none, and its rules must keep installing and
+        // resolving through the classified pipeline.
         let mut index = empty_index();
         user_ok(&mut index, "panelmap panel <C-y> godotvim.item.next");
         assert!(resolve(&index, "panel", &[ctrl('y')]).is_some());
@@ -1824,20 +1868,28 @@ mod tests {
 
     #[test]
     fn every_shipped_completion_default_still_loads() {
-        // The count the reject must not move: eight rules on
-        // `editor.completion`, six distinct verbs, every one `Caps::empty()`.
+        // Nine rules, six distinct verbs, and an exact per-verb capability
+        // expectation: the trigger family requires nothing so the popup can
+        // be OPENED with none up, while confirm/dismiss/navigate require the
+        // popup they act on.
         let index = builtin_index(&registry());
-        assert_eq!(index.rules_on("editor.completion").count(), 8);
+        assert_eq!(index.rules_on("editor.completion").count(), 9);
         let reg = registry();
         for rule in index.rules_on("editor.completion") {
             let RuleTarget::Action(id) = rule.target else {
                 panic!("a completion default must target an action");
             };
-            assert!(
-                reg.get(id).is_some_and(|s| s.requires.is_empty()),
-                "{:?} needs capabilities this surface cannot grant",
-                rule.lhs
-            );
+            let spec = reg.get(id).expect("registered");
+            let want = match spec.id {
+                "godotvim.completion.trigger"
+                | "godotvim.completion.next"
+                | "godotvim.completion.prev" => Caps::empty(),
+                "godotvim.completion.confirm"
+                | "godotvim.completion.dismiss"
+                | "godotvim.completion.navigate" => Caps::POPUP,
+                other => panic!("unexpected completion verb {other}"),
+            };
+            assert_eq!(spec.requires, want, "{:?}", rule.lhs);
         }
     }
 
@@ -1959,8 +2011,76 @@ mod tests {
         desc: "step over",
         requires: Caps::empty(),
         host_invocable: false,
+        default_consume: None,
         run: |_| Outcome::Declined,
     };
+
+    /// A verb that declares a consumption default, so the fold in `rule_from`
+    /// is observable without any shipped verb carrying one.
+    static HANDS_OFF: ActionSpec = ActionSpec {
+        id: "thirdparty.test.handoff",
+        desc: "declares Handoff as its default consumption",
+        requires: Caps::empty(),
+        host_invocable: false,
+        default_consume: Some(Consumption::Handoff),
+        run: |_| Outcome::Handled,
+    };
+
+    #[test]
+    fn a_verb_default_consumption_reaches_the_rule() {
+        // The verb declares what its rules default to, folded into
+        // `Rule.consume` at REGISTRATION, so `dispose` still reads one field.
+        let mut registry = registry();
+        registry.register(&HANDS_OFF);
+        let mut index = empty_index();
+        let mut diagnostics = Vec::new();
+        apply_text(
+            &mut index,
+            &registry,
+            "panelmap dock <Up> thirdparty.test.handoff",
+            &MappingOwner::User,
+            "test",
+            Provenance::User,
+            &mut diagnostics,
+        );
+        assert_eq!(diagnostics, Vec::new());
+        let rule = resolve(&index, "dock", &[KeyEvent::new(Key::Up, Modifiers::NONE)])
+            .expect("registered");
+        assert_eq!(rule.consume, Consumption::Handoff);
+    }
+
+    #[test]
+    fn void_on_the_rule_beats_the_verb_default() {
+        // `<void>` always raises consumption; the verb default never lowers a
+        // flag the user wrote.
+        let mut registry = registry();
+        registry.register(&HANDS_OFF);
+        let mut index = empty_index();
+        let mut diagnostics = Vec::new();
+        apply_text(
+            &mut index,
+            &registry,
+            "panelmap <void> dock <Up> thirdparty.test.handoff",
+            &MappingOwner::User,
+            "test",
+            Provenance::User,
+            &mut diagnostics,
+        );
+        assert_eq!(diagnostics, Vec::new());
+        let rule = resolve(&index, "dock", &[KeyEvent::new(Key::Up, Modifiers::NONE)])
+            .expect("registered");
+        assert_eq!(rule.consume, Consumption::Void);
+    }
+
+    #[test]
+    fn a_rule_with_no_verb_default_is_elastic() {
+        // A shipped verb with no flag and no `default_consume` stays exactly
+        // what it always was.
+        let mut index = empty_index();
+        user_ok(&mut index, "panelmap dock j godotvim.item.next");
+        let rule = resolve(&index, "dock", &[ch('j')]).expect("registered");
+        assert_eq!(rule.consume, Consumption::Elastic);
+    }
 
     #[test]
     fn a_newly_registered_action_becomes_bindable_with_no_index_changes() {

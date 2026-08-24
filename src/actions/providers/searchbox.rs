@@ -29,6 +29,7 @@ pub(crate) static SEARCHBOX: SurfaceSpec = SurfaceSpec {
         (chain.focus_is("LineEdit") && chain.sibling_nav_control.is_some())
             .then_some(Anchor::Node(0))
     },
+    overlay: None,
     on_key: None,
     refuses_positional: false,
     yields_to_engine: false,

@@ -257,9 +257,13 @@ pub(crate) fn execute(
         } => eval_to_host_result(request.id(), expression.as_str(), mode_str),
 
         HostRequest::RequestCompletion { .. } => {
-            if editor.is_code_completion_enabled() {
-                editor.request_code_completion_ex().force(false).done();
-            }
+            // No `is_code_completion_enabled()` gate: that CodeEdit flag is
+            // never set by Godot's script editor, so the gate made this arm
+            // unconditionally dead. Forced, because this arm is reached only
+            // from i_CTRL-N / i_CTRL-P (vim-core grammar/handlers/insert.rs),
+            // so it is always user-initiated; unforced it self-cancels after
+            // an open paren. Godot-bound and therefore review-only.
+            editor.request_code_completion_ex().force(true).done();
             host_success(request.id())
         }
 

@@ -15,7 +15,7 @@
 //! - [`perf`] -- per-keystroke latency tracking (`:perf`)
 //! - [`vimdebug`] -- effect inspector (`:vimdebug watch/step`)
 
-mod completion;
+pub(crate) mod completion;
 mod passthrough;
 pub(crate) mod perf;
 mod pipeline_outcome;
@@ -59,6 +59,14 @@ pub(crate) struct TransientShellState {
     vimdebug: vimdebug::VimdebugState,
     /// Pass-2 effects deferred by vimdebug step-mode.
     pending_step_effects: Option<Vec<vim_core::effects::Effect>>,
+    /// Whether the completion selection was chosen by the user, advanced once
+    /// per keystroke by `process_cycle_impl` from the overlay facts.
+    ///
+    /// On the transient state and NOT on `GodotVimCore`, for a decisive
+    /// reason: the port writes `explicit = true` from `select()` and
+    /// `request()`, and the port is constructed inside `process_cycle_impl`
+    /// where `&mut ctx.transient` is in hand.
+    completion: completion::Provenance,
 }
 
 impl TransientShellState {
@@ -68,6 +76,7 @@ impl TransientShellState {
             pending_ui_actions: Vec::new(),
             vimdebug: vimdebug::VimdebugState::default(),
             pending_step_effects: None,
+            completion: completion::Provenance::default(),
         }
     }
 
@@ -81,11 +90,13 @@ impl TransientShellState {
             pending_ui_actions,
             vimdebug,
             pending_step_effects,
+            completion,
         } = self;
         *operations_this_cycle = 0;
         pending_ui_actions.clear();
         vimdebug.set_mode(vimdebug::VimdebugMode::Off);
         *pending_step_effects = None;
+        *completion = completion::Provenance::default();
     }
 }
 
@@ -1100,22 +1111,23 @@ impl VimController {
     // ── Processing entry points ────────────────────────────────────────
 
     /// Single entry point for keystroke processing from `gui_input`.
-    /// `completion_binding` is what the `editor.completion` surface resolved
-    /// this key to, resolved by the caller because the `BindingIndex` lives on
+    /// `plan` is what the `editor.completion` overlay resolved this key to,
+    /// resolved by the caller because the `BindingIndex` lives on
     /// `GodotVimCore` and the controller deliberately holds no reference to it
     /// — a controller that could read the binding plane could also read a
-    /// stale generation of it.
+    /// stale generation of it. `Candidate` copies the `&'static ActionSpec`
+    /// out of the registry, so no borrow crosses the seam.
     pub(crate) fn process_cycle(
         &mut self,
         key: KeyEvent,
         editor: &mut Gd<CodeEdit>,
-        completion_binding: Option<&'static crate::actions::action::ActionSpec>,
+        plan: crate::actions::resolve::OverlayPlan,
     ) -> PipelineOutcome {
         let ControllerPhase::Attached { ref mut session } = self.phase else {
             log::warn!("process_cycle: not attached");
             return PipelineOutcome::Passthrough;
         };
-        process::process_cycle_impl(session, &mut self.ctx, key, editor, completion_binding)
+        process::process_cycle_impl(session, &mut self.ctx, key, editor, plan)
     }
 
     /// Force-resolve a pending mapping after timeout, then drain expanded keys.

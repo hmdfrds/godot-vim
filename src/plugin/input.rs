@@ -13,10 +13,10 @@ use godot::global::Key;
 use godot::prelude::*;
 use vim_core::keymap::KeyEvent;
 
-use crate::actions::action::{ActionCtx, ActionSpec, Params};
+use crate::actions::action::{ActionCtx, Params};
 use crate::actions::outcome::Outcome;
 use crate::actions::resolve::{
-    self, Candidate, CandidateTarget, Disposition, Resolution, ResolveInput,
+    self, Candidate, CandidateTarget, Disposition, OverlayPlan, Resolution, ResolveInput,
 };
 use crate::actions::sequence::SeqStep;
 use crate::actions::surface::{FocusChain, Seal, SurfacePath};
@@ -92,6 +92,26 @@ fn plan_effects(plan: &Plan) -> (Disposition, TimerAction) {
         // the timer is what keeps a stale timeout from firing into the action
         // that just ran.
         Plan::Run(_, _) => (Disposition::Ignore, TimerAction::Stop),
+    }
+}
+
+/// Perform a disposition on the primary transport.
+///
+/// An exhaustive match, not `== Disposition::Consume`, so a future variant is
+/// a compile error at the two places that commit rather than silently taking
+/// the not-consumed path.
+fn commit(viewport: &mut Gd<Viewport>, disposition: Disposition) {
+    match disposition {
+        Disposition::Consume => viewport.set_input_as_handled(),
+        Disposition::Ignore => {}
+        // Unreachable here by audit A9': the only verb that can produce it
+        // requires `Caps::POPUP`, which no classified path grants. Logged
+        // rather than folded silently into "not consumed", because the day it
+        // fires is the day someone weakened the audit. NOT a panic: a panic
+        // across the FFI boundary in an input handler is fatal (see ec417b3).
+        Disposition::Handoff => log::error!(
+            "input: Disposition::Handoff on the primary transport; audit A9' was weakened"
+        ),
     }
 }
 
@@ -296,9 +316,7 @@ impl GodotVimCore {
             // Every other arm is terminal: `plan_effects` has already said
             // everything there is to say about the keystroke.
             Plan::Drop | Plan::Swallow | Plan::Arm | Plan::Clear => {
-                if immediate == Disposition::Consume {
-                    viewport.set_input_as_handled();
-                }
+                commit(&mut viewport, immediate);
                 return;
             }
         };
@@ -317,8 +335,8 @@ impl GodotVimCore {
                 "input: consumed {matched} via {}",
                 candidates.first().map_or("<none>", |c| c.surface)
             );
-            viewport.set_input_as_handled();
         }
+        commit(&mut viewport, disposition);
     }
 
     /// §5.10 step 3 — `Tree`/`ItemList` incremental type-to-search, off for
@@ -552,57 +570,6 @@ impl GodotVimCore {
         }
     }
 
-    /// Resolve a keystroke on the `editor.completion` surface (P9).
-    ///
-    /// This is the whole of "completion routing became rebindable". It is a
-    /// **direct lookup by surface name**, not a forest walk: `editor.completion`
-    /// declares `probe: |_| None` because popup visibility is a per-keystroke
-    /// fact while the sampled `FocusChain` is cached per focus change, so a
-    /// probe here would answer from a cache that is stale by construction.
-    ///
-    /// Three things a walked surface would get and this one deliberately does
-    /// not, all inert rather than wrong:
-    ///
-    /// - **`<physical>`** — only probe 1 (the canonicalized logical key) is
-    ///   offered. A positional guess inside the attached editor is what
-    ///   `refuses_positional` exists to forbid; honouring it here would turn a
-    ///   Dvorak `Ctrl+p` into a completion key.
-    /// - **`<void>` / `<norepeat>`** — the verdict is the action's own
-    ///   `Outcome`, i.e. always elastic. That is not a shortcut: consuming
-    ///   `<CR>` when no popup is up would stop Enter inserting a newline, so
-    ///   `Void` has no correct meaning on this surface.
-    /// - **multi-key sequences** — rejected at registration by V8, since
-    ///   `editor.completion` is editor-reachable.
-    fn completion_binding(&self, key: vim_core::keymap::KeyEvent) -> Option<&'static ActionSpec> {
-        let lhs = [crate::actions::keys::canonicalize(key)];
-        let rule = self
-            .bindings
-            .rule_for(crate::actions::providers::completion::SURFACE, &lhs)?;
-        match rule.target {
-            crate::actions::action::RuleTarget::Action(id) => self
-                .actions
-                .get(id)
-                // THE gate every walked surface gets at `resolve.rs`'s
-                // `hit_from`, and that this transport structurally cannot: it
-                // has no classified path, so it has no `Caps` to satisfy
-                // anything with. Empty `requires` is therefore the only
-                // requirement it can honour, and anything else must not run —
-                // `process_cycle` calls `(spec.run)` with
-                // `ActionCtx::new(None, …)`, and the ctx-free FS verbs never
-                // read their ctx at all, so `godotvim.fs.delete` bound here
-                // would delete a file from a keystroke typed in a script.
-                //
-                // `BindingIndex::try_insert` rejects such a rule at
-                // registration; this is the second wall, because the cost of
-                // the two disagreeing is a deleted file.
-                .filter(|spec| spec.requires.is_empty()),
-            // `native` and `<Shortcut>(…)` have no meaning against a popup:
-            // both mean "not ours", which on this transport is exactly what
-            // `None` already says.
-            _ => None,
-        }
-    }
-
     /// Per-editor keystroke handler. Connected to `gui_input` on the attached CodeEdit.
     pub(super) fn handle_gui_input_impl(&mut self, event: Gd<InputEvent>) {
         let Some(editor) = &self.attached_editor else {
@@ -684,20 +651,79 @@ impl GodotVimCore {
         };
         let mut ed = editor.clone();
 
-        // Resolved here and passed down, rather than looked up inside the
-        // controller: the `BindingIndex` lives on the plugin, and the
-        // controller holding a reference to it would be a second cache of the
-        // index generation to keep honest. Deliberately AFTER the IME guard
-        // above — a preedit must reach `TextEdit` untouched, and that guard is
-        // one of the three reasons these keys never moved to `_input`.
-        let completion_binding = self.completion_binding(key);
+        // The overlay layer, at the exact site the transport-only lookup
+        // occupied: AFTER the IME guard above (a preedit must reach TextEdit
+        // untouched) and before the vim engine sees anything. Resolved here
+        // and handed down, rather than looked up inside the controller: the
+        // `BindingIndex` lives on the plugin, and the controller holding a
+        // reference to it would be a second cache of the index generation to
+        // keep honest.
+        //
+        // No chain is sampled and `ChainCache` is not read. The guards at the
+        // top of this function have already established that this event is on
+        // the attached editor and that it has focus, which is both facts the
+        // overlay's predicate asks; `FocusChain::sample` would walk twenty
+        // ancestors to answer questions nothing here asks, and for a floated
+        // editor it would answer them against the wrong viewport.
+        let plan = {
+            let index = &self.bindings;
+            let registry = &self.actions;
+            let facts = crate::actions::surface::OverlayFacts {
+                at_attached_editor: true,
+                mode: self.controller.as_ref().map(VimController::mode),
+                selected_index: ed.get_code_completion_selected_index(),
+                caret: (ed.get_caret_line(), ed.get_caret_column()),
+            };
+            // Candidates only; the facts cross on BOTH arms, because the
+            // provenance machine advances on every keystroke, typed
+            // characters included.
+            let candidates = match index.forest().overlay(&facts) {
+                None => Vec::new(),
+                Some(path) => {
+                    // The SAME key vocabulary every other surface uses:
+                    // langmap applied and a Latin collapse offered, neither of
+                    // which `parse_godot_key` does. Probe 3 is withheld by
+                    // `refuses_positional`, audited by V-O3.
+                    let probes = crate::actions::keys::probes(&key_event, self.langmap.as_ref());
+                    // Never consulted: the overlay declares
+                    // `yields_to_engine: false` (audited), so `resolve`'s S6
+                    // gate does not reach it. Written out so a future flip is
+                    // a deliberate edit.
+                    let claims = |_: KeyEvent| false;
+                    let input = ResolveInput {
+                        probes: &probes,
+                        path: &path,
+                        index,
+                        registry,
+                        vim_claims: &claims,
+                    };
+                    match resolve::resolve(&input) {
+                        Resolution::Run { candidates, .. } => candidates,
+                        // A4': EVERY stop, `Stop::Native` included, hands the
+                        // key onward. `native` here is exactly as powerful as
+                        // no rule at all, which is what keeps three lines in a
+                        // committed project vimrc from suppressing the engine
+                        // on <Esc>, <C-c> and <C-[>: `hit_from` returns
+                        // `Hit::Native` ABOVE the capability test, so a
+                        // `native` rule carries no `requires` and cannot be
+                        // gated.
+                        Resolution::None(_) => Vec::new(),
+                    }
+                }
+            };
+            OverlayPlan {
+                facts,
+                candidates,
+                is_echo: key_event.is_echo(),
+            }
+        };
 
         let outcome = {
             let _guard = ProcessingKeyGuard::new(&mut self.processing_key);
             let Some(controller) = &mut self.controller else {
                 return;
             };
-            controller.process_cycle(key, &mut ed, completion_binding)
+            controller.process_cycle(key, &mut ed, plan)
         };
 
         let snap = {
@@ -1168,6 +1194,46 @@ mod tests {
             base,
             chain_key(Some(id(1)), Some(id(2)), Some(Mode::Normal), Some(id(9)), 7)
         );
+    }
+
+    #[test]
+    fn only_input_classifies_and_only_gui_input_lends_an_overlay() {
+        // The parity mechanism, stated from the transport side.
+        // `handle_input_impl` constructs no `OverlayFacts` (a source-level
+        // claim, left to review; noted in the cutover commit body), and the
+        // two entry points below are what its absence means: the facts a
+        // transport does not fill lend no overlay, and classification never
+        // produces an overlay surface.
+        use crate::actions::surface::{FocusChain, OverlayFacts};
+        let forest = crate::actions::providers::forest();
+        assert!(
+            forest.overlay(&OverlayFacts::default()).is_none(),
+            "default facts (no attachment, no mode, no popup) lend nothing"
+        );
+        let chains = [
+            FocusChain::default(),
+            FocusChain {
+                nodes: vec![ChainNode::new(
+                    "CodeEdit",
+                    "CodeEdit",
+                    id(7),
+                    crate::actions::surface::ClassMask::CODE_EDIT
+                        .union(crate::actions::surface::ClassMask::TEXT_EDIT),
+                )],
+                attached_editor: Some(id(7)),
+                editor_mode: Some(Mode::Insert),
+                ..Default::default()
+            },
+        ];
+        for chain in chains {
+            let path = forest.classify(&chain).expect("total");
+            for surface in &path.ids {
+                assert!(
+                    forest.get(surface).is_none_or(|s| s.overlay.is_none()),
+                    "classification produced overlay '{surface}'"
+                );
+            }
+        }
     }
 
     // ── (b) The five consumption arms ────────────────────────────────

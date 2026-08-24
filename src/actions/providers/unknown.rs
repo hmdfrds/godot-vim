@@ -42,6 +42,7 @@ pub(crate) static UNKNOWN: SurfaceSpec = SurfaceSpec {
             None => Anchor::Rootless,
         })
     },
+    overlay: None,
     on_key: None,
     refuses_positional: false,
     yields_to_engine: false,

@@ -161,17 +161,29 @@ All standard insert-mode keybindings:
 | `Ctrl-U` | Delete to start of line |
 | `Ctrl-O` | Execute one Normal-mode command, then return to Insert |
 | `Ctrl-A` | Re-insert last inserted text |
-| `Ctrl-@` | Insert last inserted text and exit Insert mode |
+| `Ctrl-@` | Trigger the completion popup (claimed by `editor.completion`; `panelunmap editor.completion <C-@>` restores Vim's insert-last-text-and-exit) |
 | `Ctrl-T` | Increase indent of current line |
 | `Ctrl-D` | Decrease indent of current line |
-| `Ctrl-E` | Insert character from line below |
-| `Ctrl-Y` | Insert character from line above |
+| `Ctrl-E` | Insert character from line below (with the completion popup visible: close the popup) |
+| `Ctrl-Y` | Insert character from line above (with the completion popup visible: accept the candidate) |
 | `Ctrl-V {char}` | Insert literal character / unicode codepoint |
 | `Ctrl-G u` | Break undo sequence |
 | `Ctrl-G U` | Don't break undo on next cursor movement |
-| `Ctrl-N` | Next completion item |
-| `Ctrl-P` | Previous completion item |
-| `Ctrl-Space` | Trigger completion menu |
+| `Ctrl-N` | Next completion candidate, opening the popup if closed |
+| `Ctrl-P` | Previous completion candidate, opening the popup if closed |
+| `Ctrl-Space` | Trigger completion menu (same keystroke as `Ctrl-@`: Godot reports Ctrl+Space as Ctrl+`@`) |
+
+While the completion popup is visible, the `editor.completion` bindings take
+these keys first; each is a `panelmap` rule you can change:
+
+| Key | While the popup is visible |
+|-----|----------------------------|
+| `Ctrl-Y` | Accept the candidate, chosen or not (`require_selection=0`) |
+| `Ctrl-E` | Close the popup, keeping what you typed and staying in Insert |
+| `Tab`, `Enter` | Accept **only a candidate you explicitly selected**; otherwise the popup closes and the key does its ordinary job (indent, newline) |
+| `Ctrl-N`, `Ctrl-P` | Move the selection, wrapping |
+| `Up`, `Down` | Hand the key to Godot's own popup handling |
+| `Esc` | Not bound: one press closes the popup **and** leaves Insert, through the engine |
 
 Auto-pair insertion for `()`, `[]`, `{}`, `""`, `''`, `` `` `` is GodotVim's own
 reimplementation of Godot's `CodeEdit` behaviour, not a delegation to it
@@ -579,9 +591,9 @@ nnoremap <Space>r :run<CR>
 
 ## Panel Key Bindings (panelmap)
 
-Everything GodotVim does **outside** the script editor is a table of bindings you can read, change and remove: moving focus between panels (`Ctrl-h/j/k/l`), navigating docks with `h/j/k/l`, the FileSystem file operations (`a`/`d`/`r`/`y`/`R`), the debugger keys (`J`/`K`/`G`/`y`), and the autocomplete popup (`Ctrl-N`/`Ctrl-P`/`Tab`/`Enter`/`Esc`).
+Everything GodotVim does **outside** the script editor is a table of bindings you can read, change and remove: moving focus between panels (`Ctrl-h/j/k/l`), navigating docks with `h/j/k/l`, the FileSystem file operations (`a`/`d`/`r`/`y`/`R`), the debugger keys (`J`/`K`/`G`/`y`), and the autocomplete popup (`Ctrl-N`/`Ctrl-P`/`Ctrl-Y`/`Ctrl-E`/`Tab`/`Enter`; `Esc` is deliberately not bound there).
 
-Those 30 bindings are not hardcoded. They are `panelmap` lines the plugin writes for itself and hands to the same parser that reads your `.godot-vimrc`. Anything the defaults can express, you can express.
+Those 31 bindings are not hardcoded. They are `panelmap` lines the plugin writes for itself and hands to the same parser that reads your `.godot-vimrc`. Anything the defaults can express, you can express.
 
 ```
 panelmap   [<flag> ...] <surface> <lhs> <target> [key=value ...]
@@ -611,7 +623,7 @@ There is no layering between files: if `res://.godot-vimrc` exists, `user://.god
 
 Both print to the **Output** panel, not the status bar, since a resolution trace is a dozen lines.
 
-Two things to know about `:panelmap {keys}`. It samples **the focus you have while typing the command**, which is the command line, so run it with the panel you care about in mind and read the focus chain it prints back at you, which is the chain it actually used. And it answers for the key **as written**: a real keystroke on a non-QWERTY layout also carries a US-QWERTY position that a written left-hand side cannot reconstruct, so a `<physical>` rule may be reachable in practice without appearing in the trace.
+Two things to know about `:panelmap {keys}`. It samples **the focus you have while typing the command**, which is the command line, so run it with the panel you care about in mind and read the focus chain it prints back at you, which is the chain it actually used; because the completion popup can never be open at that moment, the report also prints a clearly labelled **counterfactual** section showing how the key would resolve if the script editor were in Insert mode with the popup open. And it answers for the key **as written**: a real keystroke on a non-QWERTY layout also carries a US-QWERTY position that a written left-hand side cannot reconstruct, so a `<physical>` rule may be reachable in practice without appearing in the trace.
 
 A malformed line costs you that line and nothing else. The rest of your config still loads. `:panelmap` is the primary channel for those rejections and needs no setup at all.
 
@@ -658,7 +670,7 @@ A **surface** is a named place in the editor UI. Surfaces form a tree, and a key
 | `prompt` | `panel` | GodotVim's own FileSystem create/rename prompt. |
 | `editor.nav` | `panel` | The attached script editor in Normal, Visual or Operator-pending mode. |
 | `editor.insert` |, (root) | The attached script editor in any *other* mode, Insert, Replace, Select. **Takes no bindings.** |
-| `editor.completion` |, (root) | The script editor's autocomplete popup. Reached by the popup itself, not by focus. |
+| `editor.completion` |, (root) | An **overlay**: the script editor in an insert-like mode, joined per keystroke rather than by focus. Grants the `POPUP` capability while the completion popup is visible. |
 | `foreign` |, (root) | Somebody else's text input, a Project Settings field, an addon's editor. **Takes no bindings.** |
 | `unknown` | `panel` | A focused control none of the above claimed, or no focus owner at all. |
 
@@ -689,13 +701,13 @@ The target vocabulary is deliberately closed. There is no shell form, no `:` com
 
 Flags come first, in any order, each at most once.
 
-| Flag | Effect |
-|------|--------|
-| `<physical>` | Also match this rule against the key's **US-QWERTY physical position**, when that differs from what was typed. Opt-in per rule. |
-| `<void>` | Consume the keystroke whether or not the action succeeded, and stop the walk. Without it, a declining action lets the key fall through. |
-| `<norepeat>` | Ignore auto-repeat while the key is held. The rule fires once per press. |
-| `<shift>` | Also match this key with Shift held. Only meaningful for named keys (`<CR>`, `<Esc>`, `<Up>`…), `R` is already the shifted spelling of `r`. |
-| `<nowait>` | Fire immediately even if this key is also the first key of a longer sequence, instead of waiting `timeoutlen` for the rest. |
+| Flag | Effect | On `editor.completion` |
+|------|--------|------------------------|
+| `<physical>` | Also match this rule against the key's **US-QWERTY physical position**, when that differs from what was typed. Opt-in per rule. | Inert: the surface refuses the positional probe (see below) |
+| `<void>` | Consume the keystroke whether or not the action succeeded, and stop the walk. Without it, a declining action lets the key fall through. | Live |
+| `<norepeat>` | Ignore auto-repeat while the key is held. The rule fires once per press. | Live |
+| `<shift>` | Also match this key with Shift held. Only meaningful for named keys (`<CR>`, `<Esc>`, `<Up>`…), `R` is already the shifted spelling of `r`. | Live |
+| `<nowait>` | Fire immediately even if this key is also the first key of a longer sequence, instead of waiting `timeoutlen` for the rest. | Inert: multi-key sequences are refused there, so no wait can exist |
 
 **Why the shipped defaults carry the flags they do**: these are not decoration, and dropping one has a specific consequence:
 
@@ -708,13 +720,18 @@ Flags come first, in any order, each at most once.
 
 If you rebind one of these, carry the flags across. The `:panelmap` listing prints every rule with its flags, so you can copy the line you are replacing.
 
+Two flags are inert on `editor.completion`, for **two different reasons**, and `:panelmap {keys}` prints both: `<physical>` because the surface declares `refuses_positional: true` (inside the attached editor a positional guess would turn a Dvorak `Ctrl-p` into a completion key), and `<nowait>` because the surface is editor-reachable and therefore refuses multi-key left-hand sides at load, so there is never a wait to skip.
+
 ### Parameters
 
 Trailing `key=value` pairs, at most **4** per rule. Values are **decimal integers only**: there is no string or enum form.
 
+Parameters are honoured on every surface, `editor.completion` included.
+
 | Parameter | Range | Meaning |
 |-----------|-------|---------|
 | `count` | `1`–`100` | Repeat the action this many times per keystroke. |
+| `require_selection` | `0` or `1` (default `1`) | On `godotvim.completion.confirm`: with `1`, accept only a candidate you explicitly selected, cancelling the popup otherwise; with `0`, accept whatever is highlighted. |
 
 ```vim
 " Half-page-ish movement in any dock.
@@ -760,9 +777,9 @@ The **`:action`** column marks the verbs that also work by name, from `:action {
 | `godotvim.completion.trigger` | `<C-@>` on `editor.completion` | Open the completion popup |, | |
 | `godotvim.completion.next` | `<C-n>` on `editor.completion` | Next candidate, opening the popup if closed |, | |
 | `godotvim.completion.prev` | `<C-p>` on `editor.completion` | Previous candidate, opening the popup if closed |, | |
-| `godotvim.completion.confirm` | `<Tab>`, `<CR>` on `editor.completion` | Accept the selected candidate |, | |
-| `godotvim.completion.dismiss` | `<Esc>` on `editor.completion` | Close the popup, letting the key through |, | |
-| `godotvim.completion.navigate` | `<Up>`, `<Down>` on `editor.completion` | Let the editor's own popup handling move the selection |, | |
+| `godotvim.completion.confirm` | `<Tab>`, `<CR>`, `<C-y> require_selection=0` on `editor.completion` | Accept the selected candidate; by default only one you explicitly chose (`require_selection`) | a visible popup | |
+| `godotvim.completion.dismiss` | `<C-e>` on `editor.completion` | Close the popup, keeping insert mode | a visible popup | |
+| `godotvim.completion.navigate` | `<Up>`, `<Down>` on `editor.completion` | Hand this key to CodeEdit's own popup handling | a visible popup | |
 
 > `<C-@>` is not a typo. Godot reports Ctrl+Space as Ctrl+`@` (the terminal NUL convention), so `<C-@>` is the spelling that actually fires. `<C-Space>` parses to a different key and would never match.
 

@@ -45,6 +45,7 @@ pub(crate) static DOCK: SurfaceSpec = SurfaceSpec {
     // adds no affordance merely by being a dock.
     grants: |_| Caps::empty(),
     probe: |chain| focuses_nav_widget(chain).then_some(Anchor::Node(0)),
+    overlay: None,
     on_key: None,
     refuses_positional: false,
     yields_to_engine: false,

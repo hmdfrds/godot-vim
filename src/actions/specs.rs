@@ -69,6 +69,7 @@ pub(crate) static ITEM_NEXT: ActionSpec = ActionSpec {
     // j/k today, and the docs panel scrolls rather than selecting.
     requires: Caps::VNAV,
     host_invocable: false,
+    default_consume: None,
     run: |cx| nav(cx, NavDirection::Next),
 };
 
@@ -77,6 +78,7 @@ pub(crate) static ITEM_PREV: ActionSpec = ActionSpec {
     desc: "Move to the previous item",
     requires: Caps::VNAV,
     host_invocable: false,
+    default_consume: None,
     run: |cx| nav(cx, NavDirection::Prev),
 };
 
@@ -88,6 +90,7 @@ pub(crate) static ITEM_COLLAPSE: ActionSpec = ActionSpec {
     // the dispatcher naming a widget class.
     requires: Caps::HIERARCHY,
     host_invocable: false,
+    default_consume: None,
     run: |cx| hierarchy(cx, HierarchyAction::Collapse),
 };
 
@@ -96,6 +99,7 @@ pub(crate) static ITEM_EXPAND: ActionSpec = ActionSpec {
     desc: "Expand the current item",
     requires: Caps::HIERARCHY,
     host_invocable: false,
+    default_consume: None,
     run: |cx| hierarchy(cx, HierarchyAction::Expand),
 };
 
@@ -104,6 +108,7 @@ pub(crate) static ITEM_ACTIVATE: ActionSpec = ActionSpec {
     desc: "Open or activate the current item",
     requires: Caps::ACTIVATE,
     host_invocable: false,
+    default_consume: None,
     run: |cx| {
         // Delegates rather than re-emitting by hand, and that is not
         // fastidiousness. The two widgets have DIFFERENT signal contracts:
@@ -176,6 +181,7 @@ pub(crate) static FOCUS_LEFT: ActionSpec = ActionSpec {
     desc: "Move focus to the panel on the left",
     requires: Caps::empty(),
     host_invocable: true,
+    default_consume: None,
     run: |cx| focus_dir(cx, WindowNavDirection::Left),
 };
 
@@ -184,6 +190,7 @@ pub(crate) static FOCUS_RIGHT: ActionSpec = ActionSpec {
     desc: "Move focus to the panel on the right",
     requires: Caps::empty(),
     host_invocable: true,
+    default_consume: None,
     run: |cx| focus_dir(cx, WindowNavDirection::Right),
 };
 
@@ -192,6 +199,7 @@ pub(crate) static FOCUS_UP: ActionSpec = ActionSpec {
     desc: "Move focus to the panel above",
     requires: Caps::empty(),
     host_invocable: true,
+    default_consume: None,
     run: |cx| focus_dir(cx, WindowNavDirection::Up),
 };
 
@@ -200,6 +208,7 @@ pub(crate) static FOCUS_DOWN: ActionSpec = ActionSpec {
     desc: "Move focus to the panel below",
     requires: Caps::empty(),
     host_invocable: true,
+    default_consume: None,
     run: |cx| focus_dir(cx, WindowNavDirection::Down),
 };
 
@@ -208,6 +217,7 @@ pub(crate) static FOCUS_CYCLE_NEXT: ActionSpec = ActionSpec {
     desc: "Cycle focus to the next panel",
     requires: Caps::empty(),
     host_invocable: true,
+    default_consume: None,
     run: |cx| focus_cycle(cx, crate::effects::WindowNavAction::CycleNext),
 };
 
@@ -216,6 +226,7 @@ pub(crate) static FOCUS_CYCLE_PREV: ActionSpec = ActionSpec {
     desc: "Cycle focus to the previous panel",
     requires: Caps::empty(),
     host_invocable: true,
+    default_consume: None,
     run: |cx| focus_cycle(cx, crate::effects::WindowNavAction::CyclePrev),
 };
 
@@ -224,6 +235,7 @@ pub(crate) static FOCUS_EDITOR: ActionSpec = ActionSpec {
     desc: "Return focus to the script editor",
     requires: Caps::empty(),
     host_invocable: true,
+    default_consume: None,
     // Needs no target: it locates the script editor itself, and declines when
     // there is none — which is why `Caps::ESCAPE` was deleted as a gate with
     // no possible grantor.
@@ -240,6 +252,7 @@ pub(crate) static DOCK_SEARCH: ActionSpec = ActionSpec {
     // it asks the actual scene tree rather than the widget class.
     requires: Caps::empty(),
     host_invocable: false,
+    default_consume: None,
     run: |cx| {
         let Some(target) = cx.target().cloned() else {
             return Outcome::Declined;
@@ -253,6 +266,7 @@ pub(crate) static SEARCH_ACCEPT: ActionSpec = ActionSpec {
     desc: "Leave the filter box, keeping the filter",
     requires: Caps::TEXTENTRY,
     host_invocable: false,
+    default_consume: None,
     run: |cx| {
         let Some(target) = cx.target().cloned() else {
             return Outcome::Declined;
@@ -293,6 +307,7 @@ pub(crate) static FS_CREATE: ActionSpec = ActionSpec {
     desc: "Create a file or folder",
     requires: Caps::FILEOPS,
     host_invocable: true,
+    default_consume: None,
     run: |cx| {
         let Some((target, kind)) = dock_target(cx) else {
             return Outcome::Declined;
@@ -313,6 +328,7 @@ pub(crate) static FS_DELETE: ActionSpec = ActionSpec {
     desc: "Delete the selected path",
     requires: Caps::FILEOPS,
     host_invocable: true,
+    default_consume: None,
     run: |_cx| crate::navigation::filesystem_explorer::delete_selected(),
 };
 
@@ -321,6 +337,7 @@ pub(crate) static FS_RENAME: ActionSpec = ActionSpec {
     desc: "Rename the selected path",
     requires: Caps::FILEOPS,
     host_invocable: true,
+    default_consume: None,
     run: |_cx| crate::navigation::filesystem_explorer::rename_selected(),
 };
 
@@ -329,6 +346,7 @@ pub(crate) static FS_YANK_PATH: ActionSpec = ActionSpec {
     desc: "Copy the selected path to the clipboard",
     requires: Caps::FILEOPS,
     host_invocable: true,
+    default_consume: None,
     run: |cx| {
         let Some((target, kind)) = dock_target(cx) else {
             return Outcome::Declined;
@@ -342,6 +360,7 @@ pub(crate) static FS_REFRESH: ActionSpec = ActionSpec {
     desc: "Rescan the filesystem",
     requires: Caps::FILEOPS,
     host_invocable: true,
+    default_consume: None,
     run: |_cx| crate::navigation::filesystem_explorer::scan_filesystem(),
 };
 
@@ -735,6 +754,7 @@ mod tests {
         desc: "records that it ran",
         requires: Caps::FILEOPS,
         host_invocable: true,
+        default_consume: None,
         run: |cx| {
             cx.emit("ran", None);
             Outcome::Handled
