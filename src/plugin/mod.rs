@@ -964,7 +964,9 @@ impl GodotVimCore {
 
     /// Fires for ALL EditorSettings changes (not just ours), so we
     /// unconditionally re-read the full snapshot. The reader falls back
-    /// to defaults for missing or wrong-type values.
+    /// to defaults for missing or wrong-type values. The engine receives
+    /// only the fields that differ from the last push, so a user's `:set`
+    /// is not reverted by an unrelated change.
     #[func]
     fn on_settings_changed(&mut self) {
         // Intentionally ungated — must observe re-enable to become active again.
@@ -1057,9 +1059,12 @@ impl GodotVimCore {
             );
             self.wired = true;
             if was_inert {
-                // disabled→enabled edge: single startup-equivalent config load + re-discovery
+                // disabled→enabled edge: single startup-equivalent config load + re-discovery.
+                // Forget the last push first, so the engine gets every field
+                // before the vimrc is sourced on top, exactly as at startup.
                 if let Some(s) = self.settings.clone() {
                     if let Some(c) = &mut self.controller {
+                        c.forget_applied_settings();
                         c.apply_settings(&s);
                     }
                 }
@@ -1199,6 +1204,11 @@ impl GodotVimCore {
                     .is_some_and(|e| e.is_instance_valid());
 
                 if let Some(controller) = &mut self.controller {
+                    // The engine is not trusted to still hold the last push:
+                    // a panic inside attach_session or detach_session unwinds
+                    // with the fresh placeholder engine in place. The next
+                    // settings push then writes every field.
+                    controller.forget_applied_settings();
                     if has_valid_editor {
                         let mut editor = self.attached_editor.as_ref().unwrap().clone();
                         controller.recover_from_panic(&mut editor);

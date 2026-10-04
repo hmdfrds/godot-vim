@@ -121,6 +121,9 @@ pub(crate) struct ControllerContext {
     /// Whether Godot's native code completion should auto-trigger on typing.
     /// Mirrors `text_editor/completion/code_complete_enabled` from EditorSettings.
     pub(crate) code_complete_enabled: bool,
+    /// The snapshot last pushed into the engine's options, so the next push
+    /// writes only what changed. `None` makes the next push write everything.
+    pub(crate) last_applied: Option<crate::settings::SettingsSnapshot>,
 }
 
 /// Per-editor orchestrator that bridges Godot's event-driven input to
@@ -164,6 +167,7 @@ impl VimController {
                 )
                 .unwrap_or(150),
                 code_complete_enabled: true,
+                last_applied: None,
             },
         }
     }
@@ -283,8 +287,18 @@ impl VimController {
         self.ctx.highlight_yank_duration_ms = ms;
     }
 
+    /// Push an Editor Settings snapshot into the engine and the host config.
+    ///
+    /// Engine options get only the fields that changed since the last push
+    /// (see [`SettingsSnapshot::apply_delta`]), so a user's `:set` survives
+    /// unrelated settings events. The host-side fields below are not
+    /// reachable from `:set` and are written every time.
+    ///
+    /// [`SettingsSnapshot::apply_delta`]: crate::settings::SettingsSnapshot::apply_delta
     pub(crate) fn apply_settings(&mut self, snapshot: &crate::settings::SettingsSnapshot) {
-        snapshot.apply_to_options(self.engine_mut().options_mut());
+        let prev = self.ctx.last_applied.take();
+        snapshot.apply_delta(prev.as_ref(), self.engine_mut().options_mut());
+        self.ctx.last_applied = Some(snapshot.clone());
         self.set_passthrough_keys(&snapshot.passthrough_keys);
         self.set_security_policy(crate::host::SecurityPolicy {
             shell_execution: snapshot.shell_execution,
@@ -293,6 +307,16 @@ impl VimController {
         });
         self.set_highlight_yank_duration(snapshot.highlight_yank_duration);
         self.ctx.code_complete_enabled = snapshot.code_complete_enabled;
+    }
+
+    /// Forget what was pushed into the engine's options, so the next
+    /// [`apply_settings`](Self::apply_settings) writes every field.
+    ///
+    /// Called wherever the engine's options may no longer hold what was last
+    /// pushed: a delta against a stale record would skip fields the engine
+    /// never received.
+    pub(crate) fn forget_applied_settings(&mut self) {
+        self.ctx.last_applied = None;
     }
 
     // ── Public accessors ─────────────────────────────────────────────
@@ -1196,6 +1220,7 @@ impl VimController {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings::SettingsSnapshot;
 
     /// Exhaustive field inventory for [`VimController`], [`ControllerPhase`],
     /// and [`ControllerContext`].
@@ -1235,7 +1260,46 @@ mod tests {
                 perf: _,                       // persistent
                 highlight_yank_duration_ms: _, // config
                 code_complete_enabled: _,      // config
+                last_applied: _,               // config: reset by forget_applied_settings
             } = ctx;
         }
+    }
+
+    // ── Settings push ─────────────────────────────────────────────────
+
+    #[test]
+    fn apply_settings_keeps_a_user_set_across_an_unrelated_refresh() {
+        let mut c = VimController::new();
+        let snap = SettingsSnapshot::for_tests(5, 100, 1000);
+        c.apply_settings(&snap);
+        let _ = c.engine_mut().source_config_text("set tw=0");
+
+        let mut next = snap.clone();
+        next.ignorecase = true;
+        c.apply_settings(&next);
+
+        assert_eq!(c.engine().options().textwidth(), 0);
+        assert!(c.engine().options().ignorecase());
+    }
+
+    #[test]
+    fn forget_applied_settings_makes_the_next_push_write_everything() {
+        let mut c = VimController::new();
+        let snap = SettingsSnapshot::for_tests(5, 100, 1000);
+        c.apply_settings(&snap);
+        // Stands in for an engine that lost the push, such as the fresh
+        // placeholder a panic can leave behind.
+        c.engine_mut().options_mut().set_textwidth(0);
+
+        c.apply_settings(&snap);
+        assert_eq!(
+            c.engine().options().textwidth(),
+            0,
+            "same snapshot, no write"
+        );
+
+        c.forget_applied_settings();
+        c.apply_settings(&snap);
+        assert_eq!(c.engine().options().textwidth(), 100);
     }
 }
