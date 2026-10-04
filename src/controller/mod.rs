@@ -128,6 +128,12 @@ pub(crate) struct ControllerContext {
     /// the engine's options, so a settings refresh rewrites them only when
     /// the CodeEdit's own values moved.
     pub(crate) synced_indent: Option<(bool, usize, usize)>,
+    /// Set while [`VimController::attach_session`] or
+    /// [`VimController::detach_session`] has its placeholder engine in
+    /// `phase`, and cleared when the swap completes. Still set afterwards
+    /// only if a panic interrupted the swap, leaving a fresh engine that never
+    /// received the settings or the vimrc.
+    pub(crate) swap_in_flight: bool,
 }
 
 /// Per-editor orchestrator that bridges Godot's event-driven input to
@@ -173,6 +179,7 @@ impl VimController {
                 code_complete_enabled: true,
                 last_applied: None,
                 synced_indent: None,
+                swap_in_flight: false,
             },
         }
     }
@@ -217,6 +224,7 @@ impl VimController {
     /// Syncs controller-level config (security policy, highlight yank duration)
     /// into the new host.
     pub(crate) fn attach_session(&mut self, editor: Gd<CodeEdit>) {
+        self.ctx.swap_in_flight = true;
         let old_phase = std::mem::replace(
             &mut self.phase,
             // Temporary placeholder; overwritten below.
@@ -244,6 +252,7 @@ impl VimController {
         let initial_text = session.host().text().to_owned();
         session.engine_mut().set_shadow_text(initial_text);
         self.phase = ControllerPhase::Attached { session };
+        self.ctx.swap_in_flight = false;
     }
 
     /// Decompose the active session: drop the host, reclaim the engine.
@@ -251,6 +260,7 @@ impl VimController {
     /// Returns the `GodotHost` for any final cleanup the caller needs.
     /// No-ops if already detached.
     pub(crate) fn detach_session(&mut self) -> Option<GodotHost> {
+        self.ctx.swap_in_flight = true;
         let old_phase = std::mem::replace(
             &mut self.phase,
             ControllerPhase::Detached {
@@ -258,7 +268,7 @@ impl VimController {
                 state: ShellState::default(),
             },
         );
-        match old_phase {
+        let host = match old_phase {
             ControllerPhase::Attached { session } => {
                 let (engine, mut host) = session.into_parts();
                 let state = host.take_state();
@@ -269,7 +279,25 @@ impl VimController {
                 self.phase = detached;
                 None
             }
+        };
+        self.ctx.swap_in_flight = false;
+        host
+    }
+
+    /// Whether a panic interrupted [`attach_session`](Self::attach_session)
+    /// or [`detach_session`](Self::detach_session) and left its placeholder
+    /// engine in place. Clears the flag. When it was set, the push record is
+    /// forgotten too, since the fresh engine received nothing; the caller
+    /// then pushes the settings and sources the vimrc again.
+    ///
+    /// Panic recovery must check this before it detaches, because a
+    /// completed `detach_session` clears the flag.
+    pub(crate) fn take_replaced_engine(&mut self) -> bool {
+        let replaced = std::mem::take(&mut self.ctx.swap_in_flight);
+        if replaced {
+            self.forget_applied_settings();
         }
+        replaced
     }
 
     /// Whether a session is currently active (editor attached).
@@ -320,7 +348,8 @@ impl VimController {
     ///
     /// Called wherever the engine's options may no longer hold what was last
     /// pushed: a delta against a stale record would skip fields the engine
-    /// never received.
+    /// never received. Only there: forgetting while the engine still holds
+    /// a user's `:set` makes the next unrelated settings event revert it.
     pub(crate) fn forget_applied_settings(&mut self) {
         self.ctx.last_applied = None;
         self.ctx.synced_indent = None;
@@ -1264,6 +1293,12 @@ mod tests {
     ///   shell      — cleaned selectively by `force_cleanup_without_editor`
     ///   transient  — in `TransientShellState`, cleaned by `transient.reset()`
     ///   config     — set via `apply_settings()`, never reset on cleanup
+    ///   push record: what was last pushed into the engine's options,
+    ///                forgotten by `forget_applied_settings()` on the enable
+    ///                edge and when a panic left a placeholder engine
+    ///   swap guard:  set only inside `attach_session()`/`detach_session()`,
+    ///                read and cleared by `take_replaced_engine()` in panic
+    ///                recovery
     ///   persistent — survives all cleanups
     #[test]
     fn cleanup_field_inventory() {
@@ -1291,8 +1326,9 @@ mod tests {
                 perf: _,                       // persistent
                 highlight_yank_duration_ms: _, // config
                 code_complete_enabled: _,      // config
-                last_applied: _,               // config: reset by forget_applied_settings
-                synced_indent: _,              // config: reset by forget_applied_settings
+                last_applied: _,               // push record
+                synced_indent: _,              // push record
+                swap_in_flight: _,             // swap guard
             } = ctx;
         }
     }
@@ -1333,6 +1369,50 @@ mod tests {
         c.forget_applied_settings();
         c.apply_settings(&snap);
         assert_eq!(c.engine().options().textwidth(), 100);
+    }
+
+    /// Panic recovery used to forget the push record for every panic, so
+    /// the next unrelated settings event rewrote every pushed option and
+    /// the indent, reverting a user's `:set`.
+    #[test]
+    fn recovery_with_the_engine_intact_keeps_a_user_set() {
+        let mut c = VimController::new();
+        let snap = SettingsSnapshot::for_tests(5, 100, 1000);
+        c.apply_settings(&snap);
+        c.sync_indent(true, 4, 4);
+        let _ = c.engine_mut().source_config_text("set tw=0 ts=8");
+
+        // What recover_controller_from_panic does with no editor attached.
+        assert!(!c.take_replaced_engine());
+        c.force_cleanup_without_editor();
+        // An unrelated settings event afterwards.
+        c.apply_settings(&snap);
+        c.sync_indent_if_changed(true, 4, 4);
+
+        assert_eq!(c.engine().options().textwidth(), 0);
+        assert_eq!(c.engine().options().tabstop(), 8);
+    }
+
+    #[test]
+    fn an_interrupted_swap_reports_the_replaced_engine_once() {
+        let mut c = VimController::new();
+        let snap = SettingsSnapshot::for_tests(5, 100, 1000);
+        c.apply_settings(&snap);
+        // What a panic between the swap and its end leaves behind.
+        c.ctx.swap_in_flight = true;
+        c.engine_mut().options_mut().set_textwidth(0);
+
+        assert!(c.take_replaced_engine());
+        c.apply_settings(&snap);
+        assert_eq!(c.engine().options().textwidth(), 100, "full push");
+        assert!(!c.take_replaced_engine());
+    }
+
+    #[test]
+    fn a_completed_swap_does_not_report_a_replaced_engine() {
+        let mut c = VimController::new();
+        assert!(c.detach_session().is_none());
+        assert!(!c.take_replaced_engine());
     }
 
     #[test]

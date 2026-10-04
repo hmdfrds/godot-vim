@@ -1063,15 +1063,7 @@ impl GodotVimCore {
             self.wired = true;
             if was_inert {
                 // disabled→enabled edge: single startup-equivalent config load + re-discovery.
-                // Forget the last push first, so the engine gets every field
-                // before the vimrc is sourced on top, exactly as at startup.
-                if let Some(s) = self.settings.clone() {
-                    if let Some(c) = &mut self.controller {
-                        c.forget_applied_settings();
-                        c.apply_settings(&s);
-                    }
-                }
-                self.source_config_from_disk("enable");
+                self.reseed_engine("enable");
                 self.last_editor_id = None;
                 self.base_mut().call_deferred("rediscover_and_attach", &[]);
                 self.base_mut()
@@ -1198,6 +1190,7 @@ impl GodotVimCore {
     /// completed inside `recover_from_panic`, so the engine is in a known-good
     /// state. Godot state may be slightly messy but no UB occurs.
     fn recover_controller_from_panic(&mut self) {
+        let mut engine_replaced = false;
         panic_guard(
             "recover_controller_from_panic",
             || {
@@ -1207,11 +1200,11 @@ impl GodotVimCore {
                     .is_some_and(|e| e.is_instance_valid());
 
                 if let Some(controller) = &mut self.controller {
-                    // The engine is not trusted to still hold the last push:
-                    // a panic inside attach_session or detach_session unwinds
-                    // with the fresh placeholder engine in place. The next
-                    // settings push then writes every field.
-                    controller.forget_applied_settings();
+                    // Only a panic inside attach_session or detach_session
+                    // can leave a fresh engine behind; Tier 1 cleanup never
+                    // touches options. Checked before the detach below,
+                    // which would clear the flag.
+                    engine_replaced = controller.take_replaced_engine();
                     if has_valid_editor {
                         let mut editor = self.attached_editor.as_ref().unwrap().clone();
                         controller.recover_from_panic(&mut editor);
@@ -1242,6 +1235,13 @@ impl GodotVimCore {
             },
             (),
         );
+        // A fresh engine holds neither the settings nor the vimrc. Give it
+        // both now, as the enable edge does, rather than leaving the full
+        // push to whatever settings event comes next.
+        if engine_replaced {
+            log::warn!("recover_controller_from_panic: engine was replaced, reloading config");
+            panic_guard("recover:config", || self.reseed_engine("recover"), ());
+        }
         // Stop the mapping timer — emergency_reset cleared all pending mapping
         // state, so a stale timeout firing would be a wasted no-op.
         if let Some(timer) = self.mapping_timer.as_mut() {
@@ -1426,6 +1426,21 @@ impl GodotVimCore {
     /// Load config from disk, apply the project-vimrc security policy, and
     /// reload into the engine. Returns `true` if the file existed (regardless
     /// of whether the policy allowed sourcing it).
+    /// Push every Editor Setting into the engine, then source the vimrc on
+    /// top, exactly as at startup. The push record is forgotten first, so
+    /// no field is skipped. For an engine that may hold neither: the
+    /// disabled to enabled edge, and the fresh engine a panic inside a
+    /// session swap leaves behind.
+    fn reseed_engine(&mut self, caller: &str) {
+        if let Some(s) = self.settings.clone() {
+            if let Some(c) = &mut self.controller {
+                c.forget_applied_settings();
+                c.apply_settings(&s);
+            }
+        }
+        self.source_config_from_disk(caller);
+    }
+
     fn source_config_from_disk(&mut self, caller: &str) -> bool {
         let resolved = self.resolve_config_path();
         let Some(text) = crate::config::writer::read_file(&resolved.path) else {
