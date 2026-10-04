@@ -376,3 +376,26 @@ pub(super) fn sync_indent_from_editor(
         editor.instance_id().to_i64(),
     );
 }
+
+/// Settings-refresh variant of [`sync_indent_from_editor`]: writes the engine
+/// only when the CodeEdit's indent moved since the last sync, so a `:set ts`,
+/// `sw` or `et` survives unrelated EditorSettings events. See
+/// [`VimController::sync_indent_if_changed`](crate::controller::VimController::sync_indent_if_changed).
+pub(super) fn resync_indent_from_editor(
+    editor: &Gd<CodeEdit>,
+    controller: &mut crate::controller::VimController,
+) {
+    let use_spaces = editor.is_indent_using_spaces();
+    let indent_size = editor.safe_indent_size();
+    let tab_size = editor.safe_tab_size();
+
+    if controller.sync_indent_if_changed(use_spaces, indent_size, tab_size) {
+        log::debug!(
+            "resync_indent: expandtab={} shiftwidth={} tabstop={} for editor #{}",
+            use_spaces,
+            indent_size,
+            tab_size,
+            editor.instance_id().to_i64(),
+        );
+    }
+}

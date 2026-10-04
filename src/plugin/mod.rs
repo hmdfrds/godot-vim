@@ -997,11 +997,14 @@ impl GodotVimCore {
 
                 // Re-sync indent settings from the attached CodeEdit.
                 // EditorSettings changes can affect indent_size / tab_size,
-                // so the engine must pick up the new values.
+                // so the engine must pick up the new values, but only when
+                // the CodeEdit's values actually moved: this signal fires for
+                // every EditorSettings write, and an unconditional sync
+                // reverted a user's `:set ts` on any unrelated click.
                 if let Some(ref editor) = self.attached_editor {
                     if editor.is_instance_valid() {
                         if let Some(controller) = &mut self.controller {
-                            attach::sync_indent_from_editor(editor, controller);
+                            attach::resync_indent_from_editor(editor, controller);
                         }
                     }
                 }

@@ -124,6 +124,10 @@ pub(crate) struct ControllerContext {
     /// The snapshot last pushed into the engine's options, so the next push
     /// writes only what changed. `None` makes the next push write everything.
     pub(crate) last_applied: Option<crate::settings::SettingsSnapshot>,
+    /// The CodeEdit indent (expandtab, shiftwidth, tabstop) last written into
+    /// the engine's options, so a settings refresh rewrites them only when
+    /// the CodeEdit's own values moved.
+    pub(crate) synced_indent: Option<(bool, usize, usize)>,
 }
 
 /// Per-editor orchestrator that bridges Godot's event-driven input to
@@ -168,6 +172,7 @@ impl VimController {
                 .unwrap_or(150),
                 code_complete_enabled: true,
                 last_applied: None,
+                synced_indent: None,
             },
         }
     }
@@ -310,13 +315,15 @@ impl VimController {
     }
 
     /// Forget what was pushed into the engine's options, so the next
-    /// [`apply_settings`](Self::apply_settings) writes every field.
+    /// [`apply_settings`](Self::apply_settings) writes every field and the
+    /// next indent resync writes unconditionally.
     ///
     /// Called wherever the engine's options may no longer hold what was last
     /// pushed: a delta against a stale record would skip fields the engine
     /// never received.
     pub(crate) fn forget_applied_settings(&mut self) {
         self.ctx.last_applied = None;
+        self.ctx.synced_indent = None;
     }
 
     // ── Public accessors ─────────────────────────────────────────────
@@ -466,6 +473,30 @@ impl VimController {
         opts.set_expandtab(expandtab);
         opts.set_shiftwidth(shiftwidth);
         opts.set_tabstop(tabstop);
+        self.ctx.synced_indent = Some((expandtab, shiftwidth, tabstop));
+    }
+
+    /// [`sync_indent`](Self::sync_indent), but only when the CodeEdit's
+    /// values differ from the ones last synced. Returns whether it wrote.
+    ///
+    /// For the settings refresh, which fires on every EditorSettings write:
+    /// rewriting unconditionally there reverted a `:set ts`, `sw` or `et` on
+    /// any unrelated click. Comparing against the CodeEdit, not against
+    /// Godot's indent settings, is deliberate. The CodeEdit is the source of
+    /// truth, and Godot updates it from those settings later, on its own
+    /// `NOTIFICATION_EDITOR_SETTINGS_CHANGED`, so at signal time a setting can
+    /// have changed while the CodeEdit has not.
+    pub(crate) fn sync_indent_if_changed(
+        &mut self,
+        expandtab: bool,
+        shiftwidth: usize,
+        tabstop: usize,
+    ) -> bool {
+        if self.ctx.synced_indent == Some((expandtab, shiftwidth, tabstop)) {
+            return false;
+        }
+        self.sync_indent(expandtab, shiftwidth, tabstop);
+        true
     }
 
     /// Sync from CodeEdit's language-specific comment delimiters (e.g., `"# %s"`
@@ -1261,6 +1292,7 @@ mod tests {
                 highlight_yank_duration_ms: _, // config
                 code_complete_enabled: _,      // config
                 last_applied: _,               // config: reset by forget_applied_settings
+                synced_indent: _,              // config: reset by forget_applied_settings
             } = ctx;
         }
     }
@@ -1301,5 +1333,45 @@ mod tests {
         c.forget_applied_settings();
         c.apply_settings(&snap);
         assert_eq!(c.engine().options().textwidth(), 100);
+    }
+
+    #[test]
+    fn indent_resync_skips_an_unchanged_code_edit() {
+        let mut c = VimController::new();
+        c.sync_indent(true, 4, 4);
+        let _ = c.engine_mut().source_config_text("set ts=8 sw=2 noet");
+
+        assert!(!c.sync_indent_if_changed(true, 4, 4));
+        let opts = c.engine().options();
+        assert_eq!(
+            (opts.expandtab(), opts.shiftwidth(), opts.tabstop()),
+            (false, 2, 8),
+            "an unrelated settings event reverted :set"
+        );
+    }
+
+    #[test]
+    fn indent_resync_follows_a_changed_code_edit() {
+        let mut c = VimController::new();
+        c.sync_indent(true, 4, 4);
+        let _ = c.engine_mut().source_config_text("set ts=8");
+
+        assert!(c.sync_indent_if_changed(false, 2, 2));
+        let opts = c.engine().options();
+        assert_eq!(
+            (opts.expandtab(), opts.shiftwidth(), opts.tabstop()),
+            (false, 2, 2)
+        );
+    }
+
+    #[test]
+    fn indent_resync_writes_after_forget() {
+        let mut c = VimController::new();
+        c.sync_indent(true, 4, 4);
+        c.forget_applied_settings();
+        let _ = c.engine_mut().source_config_text("set ts=8");
+
+        assert!(c.sync_indent_if_changed(true, 4, 4));
+        assert_eq!(c.engine().options().tabstop(), 4);
     }
 }
