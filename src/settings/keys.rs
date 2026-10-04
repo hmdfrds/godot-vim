@@ -10,6 +10,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub(crate) const LOG_LEVEL: &str = "plugins/GodotVim/log_level";
+
+/// The revision the stored settings have been migrated to (see
+/// `registration::SETTINGS_REVISION`). Not a user setting: the leading
+/// underscore keeps it out of the inspector, and Godot always saves such
+/// keys.
+pub(crate) const SETTINGS_REVISION: &str = "_plugins/GodotVim/settings_revision";
 pub(crate) const ENABLED: &str = "plugins/GodotVim/enabled";
 
 // ─────────────────────────────────────────────────────────────────────────────

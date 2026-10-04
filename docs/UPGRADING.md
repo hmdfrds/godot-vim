@@ -10,15 +10,17 @@ typing past column 80 in Insert mode broke the line, because vim-core's
 `formatoptions` contains `t`. In GDScript that splits a statement, and the
 break could also misplace the characters typed next.
 
-1. **If you never changed Textwidth**, you get `0` automatically, also when
-   you update the plugin without restarting the editor. Nothing breaks lines
+1. **If you never changed Textwidth**, it moves to `0` the first time this
+   version loads: when you restart the editor, or when you disable and enable
+   the plugin again under Project Settings > Plugins. Nothing breaks lines
    while you type, and `gq` formats at 79 columns.
 2. **If you set another width**, such as 100, it is kept, and typing keeps
    breaking lines at that width. Set it to `0` to stop that.
 3. **If you deliberately wanted exactly 80**, set it again under
-   **Godot Vim > Editor > Textwidth**. Godot only saves a setting that
-   differs from its default, so your 80 was never stored and cannot be told
-   apart from a setting nobody touched. Once set, it persists.
+   **Godot Vim > Editor > Textwidth**. Godot saved the old default of 80
+   for everyone, so an 80 stored by an earlier version cannot be told apart
+   from a setting nobody touched, and it moves to `0` once. An 80 you set
+   from now on is kept.
 
 **`:set` values now survive unrelated Editor Settings changes.** Every
 change to any Editor Setting used to push all of GodotVim's settings into
