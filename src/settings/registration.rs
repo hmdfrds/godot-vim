@@ -214,8 +214,11 @@ where
     T: ToGodot + FromGodot + PartialEq,
 {
     let exists = settings.has_setting(key);
+    // `get`, not `get_setting`: `get_setting` returns a project's editor
+    // setting override when one exists, while `set_setting` below writes the
+    // user's own stored value. The decision must be made on what it writes.
     let current = if exists {
-        settings.get_setting(key).try_to::<T>().ok()
+        settings.get(key).try_to::<T>().ok()
     } else {
         None
     };
