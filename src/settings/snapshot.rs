@@ -84,14 +84,6 @@ pub(crate) enum InccommandMode {
     Nosplit,
 }
 
-impl InccommandMode {
-    #[inline]
-    #[must_use]
-    pub(crate) fn is_enabled(self) -> bool {
-        self != Self::Off
-    }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // CursorSettings
 // ─────────────────────────────────────────────────────────────────────────────
@@ -457,16 +449,6 @@ mod tests {
     #[test]
     fn inccommand_mode_default_is_nosplit() {
         assert_eq!(InccommandMode::default(), InccommandMode::Nosplit);
-    }
-
-    #[test]
-    fn inccommand_mode_off_is_not_enabled() {
-        assert!(!InccommandMode::Off.is_enabled());
-    }
-
-    #[test]
-    fn inccommand_mode_nosplit_is_enabled() {
-        assert!(InccommandMode::Nosplit.is_enabled());
     }
 
     #[test]

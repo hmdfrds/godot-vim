@@ -148,7 +148,6 @@ pub(crate) struct UiCoordinator {
     /// Toggled by user settings; requires swapping caret_color overrides.
     cursor_enabled: bool,
     cache: DirtyCache,
-    inccommand_enabled: bool,
     debug_overlay: Option<Gd<DebugRangeOverlay>>,
     virtual_text: Option<Gd<VirtualTextOverlay>>,
     highlight_yank: Option<Gd<HighlightYankOverlay>>,
@@ -168,7 +167,6 @@ impl UiCoordinator {
             saved: SavedEditorState::default(),
             cursor_enabled: true,
             cache: DirtyCache::default(),
-            inccommand_enabled: true,
             debug_overlay: None,
             virtual_text: None,
             highlight_yank: None,
@@ -308,7 +306,6 @@ impl UiCoordinator {
         self.cache = DirtyCache::default();
         self.saved = SavedEditorState::default();
         self.cursor_enabled = true;
-        self.inccommand_enabled = true;
         self.search_hl = SearchHighlighter::new();
         self.status_bar.take();
         self.cursor.take();
@@ -435,8 +432,13 @@ impl UiCoordinator {
         // ── 4. Line numbers (signal-driven, no per-keystroke update) ────
 
         // ── 5. Inccommand preview ────────────────────────────────────────
+        // No gate on the Inccommand setting here: the engine emits a preview
+        // only while its own `inccommand` option is on, and that option is
+        // what `:set inccommand` changes. Gating on the setting as well threw
+        // away the preview of a `:set inccommand=nosplit` made while the
+        // setting was Off.
         if let Some(ref positions) = snap.substitute_preview {
-            if !self.inccommand_enabled || positions.is_empty() {
+            if positions.is_empty() {
                 self.clear_substitute_preview();
             } else {
                 self.update_substitute_preview(positions, editor);
@@ -578,11 +580,6 @@ impl UiCoordinator {
         with_valid_overlay!(self.line_numbers, |ln| {
             ln.bind_mut().set_mode(snapshot.line_number_mode);
         });
-
-        self.inccommand_enabled = snapshot.inccommand.is_enabled();
-        if !self.inccommand_enabled {
-            self.clear_substitute_preview();
-        }
 
         with_valid_overlay!(self.status_bar, |bar| {
             bar.bind_mut().apply_colors(&snapshot.status_bar);
