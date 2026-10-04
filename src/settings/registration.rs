@@ -4,9 +4,10 @@
 //! Called once during `enter_tree`. Each setting goes through a three-step
 //! Godot `EditorSettings` protocol:
 //!
-//! 1. **`has_setting` guard + `set_setting`**: only writes the default if the
-//!    key is absent, so user customizations in `editor_settings-*.tres` survive
-//!    plugin reloads and editor restarts.
+//! 1. **Untouched guard + `set_setting`**: writes the default only if the
+//!    user never changed the value (see [`is_untouched`]), so user
+//!    customizations in `editor_settings-*.tres` survive plugin reloads and
+//!    editor restarts, while a changed default reaches everyone else.
 //! 2. **`set_initial_value`**: always called (even if the key exists) so Godot
 //!    knows what value to show for the "Revert" action in the Inspector.
 //! 3. **`add_property_info`**: attaches type/hint metadata so the Inspector
@@ -20,7 +21,7 @@ use super::{defaults, keys};
 
 /// Register all GodotVim settings into `EditorSettings`.
 ///
-/// Idempotent: `has_setting` guards prevent overwriting user customizations,
+/// Idempotent: the untouched guard never overwrites a user customization,
 /// so this is safe to call on every `enter_tree` (e.g., after plugin reload).
 pub(crate) fn register_all(settings: &mut EditorSettings) {
     // ── Top-level ────────────────────────────────────────────────────────
@@ -174,23 +175,69 @@ pub(crate) fn register_all(settings: &mut EditorSettings) {
 // Per-type registration helpers
 //
 // Each helper encodes the three-step protocol (guard + initial + hint) for a
-// specific VariantType. They look repetitive, but factoring further would
-// obscure the Godot API calls and make debugging registration issues harder.
+// specific VariantType. Steps 1 and 2 are shared by `seed_default`, because
+// the untouched decision must be identical for every type; the hints stay
+// inline, since factoring them further would obscure the Godot API calls and
+// make debugging registration issues harder.
 // ─────────────────────────────────────────────────────────────────────────────
 
-fn register_bool(settings: &mut EditorSettings, key: &str, default: bool) {
-    if !settings.has_setting(key) {
-        settings.set_setting(key, &default.to_variant());
+/// Whether a setting still holds the default it was registered with, and so
+/// may be moved to a new default.
+///
+/// - Missing key: untouched. This is every user at the default on a cold
+///   start, because Godot saves a setting only when it differs from its
+///   initial value, so the old default never reached the `.tres`.
+/// - Current value equals the revert value: untouched. This is the hot
+///   reload case. The extension is reloadable, the old registration's value
+///   and initial value are still in memory, and without this arm the old
+///   default would survive and then be saved because it now differs from
+///   the new initial value.
+/// - Anything else is the user's: a different value, no revert value (a
+///   value loaded from the `.tres` before `set_initial_value` ran), or a value
+///   of another Variant type than the default (`None` here). An enum dropdown
+///   stores an INT ordinal where the default is a STRING, and a hand-edited
+///   file can hold anything; neither is ours to rewrite.
+///
+/// A user who deliberately picked exactly the old default cannot be told
+/// apart from one who never touched it, and moves with the default.
+fn is_untouched<T: PartialEq>(exists: bool, current: Option<&T>, revert: Option<&T>) -> bool {
+    if !exists {
+        return true;
     }
-    settings.set_initial_value(key, &default.to_variant(), false);
+    matches!((current, revert), (Some(current), Some(revert)) if current == revert)
+}
+
+/// Step 1 of the protocol for every helper: write `default` unless the user
+/// owns the value, then make it the revert value.
+fn seed_default<T>(settings: &mut EditorSettings, key: &str, default: T)
+where
+    T: ToGodot + FromGodot + PartialEq,
+{
+    let exists = settings.has_setting(key);
+    let current = if exists {
+        settings.get_setting(key).try_to::<T>().ok()
+    } else {
+        None
+    };
+    let revert = if settings.property_can_revert(key) {
+        settings.property_get_revert(key).try_to::<T>().ok()
+    } else {
+        None
+    };
+    let default = default.to_variant();
+    if is_untouched(exists, current.as_ref(), revert.as_ref()) {
+        settings.set_setting(key, &default);
+    }
+    settings.set_initial_value(key, &default, false);
+}
+
+fn register_bool(settings: &mut EditorSettings, key: &str, default: bool) {
+    seed_default(settings, key, default);
     add_property_info(settings, key, VariantType::BOOL, PropertyHint::NONE, "");
 }
 
 fn register_int_range(settings: &mut EditorSettings, key: &str, default: i64, min: i64, max: i64) {
-    if !settings.has_setting(key) {
-        settings.set_setting(key, &default.to_variant());
-    }
-    settings.set_initial_value(key, &default.to_variant(), false);
+    seed_default(settings, key, default);
     let hint_string = format!("{min},{max},1");
     add_property_info(
         settings,
@@ -226,10 +273,7 @@ fn register_float_range_hinted(
     step: f64,
     flags: &str,
 ) {
-    if !settings.has_setting(key) {
-        settings.set_setting(key, &default.to_variant());
-    }
-    settings.set_initial_value(key, &default.to_variant(), false);
+    seed_default(settings, key, default);
     let hint_string = format!("{min},{max},{step}{flags}");
     add_property_info(
         settings,
@@ -247,10 +291,7 @@ fn register_float_range_hinted(
 /// hint format. This ensures registration and reading always agree on the
 /// option order — a mismatch would silently map dropdown indices to wrong labels.
 fn register_enum(settings: &mut EditorSettings, key: &str, default: &str, options: &[&str]) {
-    if !settings.has_setting(key) {
-        settings.set_setting(key, &default.to_variant());
-    }
-    settings.set_initial_value(key, &default.to_variant(), false);
+    seed_default(settings, key, GString::from(default));
     let hint_string = options.join(",");
     add_property_info(
         settings,
@@ -262,18 +303,12 @@ fn register_enum(settings: &mut EditorSettings, key: &str, default: &str, option
 }
 
 fn register_string(settings: &mut EditorSettings, key: &str, default: &str) {
-    if !settings.has_setting(key) {
-        settings.set_setting(key, &default.to_variant());
-    }
-    settings.set_initial_value(key, &default.to_variant(), false);
+    seed_default(settings, key, GString::from(default));
     add_property_info(settings, key, VariantType::STRING, PropertyHint::NONE, "");
 }
 
 fn register_color(settings: &mut EditorSettings, key: &str, default: Color) {
-    if !settings.has_setting(key) {
-        settings.set_setting(key, &default.to_variant());
-    }
-    settings.set_initial_value(key, &default.to_variant(), false);
+    seed_default(settings, key, default);
     add_property_info(settings, key, VariantType::COLOR, PropertyHint::NONE, "");
 }
 
@@ -293,4 +328,44 @@ fn add_property_info(
     info.set("hint", hint.ord() as i64);
     info.set("hint_string", hint_string);
     settings.add_property_info(&info);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_untouched;
+
+    #[test]
+    fn missing_key_is_untouched() {
+        assert!(is_untouched::<i64>(false, None, None));
+        // A missing key has nothing stored, whatever revert value Godot holds.
+        assert!(is_untouched(false, None, Some(&80_i64)));
+    }
+
+    #[test]
+    fn value_equal_to_revert_is_untouched() {
+        // Hot reload: the old default is still in memory as value and initial.
+        assert!(is_untouched(true, Some(&80_i64), Some(&80_i64)));
+    }
+
+    #[test]
+    fn user_value_is_kept() {
+        assert!(!is_untouched(true, Some(&100_i64), Some(&80_i64)));
+        // A value the user set to what is now the new default is still theirs.
+        assert!(!is_untouched(true, Some(&0_i64), Some(&80_i64)));
+    }
+
+    #[test]
+    fn value_without_revert_is_kept() {
+        // Loaded from the .tres before set_initial_value ran this session.
+        assert!(!is_untouched(true, Some(&100_i64), None));
+        assert!(!is_untouched(true, Some(&80_i64), None));
+    }
+
+    #[test]
+    fn variant_type_mismatch_is_kept() {
+        // The stored Variant did not convert to the default's type, for
+        // example an enum dropdown's INT ordinal against a STRING default.
+        assert!(!is_untouched(true, None, Some(&"Hybrid")));
+        assert!(!is_untouched::<i64>(true, None, None));
+    }
 }
