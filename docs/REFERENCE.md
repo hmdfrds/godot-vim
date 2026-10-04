@@ -344,7 +344,7 @@ The following Vim options are supported via `:set`, `:setlocal`, and `.godot-vim
 | `tabstop` / `ts` | `int` | (from Godot) | Number of spaces a tab counts for |
 | `shiftwidth` / `sw` | `int` | (from Godot) | Number of spaces for indent |
 | `scrolloff` / `so` | `int` | `5` | Minimum lines above/below cursor |
-| `textwidth` / `tw` | `int` | `0` | Width at which typing in Insert mode breaks lines, when `formatoptions` contains `t` (the default; `formatoptions` cannot be changed with `:set` yet). `0` disables it. `gq` formats at 79 when it is `0`. Seeded from the **Textwidth** setting; a `:set tw` holds until that setting is changed. Typing reads only the global value, so `:setlocal tw` changes `gq` but not the breaking while typing. |
+| `textwidth` / `tw` | `int` | `0` | Width past which typing in Insert mode breaks lines, when `formatoptions` contains `t` (the default; `formatoptions` cannot be changed with `:set` yet). In this version the whole line counts, with a tab as one column: typing a character other than a blank on a line longer than this breaks it, wherever the cursor is. `0` disables it. `gq` formats at 79 when it is `0`. Seeded from the **Textwidth** setting, and pushed again only when that setting changes. Typing reads only the global value, so `:setlocal tw` changes `gq` but not the breaking while typing. `:set tw` sets both: after a later change to **Textwidth**, typing follows the setting while `gq` in that script keeps the `:set` value. |
 | `timeoutlen` / `tm` | `int` | `1000` | Mapping timeout in milliseconds |
 | `number` / `nu` | `bool` | `false` | Show line numbers. Engine-only: nothing in GodotVim reads it, and the gutter is driven by the **Line Numbers** setting. |
 | `relativenumber` / `rnu` | `bool` | `false` | Show relative line numbers. Engine-only: nothing in GodotVim reads it, and the gutter is driven by the **Line Numbers** setting. |
@@ -375,7 +375,7 @@ All settings are in **Editor > Editor Settings > Plugins > GodotVim**.
 | Setting | Key | Type | Default | Description |
 |---------|-----|------|---------|-------------|
 | Scroll Off | `plugins/GodotVim/editor/scrolloff` | `int` | `5` | Minimum lines above/below cursor (0-20). |
-| Textwidth | `plugins/GodotVim/editor/textwidth` | `int` | `0` | Vim `textwidth`, 0 to 200. The width at which typing in Insert mode breaks lines (vim-core's `formatoptions` contains `t` by default). `0` disables it. `gq` formats at 79 when it is `0`. Shown as **Textwidth** under **Godot Vim > Editor**; filter for `textwidth` to find it. |
+| Textwidth | `plugins/GodotVim/editor/textwidth` | `int` | `0` | Vim `textwidth`, 0 to 200. Typing in Insert mode breaks a line longer than this (vim-core's `formatoptions` contains `t` by default). `0` disables it. `gq` formats at 79 when it is `0`. Shown as **Textwidth** under **Godot Vim > Editor**; filter for `textwidth` to find it. |
 | Clipboard | `plugins/GodotVim/editor/clipboard_enabled` | `bool` | `false` | Sync Vim registers with system clipboard. |
 | Ignore Case | `plugins/GodotVim/editor/ignorecase` | `bool` | `false` | Case-insensitive search. |
 | Smart Case | `plugins/GodotVim/editor/smartcase` | `bool` | `false` | Uppercase in pattern overrides Ignore Case. |

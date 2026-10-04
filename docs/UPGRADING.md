@@ -6,16 +6,16 @@ fresh install.
 ## From v1.8.0
 
 **Textwidth now defaults to `0`, as in Vim.** With the old default of 80,
-typing past column 80 in Insert mode broke the line, because vim-core's
-`formatoptions` contains `t`. In GDScript that splits a statement, and the
-break could also misplace the characters typed next.
+typing in Insert mode on a line longer than 80 characters broke the line,
+because vim-core's `formatoptions` contains `t`. In GDScript that splits a
+statement, and the break could also misplace the characters typed next.
 
 1. **If you never changed Textwidth**, it moves to `0` the first time this
    version loads: when you restart the editor, or when you disable and enable
    the plugin again under Project Settings > Plugins. Nothing breaks lines
    while you type, and `gq` formats at 79 columns.
 2. **If you set another width**, such as 100, it is kept, and typing keeps
-   breaking lines at that width. Set it to `0` to stop that.
+   breaking lines longer than that. Set it to `0` to stop that.
 3. **If you deliberately wanted exactly 80**, set it again under
    **Godot Vim > Editor > Textwidth**. Godot saved the old default of 80
    for everyone, so an 80 stored by an earlier version cannot be told apart
@@ -26,11 +26,16 @@ break could also misplace the characters typed next.
 change to any Editor Setting used to push all of GodotVim's settings into
 the engine again, and copy tab size, indent size and spaces-or-tabs from the
 script editor, which undid a `:set tw=0`, `:set ignorecase` or `:set ts=8`
-from your vimrc or the command line. Now only a setting that actually
-changed is pushed, so the most recent writer wins: a `:set` holds until you
-change that same Editor Setting, and a change to Godot's own indent
-settings still takes over, as it did before. Switching to another script
-still takes that script's indentation.
+from your vimrc or the command line. Now a setting is pushed only when it
+changes, and the indent is copied only when the script editor's own indent
+changes.
+
+Such a change sets the global value, which typing reads. For `textwidth`,
+`tabstop`, `shiftwidth` and `expandtab`, a `:set` also sets a value local to
+the current script, and commands that read the local value, such as `gq`
+and `>>`, keep using the `:set` value in that script even after the Editor
+Setting or Godot's indent changes. Switching to another script still takes
+that script's indentation.
 
 ## From v1.7.x
 
