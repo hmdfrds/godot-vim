@@ -293,7 +293,7 @@ mod tests {
 
     #[test]
     fn scrolloff_zero_is_valid() {
-        let snap = make_snapshot(0, 80, 1000);
+        let snap = make_snapshot(0, 0, 1000);
         let mut opts = vim_core::VimOptions::default();
         snap.apply_to_options(&mut opts);
         assert_eq!(opts.scrolloff(), 0);
@@ -301,10 +301,18 @@ mod tests {
 
     #[test]
     fn scrolloff_negative_clamped_to_zero() {
-        let snap = make_snapshot(-3, 80, 1000);
+        let snap = make_snapshot(-3, 0, 1000);
         let mut opts = vim_core::VimOptions::default();
         snap.apply_to_options(&mut opts);
         assert_eq!(opts.scrolloff(), 0);
+    }
+
+    /// Vim's own default, so a user who never touched the setting gets no
+    /// line breaking while typing, exactly as in Vim.
+    #[test]
+    fn textwidth_default_matches_vim() {
+        assert_eq!(crate::settings::defaults::TEXTWIDTH, 0);
+        assert_eq!(vim_core::VimOptions::default().textwidth(), 0);
     }
 
     #[test]
@@ -325,7 +333,7 @@ mod tests {
 
     #[test]
     fn timeoutlen_at_minimum_boundary() {
-        let snap = make_snapshot(5, 80, 100);
+        let snap = make_snapshot(5, 0, 100);
         let mut opts = vim_core::VimOptions::default();
         snap.apply_to_options(&mut opts);
         assert_eq!(opts.timeoutlen_ms(), 100);
@@ -333,7 +341,7 @@ mod tests {
 
     #[test]
     fn timeoutlen_at_maximum_boundary() {
-        let snap = make_snapshot(5, 80, 5000);
+        let snap = make_snapshot(5, 0, 5000);
         let mut opts = vim_core::VimOptions::default();
         snap.apply_to_options(&mut opts);
         assert_eq!(opts.timeoutlen_ms(), 5000);
@@ -341,7 +349,7 @@ mod tests {
 
     #[test]
     fn timeoutlen_below_minimum_clamped() {
-        let snap = make_snapshot(5, 80, 50);
+        let snap = make_snapshot(5, 0, 50);
         let mut opts = vim_core::VimOptions::default();
         snap.apply_to_options(&mut opts);
         assert_eq!(opts.timeoutlen_ms(), 100);
@@ -349,7 +357,7 @@ mod tests {
 
     #[test]
     fn timeoutlen_above_maximum_clamped() {
-        let snap = make_snapshot(5, 80, 10000);
+        let snap = make_snapshot(5, 0, 10000);
         let mut opts = vim_core::VimOptions::default();
         snap.apply_to_options(&mut opts);
         assert_eq!(opts.timeoutlen_ms(), 5000);
@@ -357,7 +365,7 @@ mod tests {
 
     #[test]
     fn timeoutlen_zero_clamped_to_minimum() {
-        let snap = make_snapshot(5, 80, 0);
+        let snap = make_snapshot(5, 0, 0);
         let mut opts = vim_core::VimOptions::default();
         snap.apply_to_options(&mut opts);
         assert_eq!(opts.timeoutlen_ms(), 100);
@@ -365,7 +373,7 @@ mod tests {
 
     #[test]
     fn timeoutlen_negative_clamped_to_minimum() {
-        let snap = make_snapshot(5, 80, -100);
+        let snap = make_snapshot(5, 0, -100);
         let mut opts = vim_core::VimOptions::default();
         snap.apply_to_options(&mut opts);
         assert_eq!(opts.timeoutlen_ms(), 100);
@@ -373,7 +381,7 @@ mod tests {
 
     #[test]
     fn timeoutlen_within_range() {
-        let snap = make_snapshot(5, 80, 750);
+        let snap = make_snapshot(5, 0, 750);
         let mut opts = vim_core::VimOptions::default();
         snap.apply_to_options(&mut opts);
         assert_eq!(opts.timeoutlen_ms(), 750);
@@ -381,19 +389,19 @@ mod tests {
 
     #[test]
     fn cursor_enabled_default_is_true() {
-        let snap = make_snapshot(5, 80, 1000);
+        let snap = make_snapshot(5, 0, 1000);
         assert!(snap.cursor.enabled);
     }
 
     #[test]
     fn cursor_lerp_speed_default_is_25() {
-        let snap = make_snapshot(5, 80, 1000);
+        let snap = make_snapshot(5, 0, 1000);
         assert_eq!(snap.cursor.lerp_speed, 25.0);
     }
 
     #[test]
     fn cursor_underline_height_default_is_4() {
-        let snap = make_snapshot(5, 80, 1000);
+        let snap = make_snapshot(5, 0, 1000);
         assert_eq!(snap.cursor.underline_height, 4.0);
     }
 
@@ -401,7 +409,7 @@ mod tests {
 
     #[test]
     fn large_scrolloff() {
-        let snap = make_snapshot(999, 80, 1000);
+        let snap = make_snapshot(999, 0, 1000);
         let mut opts = vim_core::VimOptions::default();
         snap.apply_to_options(&mut opts);
         assert_eq!(opts.scrolloff(), 999);
@@ -433,7 +441,7 @@ mod tests {
     #[test]
     fn snapshot_default_is_enabled() {
         // make_snapshot takes (scrolloff, textwidth, timeoutlen); other fields hardcoded.
-        let s = make_snapshot(5, 80, 1000);
+        let s = make_snapshot(5, 0, 1000);
         assert!(s.enabled, "plugin should default to enabled (opt-out)");
     }
 

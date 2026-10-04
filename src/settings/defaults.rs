@@ -20,7 +20,10 @@ pub(crate) const ENABLED: bool = true;
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub(crate) const SCROLLOFF: i64 = 5;
-pub(crate) const TEXTWIDTH: i64 = 80;
+/// Vim's default. Any non-zero width makes vim-core break lines while you
+/// type in Insert mode (its `formatoptions` carries `t` by default), which
+/// is not something a user should get without asking for it.
+pub(crate) const TEXTWIDTH: i64 = 0;
 pub(crate) const CLIPBOARD_ENABLED: bool = false;
 pub(crate) const IGNORECASE: bool = false;
 pub(crate) const SMARTCASE: bool = false;
