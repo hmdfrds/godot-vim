@@ -21,6 +21,7 @@ mod outcome;
 mod processing_guard;
 mod signals;
 
+use godot::classes::notify::{EditorSettingsNotification, NodeNotification};
 use godot::classes::{
     CodeEdit, Control, DisplayServer, EditorInterface, INode, Input, InputEvent, InputEventKey,
     Time, Timer,
@@ -176,6 +177,19 @@ impl INode for GodotVimCore {
 
     fn process(&mut self, _delta: f64) {
         panic_guard("process", || self.poll_pending_tooltip(), ());
+    }
+
+    /// Godot copies its indent settings into each CodeEdit on
+    /// `NOTIFICATION_EDITOR_SETTINGS_CHANGED`, which `notify_changes`
+    /// propagates from the editor root about 1.5 s after `settings_changed`,
+    /// when the Editor Settings dialog saves. That is when the CodeEdit's
+    /// indent can move, so that is when the engine follows it. Deferred,
+    /// because the propagation may reach this node before the script editor.
+    fn on_notification(&mut self, what: NodeNotification) {
+        if i32::from(what) == i32::from(EditorSettingsNotification::EDITOR_SETTINGS_CHANGED) {
+            self.base_mut()
+                .call_deferred("on_editor_settings_notified", &[]);
+        }
     }
 
     fn enter_tree(&mut self) {
@@ -995,12 +1009,13 @@ impl GodotVimCore {
                     controller.apply_settings(&snapshot);
                 }
 
-                // Re-sync indent settings from the attached CodeEdit.
-                // EditorSettings changes can affect indent_size / tab_size,
-                // so the engine must pick up the new values, but only when
-                // the CodeEdit's values actually moved: this signal fires for
-                // every EditorSettings write, and an unconditional sync
-                // reverted a user's `:set ts` on any unrelated click.
+                // Re-sync indent from the attached CodeEdit, but only when
+                // its values moved: this signal fires for every EditorSettings
+                // write, and an unconditional sync reverted a user's `:set ts`
+                // on any unrelated click. Godot's own indent settings reach
+                // the CodeEdit later (see on_notification), so this catches
+                // only a CodeEdit changed some other way, such as the script
+                // editor's Convert Indent commands.
                 if let Some(ref editor) = self.attached_editor {
                     if editor.is_instance_valid() {
                         if let Some(controller) = &mut self.controller {
@@ -1019,6 +1034,36 @@ impl GodotVimCore {
                     }
                 }
 
+                true
+            },
+            false,
+        );
+        if !ok {
+            self.recover_controller_from_panic();
+        }
+    }
+
+    /// Deferred from `NOTIFICATION_EDITOR_SETTINGS_CHANGED`, once every
+    /// CodeEdit has applied Godot's indent settings. Writes the engine only
+    /// when the attached CodeEdit's indent moved, so a user's `:set ts`, `sw`
+    /// or `et` survives a notification about anything else, and a change to
+    /// Godot's indent settings reaches the engine when it happens rather than
+    /// at some later, unrelated settings event.
+    #[func]
+    fn on_editor_settings_notified(&mut self) {
+        if !self.enabled || self.controller.is_none() {
+            return;
+        }
+        let ok = panic_guard(
+            "on_editor_settings_notified",
+            || {
+                if let Some(ref editor) = self.attached_editor {
+                    if editor.is_instance_valid() {
+                        if let Some(controller) = &mut self.controller {
+                            attach::resync_indent_from_editor(editor, controller);
+                        }
+                    }
+                }
                 true
             },
             false,

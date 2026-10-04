@@ -508,13 +508,13 @@ impl VimController {
     /// [`sync_indent`](Self::sync_indent), but only when the CodeEdit's
     /// values differ from the ones last synced. Returns whether it wrote.
     ///
-    /// For the settings refresh, which fires on every EditorSettings write:
+    /// For the settings events, which fire for every EditorSettings change:
     /// rewriting unconditionally there reverted a `:set ts`, `sw` or `et` on
     /// any unrelated click. Comparing against the CodeEdit, not against
     /// Godot's indent settings, is deliberate. The CodeEdit is the source of
-    /// truth, and Godot updates it from those settings later, on its own
-    /// `NOTIFICATION_EDITOR_SETTINGS_CHANGED`, so at signal time a setting can
-    /// have changed while the CodeEdit has not.
+    /// truth, and Godot updates it from those settings on
+    /// `NOTIFICATION_EDITOR_SETTINGS_CHANGED`, after `settings_changed`, so
+    /// the plugin resyncs on both.
     pub(crate) fn sync_indent_if_changed(
         &mut self,
         expandtab: bool,
@@ -1442,6 +1442,21 @@ mod tests {
             (opts.expandtab(), opts.shiftwidth(), opts.tabstop()),
             (false, 2, 2)
         );
+    }
+
+    /// The order the plugin relies on: Godot's indent change reaches the
+    /// engine at the notification that updates the CodeEdit, so a later
+    /// `:set sw` is not overwritten by the next unrelated settings event.
+    #[test]
+    fn indent_change_then_user_set_then_unrelated_event() {
+        let mut c = VimController::new();
+        c.sync_indent(true, 4, 4);
+        // NOTIFICATION_EDITOR_SETTINGS_CHANGED: the CodeEdit now reports 2.
+        assert!(c.sync_indent_if_changed(true, 2, 4));
+        let _ = c.engine_mut().source_config_text("set sw=8");
+        // settings_changed for an Output filter toggle.
+        assert!(!c.sync_indent_if_changed(true, 2, 4));
+        assert_eq!(c.engine().options().shiftwidth(), 8);
     }
 
     #[test]

@@ -377,7 +377,7 @@ pub(super) fn sync_indent_from_editor(
     );
 }
 
-/// Settings-refresh variant of [`sync_indent_from_editor`]: writes the engine
+/// Settings-event variant of [`sync_indent_from_editor`]: writes the engine
 /// only when the CodeEdit's indent moved since the last sync, so a `:set ts`,
 /// `sw` or `et` survives unrelated EditorSettings events. See
 /// [`VimController::sync_indent_if_changed`](crate::controller::VimController::sync_indent_if_changed).
