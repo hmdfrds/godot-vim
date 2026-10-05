@@ -31,9 +31,11 @@ caveat about local values in the v1.8.0 notes below no longer applies.
 
 **`commentstring` is per script.** It used to be copied from the script
 editor's comment delimiters into the global value on every tab switch, so a
-shader's `//` could reach the next text file and a `set commentstring` in
-your vimrc was overwritten. Each script now gets its own value once. A
-`:setlocal commentstring` you make stays with that script.
+shader's `//` could reach the next text file. Each script with comment
+delimiters (GDScript, shaders, C#) now gets its own value from them once,
+so a `set commentstring` in your vimrc reaches only scripts without
+delimiters, such as text files. A `:setlocal commentstring` you make
+overrides it in that script and stays with it.
 
 **To keep the old behaviour** (Vim's defaults in every script, so code wraps
 with a width set), turn off **Godot Vim > Editor > Filetype Plugin**, or put

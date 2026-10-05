@@ -188,9 +188,9 @@ impl SettingsSnapshot {
     ///
     /// **One option at a time** rather than a whole `VimOptions`, because
     /// the engine's options also hold indent settings (`expandtab`,
-    /// `tabstop`, `shiftwidth`) and `commentstring`, synced from Godot's
-    /// CodeEdit and not from Editor Settings. Replacing the whole struct
-    /// would clobber those.
+    /// `tabstop`, `shiftwidth`), synced from Godot's CodeEdit and not from
+    /// Editor Settings, and every option a vimrc `:set` changed. Replacing
+    /// the whole struct would clobber those.
     pub(crate) fn option_delta(
         &self,
         prev: Option<&Self>,

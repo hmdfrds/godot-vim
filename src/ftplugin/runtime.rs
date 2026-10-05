@@ -305,7 +305,9 @@ pub(crate) struct Setup {
     /// `commentstring` built from Godot's line comment delimiter, applied
     /// before the plugin lines so a plugin's own value wins. Godot is the
     /// source of truth for the language's comment syntax, so this runs even
-    /// with plugins off and keeps `gc` working in every script.
+    /// with plugins off, giving each script its own value as Vim's
+    /// per-buffer `commentstring` is. Nothing in the engine reads it yet;
+    /// it is there for a commentary operator.
     pub(crate) commentstring: Option<String>,
 }
 

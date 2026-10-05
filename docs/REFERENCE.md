@@ -346,9 +346,9 @@ The following Vim options are supported via `:set`, `:setlocal`, and `.godot-vim
 | `shiftwidth` / `sw` | `int` | (from Godot) | Number of spaces for indent |
 | `scrolloff` / `so` | `int` | `5` | Minimum lines above/below cursor |
 | `textwidth` / `tw` | `int` | `0` | Width at which typing in Insert mode breaks lines, when `formatoptions` allows it (`t` for text, `c` for comments). The break happens when you type a non-blank character past this display column (a tab counts as `tabstop` columns, a wide character as 2), at the last blank before the cursor. `0` never breaks while typing; `gq` then formats at 79. Seeded from the **Textwidth** setting; changing that setting later wins over an earlier `:set tw` or `:setlocal tw` in every script, and unrelated Editor Settings changes leave it alone. A script's filetype plugin decides what may wrap: in GDScript only comments do, see [Filetype Plugins](#filetype-plugins). `wrapmargin` is not supported. |
-| `formatoptions` / `fo` | `string` | `tcqj` | Vim's flags for automatic formatting. `t` wraps text and `c` wraps comments (inserting the comment leader) at `textwidth`, `q` lets `gq` format comments, `l` leaves lines that were already long when the insert started. Also acted on: `w`, `2`, `v`, `b`, `1`, `p`. Accepted but without effect yet: `r`, `o`, `/`, `a`, `n`, `m`, `]`, `j`. An unknown letter is refused with `E539`. Takes `+=`, `-=` and `^=`, one flag at a time: `:set fo-=t`. Set per script by the filetype plugins. |
+| `formatoptions` / `fo` | `string` | `tcqj` | Vim's flags for automatic formatting. `t` wraps text and `c` wraps comments (inserting the comment leader) at `textwidth`, `q` lets `gq` format comments, `l` leaves lines that were already long when the insert started. Also acted on: `w`, `2`, `v`, `b`, `1`, `p`; `M` and `B` by `gq` only. Accepted but without effect yet: `r`, `o`, `/`, `a`, `n`, `m`, `]`, `j`. An unknown letter is refused with `E539`. Takes `+=`, `-=` and `^=`, one flag at a time: `:set fo-=t`. Set per script by the filetype plugins. |
 | `comments` / `com` | `string` | `s1:/*,mb:*,ex:*/,://,b:#,:%,:XCOMM,n:>,fb:-` | Vim's comment leaders, used by `c` and `q` in `formatoptions` and by `gq`. Same syntax as Vim (`b:#`, `s1:/*,mb:*,ex:*/`). Takes `+=`, `-=` and `^=` on whole items. Set per script by the filetype plugins. |
-| `commentstring` / `cms` | `string` | `// %s` | Comment template. Set per script from Godot's comment delimiters (`# %s` in GDScript, `// %s` in shaders) and by the filetype plugins. |
+| `commentstring` / `cms` | `string` | `// %s` | Comment template. Set per script from Godot's comment delimiters (`# %s` in GDScript, `// %s` in shaders and C#) and by the filetype plugins, so a vimrc `set commentstring` reaches only scripts with neither; `:setlocal commentstring` overrides it in one script. |
 | `timeoutlen` / `tm` | `int` | `1000` | Mapping timeout in milliseconds |
 | `number` / `nu` | `bool` | `false` | Show line numbers. Engine-only: nothing in GodotVim reads it, and the gutter is driven by the **Line Numbers** setting. |
 | `relativenumber` / `rnu` | `bool` | `false` | Show relative line numbers. Engine-only: nothing in GodotVim reads it, and the gutter is driven by the **Line Numbers** setting. |
@@ -425,9 +425,13 @@ multi-line string still counts as a comment.
 
 - `:setlocal fo+=t` lets code wrap in the current script, the Vim way. It
   can break GDScript.
-- `:set fo-=t` or `:set comments^=b:##` work as in Vim. In a `.godot-vimrc`
-  they set the global value, which the plugins then adjust per script, as
-  `setlocal` in an ftplugin overrides your vimrc in Vim.
+- `:set fo-=t` or `:set comments^=b:##` work as in Vim. At startup a
+  `.godot-vimrc` sets the global value, which the plugins then adjust per
+  script, as `setlocal` in an ftplugin overrides your vimrc in Vim.
+  Sourcing the vimrc again (`:source`, or saving key mappings) also writes
+  its options into the current script, as Vim's `:source` does, and the
+  plugin does not run again for it: a vimrc `set fo+=t` sourced then lets
+  code wrap in that script until `:setlocal fo-=t`.
 - A plugin runs once per script. A `:setlocal` you make afterwards stays
   when you switch scripts and come back. If the script's filetype changes
   (you pick another syntax highlighter), the old plugin is undone first,
