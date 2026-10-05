@@ -12,14 +12,20 @@
 //!    files and for built-in scripts (`res://x.tscn::GDScript_abc`).
 //! 2. **The syntax highlighter's class.** Godot picks it by extension when a
 //!    text tab opens (`EditorJSONSyntaxHighlighter` for `.json`, and so on),
-//!    and it is the only signal that tells JSON, Markdown and plain text
-//!    apart. If the user picks another highlighter from the menu, the class
-//!    follows, which is what they asked Godot to treat the file as.
+//!    and it tells JSON, Markdown and config files apart. If the user picks
+//!    another highlighter from the menu, the class follows, which is what
+//!    they asked Godot to treat the file as. The plain-text highlighter is
+//!    the exception: Godot gives it to every text file it has no highlighter
+//!    for (`.txt`, `.log`, `.yml`, `.yaml`, `.toml`, `.xml` by default), so
+//!    for it **the file's extension** decides, read from the script list
+//!    (see [`script_list_path`]). Only `.txt` is `text`; a path that cannot
+//!    be read or an extension Vim has no filetype for, like `.log`, gives
+//!    none.
 //! 3. **The comment delimiters.** Script tabs set them from the script's
 //!    language and the shader editor sets `//` and `/* */`; text tabs set
 //!    none. `#` is taken as GDScript. `//` is ambiguous (shader or C#) and
 //!    an empty list only says "some text file", so both give no filetype:
-//!    a plain-text guess would let JSON wrap.
+//!    a plain-text guess would let JSON or YAML wrap.
 //!
 //! [`detect`] is a pure function over those values, so the order is tested
 //! without Godot; [`read_signals`] collects them from the scene tree.
@@ -34,6 +40,9 @@ pub(crate) enum Filetype {
     Markdown,
     Text,
     Cfg,
+    Yaml,
+    Xml,
+    Toml,
 }
 
 impl Filetype {
@@ -47,6 +56,9 @@ impl Filetype {
             Self::Markdown => "markdown",
             Self::Text => "text",
             Self::Cfg => "cfg",
+            Self::Yaml => "yaml",
+            Self::Xml => "xml",
+            Self::Toml => "toml",
         }
     }
 }
@@ -62,6 +74,9 @@ pub(crate) struct Signals {
     /// `CodeEdit.get_comment_delimiters()`: line delimiters are one token
     /// (`#`), block delimiters a space-separated pair (`/* */`).
     pub(crate) comment_delimiters: Vec<String>,
+    /// The `res://` path of the file the tab shows, when Godot's script
+    /// list names it. Read only to tell plain-text files apart.
+    pub(crate) file_path: Option<String>,
 }
 
 /// The filetype the signals point to, trying them in the order of the
@@ -70,15 +85,21 @@ pub(crate) fn detect(signals: &Signals) -> Option<Filetype> {
     if let Some(ft) = signals.script_class.as_deref().and_then(from_script_class) {
         return Some(ft);
     }
-    if let Some(ft) = signals
-        .highlighter_class
-        .as_deref()
-        .and_then(from_highlighter_class)
-    {
-        return Some(ft);
-    }
-    from_delimiters(&signals.comment_delimiters)
+    // Godot's plain-text highlighter is its catch-all for text files, so it
+    // says nothing about the file: the extension decides, and without one
+    // the delimiters do (text tabs have none, a script tab keeps its own).
+    let from_highlighter = match signals.highlighter_class.as_deref() {
+        Some(PLAIN_TEXT_HIGHLIGHTER) => signals.file_path.as_deref().and_then(from_extension),
+        Some(class) => from_highlighter_class(class),
+        None => None,
+    };
+    from_highlighter.or_else(|| from_delimiters(&signals.comment_delimiters))
 }
+
+/// The highlighter Godot gives every text file whose extension it has no
+/// highlighter for: with the default `docks/filesystem/textfile_extensions`
+/// that is `.txt`, `.log`, `.yml`, `.yaml`, `.toml` and `.xml`.
+const PLAIN_TEXT_HIGHLIGHTER: &str = "EditorPlainTextSyntaxHighlighter";
 
 fn from_script_class(class: &str) -> Option<Filetype> {
     match class {
@@ -97,8 +118,31 @@ fn from_highlighter_class(class: &str) -> Option<Filetype> {
         "GDShaderSyntaxHighlighter" => Some(Filetype::GdShader),
         "EditorJSONSyntaxHighlighter" => Some(Filetype::Json),
         "EditorMarkdownSyntaxHighlighter" => Some(Filetype::Markdown),
-        "EditorPlainTextSyntaxHighlighter" => Some(Filetype::Text),
         "EditorConfigFileSyntaxHighlighter" => Some(Filetype::Cfg),
+        _ => None,
+    }
+}
+
+/// The filetype of a plain-text tab, from its file's extension, as Vim's
+/// `filetype.vim` names it. `.log` has no filetype in Vim, and any other
+/// extension a user adds to `textfile_extensions` stays unknown too. The
+/// extensions Godot has its own highlighter for are listed as well, for a
+/// tab the user switched to plain text.
+fn from_extension(path: &str) -> Option<Filetype> {
+    // A built-in resource is `res://scene.tscn::Resource_id`; only files.
+    if path.contains("::") || !path.contains("://") {
+        return None;
+    }
+    let name = path.rsplit('/').next().unwrap_or(path);
+    let (_, ext) = name.rsplit_once('.')?;
+    match ext.to_ascii_lowercase().as_str() {
+        "txt" => Some(Filetype::Text),
+        "yml" | "yaml" => Some(Filetype::Yaml),
+        "xml" => Some(Filetype::Xml),
+        "toml" => Some(Filetype::Toml),
+        "json" => Some(Filetype::Json),
+        "md" | "markdown" => Some(Filetype::Markdown),
+        "cfg" => Some(Filetype::Cfg),
         _ => None,
     }
 }
@@ -144,6 +188,8 @@ pub(crate) fn read_signals(editor: &godot::obj::Gd<godot::classes::CodeEdit>) ->
         }
     }
 
+    let file_path = owner.as_ref().and_then(script_list_path);
+
     let script_class = owner.and_then(|tab| {
         let mut script_editor = EditorInterface::singleton().get_script_editor()?;
         let current = script_editor.get_current_editor()?;
@@ -168,7 +214,49 @@ pub(crate) fn read_signals(editor: &godot::obj::Gd<godot::classes::CodeEdit>) ->
         script_class,
         highlighter_class,
         comment_delimiters,
+        file_path,
     }
+}
+
+/// The path of the file `tab` shows, from the script editor's script list.
+///
+/// Godot keeps no public path for a text tab, but the script list shows it:
+/// each item's metadata is its tab's index in the script editor's
+/// TabContainer, and its tooltip is the edited resource's path (Godot 4.7
+/// `ScriptEditor::_update_script_names`; `DocumentList::update_list` after
+/// it). The member and help outlines are ItemLists too, with line numbers
+/// for metadata but no tooltips, so only a tooltip that is a path counts.
+///
+/// `None` when the item is not listed: the script list filter hides it, or
+/// the file is unsaved (its tooltip is "Unsaved file."). Attach runs two
+/// deferred calls after the focus change, by which time a new tab is in
+/// the list.
+fn script_list_path(tab: &godot::obj::Gd<godot::classes::ScriptEditorBase>) -> Option<String> {
+    use godot::classes::{Control, EditorInterface, ItemList, TabContainer};
+    use godot::prelude::*;
+
+    let tabs = tab.get_parent()?.try_cast::<TabContainer>().ok()?;
+    let index = i64::from(tabs.get_tab_idx_from_control(&tab.clone().upcast::<Control>()));
+    if index < 0 {
+        return None;
+    }
+    let script_editor = EditorInterface::singleton().get_script_editor()?;
+    let lists = script_editor
+        .find_children_ex("*")
+        .type_("ItemList")
+        .recursive(true)
+        .owned(false)
+        .done();
+    lists
+        .iter_shared()
+        .filter_map(|node| node.try_cast::<ItemList>().ok())
+        .find_map(|list| {
+            (0..list.get_item_count()).find_map(|i| {
+                let listed = list.get_item_metadata(i).try_to::<i64>().ok()?;
+                let tooltip = list.get_item_tooltip(i).to_string();
+                (listed == index && tooltip.contains("://")).then_some(tooltip)
+            })
+        })
 }
 
 #[cfg(test)]
@@ -180,6 +268,14 @@ mod tests {
             script_class: script.map(str::to_owned),
             highlighter_class: highlighter.map(str::to_owned),
             comment_delimiters: delimiters.iter().map(|d| (*d).to_owned()).collect(),
+            file_path: None,
+        }
+    }
+
+    fn plain_text(path: Option<&str>) -> Signals {
+        Signals {
+            file_path: path.map(str::to_owned),
+            ..sig(None, Some("EditorPlainTextSyntaxHighlighter"), &[])
         }
     }
 
@@ -218,7 +314,7 @@ mod tests {
             ),
             (
                 "t.txt",
-                sig(None, Some("EditorPlainTextSyntaxHighlighter"), &[]),
+                plain_text(Some("res://t.txt")),
                 Some(Filetype::Text),
             ),
             (
@@ -237,6 +333,48 @@ mod tests {
         for (file, signals, want) in rows {
             assert_eq!(detect(&signals), want, "{file}");
         }
+    }
+
+    /// Godot 4.7 opens every default text extension it has no highlighter
+    /// for with the plain-text one, so the extension decides.
+    #[test]
+    fn plain_text_tabs_go_by_extension() {
+        let rows = [
+            ("res://t.txt", Some(Filetype::Text)),
+            ("res://a/b.yml", Some(Filetype::Yaml)),
+            ("res://b.yaml", Some(Filetype::Yaml)),
+            ("res://B.YML", Some(Filetype::Yaml)),
+            ("res://c.xml", Some(Filetype::Xml)),
+            ("res://d.toml", Some(Filetype::Toml)),
+            ("res://e.log", None),
+            ("res://f.csv", None),
+            ("res://Makefile", None),
+            ("res://dir.v2/README", None),
+            // A tab the user switched to plain text.
+            ("res://g.json", Some(Filetype::Json)),
+            ("res://h.md", Some(Filetype::Markdown)),
+            ("Unsaved file.", None),
+            ("res://scene.tscn::Resource_x.txt", None),
+        ];
+        for (path, want) in rows {
+            assert_eq!(detect(&plain_text(Some(path))), want, "{path}");
+        }
+    }
+
+    /// The highlighter alone no longer proves `text`: a `.yml` tab whose
+    /// path could not be read must not get the text plugin, which wraps.
+    #[test]
+    fn plain_text_without_a_path_is_unknown() {
+        assert_eq!(detect(&plain_text(None)), None);
+    }
+
+    /// A script tab switched to the plain-text highlighter keeps the
+    /// language its delimiters give.
+    #[test]
+    fn a_script_tab_switched_to_plain_text_keeps_its_delimiters() {
+        let mut s = plain_text(Some("res://a.gd"));
+        s.comment_delimiters = vec!["##".into(), "#".into()];
+        assert_eq!(detect(&s), Some(Filetype::GdScript));
     }
 
     #[test]

@@ -1575,6 +1575,7 @@ mod tests {
             script_class: Some("GDScript".into()),
             highlighter_class: Some("GDScriptSyntaxHighlighter".into()),
             comment_delimiters: vec!["##".into(), "#".into()],
+            file_path: None,
         }
     }
 
@@ -1583,6 +1584,7 @@ mod tests {
             script_class: None,
             highlighter_class: Some("EditorJSONSyntaxHighlighter".into()),
             comment_delimiters: Vec::new(),
+            file_path: None,
         }
     }
 
@@ -1684,6 +1686,7 @@ mod tests {
             script_class: None,
             highlighter_class: Some("GDShaderSyntaxHighlighter".into()),
             comment_delimiters: vec!["//".into(), "/* */".into()],
+            file_path: None,
         };
         c.engine_mut().options_mut().set_commentstring("/* %s */");
         c.engine_mut().invalidate_option_cache();
@@ -1831,6 +1834,7 @@ mod tests {
             script_class: Some("CSharpScript".into()),
             highlighter_class: None,
             comment_delimiters: vec!["//".into(), "/* */".into()],
+            file_path: None,
         };
         c.setup_filetype(InstanceId::from_i64(1), &cs);
         assert_eq!(c.engine().filetype(), Some("cs"));
@@ -1853,11 +1857,70 @@ mod tests {
             script_class: None,
             highlighter_class: Some("EditorConfigFileSyntaxHighlighter".into()),
             comment_delimiters: Vec::new(),
+            file_path: None,
         };
         c.setup_filetype(InstanceId::from_i64(1), &cfg);
         assert_eq!(c.engine().filetype(), Some("cfg"));
         let out = type_keys(&mut c, "", "idescription=\"A small game\"\x1b");
         assert_eq!(out, "description=\"A small game\"");
+    }
+
+    /// A text tab Godot shows with its plain-text highlighter, as it does
+    /// for every text extension it has no highlighter for.
+    fn plain_text_signals(path: Option<&str>) -> Signals {
+        Signals {
+            script_class: None,
+            highlighter_class: Some("EditorPlainTextSyntaxHighlighter".into()),
+            comment_delimiters: Vec::new(),
+            file_path: path.map(str::to_owned),
+        }
+    }
+
+    /// Godot opens `.yml` and `.yaml` with the plain-text highlighter. A
+    /// break inside a value corrupts the YAML, and Vim's yaml.vim drops `t`.
+    #[test]
+    fn yaml_values_never_wrap_and_comments_do() {
+        for path in ["res://data/config.yml", "res://CI.YAML"] {
+            let mut c = VimController::new();
+            c.apply_settings(&SettingsSnapshot::for_tests(5, 20, 1000));
+            c.setup_filetype(InstanceId::from_i64(1), &plain_text_signals(Some(path)));
+            assert_eq!(c.engine().filetype(), Some("yaml"), "{path}");
+            let value = type_keys(&mut c, "", "ititle: \"A small game here\"\x1b");
+            assert_eq!(value, "title: \"A small game here\"", "{path}");
+            let comment = type_keys(&mut c, "", "i# one two three four five six\x1b");
+            assert_eq!(comment, "# one two three four\n# five six", "{path}");
+        }
+    }
+
+    /// Godot opens `.xml` with the plain-text highlighter; xml.vim drops `t`.
+    #[test]
+    fn xml_never_wraps() {
+        let mut c = VimController::new();
+        c.apply_settings(&SettingsSnapshot::for_tests(5, 20, 1000));
+        c.setup_filetype(
+            InstanceId::from_i64(1),
+            &plain_text_signals(Some("res://export/feed.xml")),
+        );
+        assert_eq!(c.engine().filetype(), Some("xml"));
+        let out = type_keys(&mut c, "", "i<name>one two three four five</name>\x1b");
+        assert_eq!(out, "<name>one two three four five</name>");
+    }
+
+    /// Only a `.txt` file is `text`. Without a readable path the highlighter
+    /// says nothing about the file, so no plugin runs.
+    #[test]
+    fn plain_text_is_text_only_for_txt_files() {
+        let mut c = VimController::new();
+        c.setup_filetype(
+            InstanceId::from_i64(1),
+            &plain_text_signals(Some("res://notes.txt")),
+        );
+        assert_eq!(c.engine().filetype(), Some("text"));
+        for path in [None, Some("res://server.log"), Some("Unsaved file.")] {
+            let mut c = VimController::new();
+            c.setup_filetype(InstanceId::from_i64(1), &plain_text_signals(path));
+            assert_eq!(c.engine().filetype(), None, "{path:?}");
+        }
     }
 
     #[test]

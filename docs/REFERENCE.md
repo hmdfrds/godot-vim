@@ -375,8 +375,16 @@ The filetype comes from what Godot says about the editor, in this order:
    scripts in a scene) is `gdscript`, `CSharpScript` is `cs`.
 2. The syntax highlighter Godot picked for the file, which you can change
    from the script editor's **Syntax Highlighter** menu: GDScript,
-   GDShader (`gdshader`), JSON (`json`), Markdown (`markdown`), Plain Text
-   (`text`) and ConfigFile (`cfg`).
+   GDShader (`gdshader`), JSON (`json`), Markdown (`markdown`) and
+   ConfigFile (`cfg`). Godot gives **Plain Text** to every text file it has
+   no highlighter for, so for Plain Text the file's extension decides, read
+   from the script list: `.txt` is `text`, `.yml` and `.yaml` are `yaml`,
+   `.xml` is `xml`, `.toml` is `toml` (and `.json`, `.md` and `.cfg` keep
+   their own filetype if you switched them to Plain Text). Any other
+   extension, such as `.log`, has no filetype, as in Vim. So does a file
+   whose entry the script list does not show: one hidden by the script
+   list's filter when its tab first gets the cursor, or a new file not yet
+   saved.
 3. The comment delimiters: `#` means `gdscript`. Anything else gives no
    filetype, and no plugin runs.
 
@@ -397,6 +405,9 @@ Indent is not touched: it always follows the script editor.
 | `text` | `setlocal comments=fb:-,fb:*,n:> commentstring=` | `text.vim` |
 | `cs` | `setlocal formatoptions-=t formatoptions+=cql comments=sO:*\ -,mO:*\ \ ,exO:*/,s1:/*,mb:*,ex:*/,:///,:// commentstring=//\ %s` | `cs.vim` without `r` and `o` |
 | `cfg` | `setlocal commentstring=#\ %s formatoptions-=t formatoptions+=cql` | `cfg.vim` without `r` and `o` |
+| `yaml` | `setlocal comments=:# commentstring=#\ %s formatoptions-=t formatoptions+=cql` | `yaml.vim` without `r`, `o` and `expandtab` |
+| `xml` | `setlocal commentstring=<!--\ %s\ --> comments=s:<!--,e:--> formatoptions-=t formatoptions+=cql` | `xml.vim` without `r` and `o` |
+| `toml` | `setlocal commentstring=#\ %s comments=:#` | `toml.vim` |
 | anything else | nothing | |
 
 With the default `textwidth=0` none of this wraps anything. Set a width (the
@@ -407,9 +418,13 @@ With the default `textwidth=0` none of this wraps anything. Set a width (the
   and the new line starts with the same indent and leader, so the script
   still parses. A trailing comment after code (`x = 1  # note`) counts as
   code.
-- **JSON and `.cfg` values never wrap.** A break inside a quoted `.cfg`
-  value would make it a multi-line string.
-- **Markdown and text wrap as prose**, as in Vim.
+- **JSON, `.cfg`, YAML and XML values never wrap**; `#` comments in
+  `.cfg` and YAML files do. A break inside a quoted `.cfg` value would
+  make it a multi-line string, and one inside a YAML value breaks the file.
+- **Markdown and `.txt` files wrap as prose**, as in Vim. So do TOML
+  files, whose `toml.vim` keeps `t`: `:setlocal fo-=t` stops it in one
+  file. A file with no filetype (`.log`, or anything detection cannot
+  place) keeps the global `formatoptions`, which has `t`, as in Vim.
 
 **GDScript deviates from Vim on purpose.** Vim's `gdscript.vim`, like
 `python.vim`, leaves `formatoptions` alone, so `t` wraps code as you type.

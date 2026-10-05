@@ -22,8 +22,10 @@
 //! `comments` is `b:##,b:#` without Python's `fb:-`, which would make a code
 //! line starting with "- " (a continued expression) a comment and wrap it.
 //! The shader entry does the same with `formatoptions` for the same reason;
-//! upstream `gdshader.vim` keeps the global value too. The C# and cfg
-//! entries follow their upstream plugins, which already drop `t`.
+//! upstream `gdshader.vim` keeps the global value too. The C#, cfg, YAML
+//! and XML entries follow their upstream plugins, which already drop `t`.
+//! TOML follows `toml.vim`, which keeps the global `formatoptions`, so with
+//! a width set a long TOML line wraps as it does in Vim.
 //!
 //! Applying a line follows `:setlocal`: it writes the buffer's own value and
 //! leaves the global one alone. The engine's `:setlocal` executor is not
@@ -159,6 +161,54 @@ pub(crate) const FTPLUGINS: &[Ftplugin] = &[
             ex: r"setlocal commentstring=#\ %s formatoptions-=t formatoptions+=cql",
             source: "deviation: cfg.vim:16 is cms=#\\ %s fo-=t fo+=croql (r and o left out)",
         }],
+    },
+    Ftplugin {
+        filetype: Filetype::Yaml,
+        lines: &[
+            Line {
+                // expandtab is left out: Godot owns indent.
+                ex: r"setlocal comments=:# commentstring=#\ %s",
+                source: "ftplugin/yaml.vim:17",
+            },
+            Line {
+                ex: "setlocal formatoptions-=t formatoptions+=cql",
+                source: "deviation: yaml.vim:18 is fo-=t fo+=croql (r and o left out)",
+            },
+        ],
+    },
+    Ftplugin {
+        filetype: Filetype::Xml,
+        lines: &[
+            Line {
+                ex: r"setlocal commentstring=<!--\ %s\ -->",
+                source: "ftplugin/xml.vim:18",
+            },
+            Line {
+                ex: "setlocal comments=s:<!--,e:-->",
+                source: "ftplugin/xml.vim:21",
+            },
+            Line {
+                ex: "setlocal formatoptions-=t",
+                source: "ftplugin/xml.vim:23",
+            },
+            Line {
+                ex: "setlocal formatoptions+=cql",
+                source: "deviation: xml.vim:24 is fo+=croql (r and o left out)",
+            },
+        ],
+    },
+    Ftplugin {
+        filetype: Filetype::Toml,
+        lines: &[
+            Line {
+                ex: r"setlocal commentstring=#\ %s",
+                source: "ftplugin/toml.vim:17",
+            },
+            Line {
+                ex: "setlocal comments=:#",
+                source: "ftplugin/toml.vim:18",
+            },
+        ],
     },
 ];
 
@@ -632,6 +682,42 @@ mod tests {
     }
 
     #[test]
+    fn yaml_and_xml_never_wrap_values() {
+        let yaml = run(Filetype::Yaml);
+        assert_eq!(
+            local(&yaml, OptionId::FormatOptions).as_deref(),
+            Some("jcql")
+        );
+        assert_eq!(local(&yaml, OptionId::Comments).as_deref(), Some(":#"));
+        assert_eq!(
+            local(&yaml, OptionId::CommentString).as_deref(),
+            Some("# %s")
+        );
+        let xml = run(Filetype::Xml);
+        assert_eq!(
+            local(&xml, OptionId::FormatOptions).as_deref(),
+            Some("jcql")
+        );
+        assert_eq!(
+            local(&xml, OptionId::Comments).as_deref(),
+            Some("s:<!--,e:-->")
+        );
+        assert_eq!(
+            local(&xml, OptionId::CommentString).as_deref(),
+            Some("<!-- %s -->")
+        );
+    }
+
+    /// toml.vim keeps the global formatoptions.
+    #[test]
+    fn toml_keeps_fo_like_upstream() {
+        let ov = run(Filetype::Toml);
+        assert_eq!(local(&ov, OptionId::FormatOptions), None);
+        assert_eq!(local(&ov, OptionId::Comments).as_deref(), Some(":#"));
+        assert_eq!(local(&ov, OptionId::CommentString).as_deref(), Some("# %s"));
+    }
+
+    #[test]
     fn every_filetype_has_a_plugin() {
         for ft in [
             Filetype::GdScript,
@@ -641,6 +727,9 @@ mod tests {
             Filetype::Markdown,
             Filetype::Text,
             Filetype::Cfg,
+            Filetype::Yaml,
+            Filetype::Xml,
+            Filetype::Toml,
         ] {
             assert!(ftplugin_for(ft).is_some(), "{ft:?}");
         }
