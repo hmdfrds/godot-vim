@@ -21,7 +21,9 @@
 //! `#` and `##` comments wrap with their leader once `textwidth` is set.
 //! `comments` is `b:##,b:#` without Python's `fb:-`, which would make a code
 //! line starting with "- " (a continued expression) a comment and wrap it.
-//! The shader entry does the same with `formatoptions` for the same reason.
+//! The shader entry does the same with `formatoptions` for the same reason;
+//! upstream `gdshader.vim` keeps the global value too. The C# and cfg
+//! entries follow their upstream plugins, which already drop `t`.
 //!
 //! Applying a line follows `:setlocal`: it writes the buffer's own value and
 //! leaves the global one alone. The engine's `:setlocal` executor is not
@@ -50,7 +52,7 @@ pub(crate) struct Ftplugin {
     pub(crate) lines: &'static [Line],
 }
 
-/// The table. A filetype missing here (cs, cfg) gets no plugin.
+/// The table. A filetype missing here gets no plugin.
 pub(crate) const FTPLUGINS: &[Ftplugin] = &[
     Ftplugin {
         filetype: Filetype::GdScript,
@@ -86,6 +88,23 @@ pub(crate) const FTPLUGINS: &[Ftplugin] = &[
                 ex: "setlocal formatoptions-=t formatoptions+=cql",
                 source: "deviation: gdshader.vim keeps fo; \
                          c.vim:23 is fo-=t fo+=croql (r and o left out)",
+            },
+        ],
+    },
+    Ftplugin {
+        filetype: Filetype::Cs,
+        lines: &[
+            Line {
+                ex: "setlocal formatoptions-=t formatoptions+=cql",
+                source: "deviation: cs.vim:19 is fo-=t fo+=croql (r and o left out)",
+            },
+            Line {
+                ex: r"setlocal comments=sO:*\ -,mO:*\ \ ,exO:*/,s1:/*,mb:*,ex:*/,:///,://",
+                source: "ftplugin/cs.vim:22",
+            },
+            Line {
+                ex: r"setlocal commentstring=//\ %s",
+                source: "ftplugin/cs.vim:23",
             },
         ],
     },
@@ -133,6 +152,13 @@ pub(crate) const FTPLUGINS: &[Ftplugin] = &[
                 source: "ftplugin/text.vim:18",
             },
         ],
+    },
+    Ftplugin {
+        filetype: Filetype::Cfg,
+        lines: &[Line {
+            ex: r"setlocal commentstring=#\ %s formatoptions-=t formatoptions+=cql",
+            source: "deviation: cfg.vim:16 is cms=#\\ %s fo-=t fo+=croql (r and o left out)",
+        }],
     },
 ];
 
@@ -578,17 +604,43 @@ mod tests {
     }
 
     #[test]
-    fn filetypes_without_a_plugin_change_nothing() {
-        for ft in [Filetype::Cs, Filetype::Cfg] {
-            let mut ov = OptionOverrides::new();
-            let applied = update(
-                None,
-                setup(Some(ft), true, None),
-                &VimOptions::default(),
-                &mut ov,
-            );
-            assert!(applied.is_some_and(|a| a.touched.is_empty()));
-            assert!(ov.is_empty());
+    fn cs_wraps_comments_and_never_code() {
+        let ov = run(Filetype::Cs);
+        assert_eq!(local(&ov, OptionId::FormatOptions).as_deref(), Some("jcql"));
+        assert_eq!(
+            local(&ov, OptionId::Comments).as_deref(),
+            Some("sO:* -,mO:*  ,exO:*/,s1:/*,mb:*,ex:*/,:///,://")
+        );
+        assert_eq!(
+            local(&ov, OptionId::CommentString).as_deref(),
+            Some("// %s")
+        );
+    }
+
+    #[test]
+    fn cfg_never_wraps_values() {
+        let ov = run(Filetype::Cfg);
+        assert_eq!(local(&ov, OptionId::FormatOptions).as_deref(), Some("jcql"));
+        assert_eq!(local(&ov, OptionId::CommentString).as_deref(), Some("# %s"));
+        assert_eq!(
+            local(&ov, OptionId::Comments),
+            None,
+            "cfg.vim keeps comments"
+        );
+    }
+
+    #[test]
+    fn every_filetype_has_a_plugin() {
+        for ft in [
+            Filetype::GdScript,
+            Filetype::GdShader,
+            Filetype::Cs,
+            Filetype::Json,
+            Filetype::Markdown,
+            Filetype::Text,
+            Filetype::Cfg,
+        ] {
+            assert!(ftplugin_for(ft).is_some(), "{ft:?}");
         }
     }
 

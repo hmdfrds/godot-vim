@@ -395,16 +395,20 @@ Indent is not touched: it always follows the script editor.
 | `json` | `setlocal formatoptions-=t comments= commentstring=` | `json.vim` |
 | `markdown` | `setlocal comments=fb:*,fb:-,fb:+,n:> commentstring=<!--\ %s\ --> formatoptions+=tcqln formatoptions-=r formatoptions-=o` | `markdown.vim` (`n` has no effect yet) |
 | `text` | `setlocal comments=fb:-,fb:*,n:> commentstring=` | `text.vim` |
-| `cs`, `cfg`, anything else | nothing | |
+| `cs` | `setlocal formatoptions-=t formatoptions+=cql comments=sO:*\ -,mO:*\ \ ,exO:*/,s1:/*,mb:*,ex:*/,:///,:// commentstring=//\ %s` | `cs.vim` without `r` and `o` |
+| `cfg` | `setlocal commentstring=#\ %s formatoptions-=t formatoptions+=cql` | `cfg.vim` without `r` and `o` |
+| anything else | nothing | |
 
 With the default `textwidth=0` none of this wraps anything. Set a width (the
 **Textwidth** setting, or `:set tw=100`) and:
 
-- **GDScript and shader code never wraps; comments do.** A `#`, `##` or `//`
-  comment line breaks at the last blank before the width, and the new line
-  starts with the same indent and leader, so the script still parses. A
-  trailing comment after code (`x = 1  # note`) counts as code.
-- **JSON never wraps.**
+- **GDScript, shader and C# code never wraps; comments do.** A `#`, `##`,
+  `//` or `///` comment line breaks at the last blank before the width,
+  and the new line starts with the same indent and leader, so the script
+  still parses. A trailing comment after code (`x = 1  # note`) counts as
+  code.
+- **JSON and `.cfg` values never wrap.** A break inside a quoted `.cfg`
+  value would make it a multi-line string.
 - **Markdown and text wrap as prose**, as in Vim.
 
 **GDScript deviates from Vim on purpose.** Vim's `gdscript.vim`, like

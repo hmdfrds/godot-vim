@@ -10,11 +10,13 @@ script's filetype and runs Vim's filetype plugins for it, transcribed from
 Vim 9.1 (see [Filetype Plugins](REFERENCE.md#filetype-plugins)). With a
 Textwidth above `0`:
 
-- GDScript and shader code no longer breaks while you type. `#`, `##` and
-  `//` comment lines break at the last blank before the width and continue
-  with the same indent and leader. This deliberately differs from Vim's
-  `gdscript.vim`, which lets code wrap.
-- JSON never wraps. Markdown and text wrap as prose, as in Vim.
+- GDScript, shader and C# code no longer breaks while you type. `#`, `##`,
+  `//` and `///` comment lines break at the last blank before the width
+  and continue with the same indent and leader. For GDScript and shaders
+  this deliberately differs from Vim's `gdscript.vim` and `gdshader.vim`,
+  which let code wrap.
+- JSON and `.cfg` values never wrap. Markdown and text wrap as prose, as in
+  Vim.
 - The break no longer misplaces or deletes the characters you type, and it
   happens where Vim breaks: when you type a non-blank character past the
   width, at the last blank before the cursor.

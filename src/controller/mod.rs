@@ -1822,6 +1822,44 @@ mod tests {
         }
     }
 
+    /// The point of #77 for C#: code and strings never wrap, comments do.
+    #[test]
+    fn csharp_code_and_strings_never_wrap() {
+        let mut c = VimController::new();
+        c.apply_settings(&SettingsSnapshot::for_tests(5, 20, 1000));
+        let cs = Signals {
+            script_class: Some("CSharpScript".into()),
+            highlighter_class: None,
+            comment_delimiters: vec!["//".into(), "/* */".into()],
+        };
+        c.setup_filetype(InstanceId::from_i64(1), &cs);
+        assert_eq!(c.engine().filetype(), Some("cs"));
+
+        let s = type_keys(&mut c, "", "i\tGD.Print(\"one two three four\");\x1b");
+        assert!(!s.contains('\n'), "{s:?}");
+        let code = type_keys(&mut c, "", "ivar v = a + b + c + d + e + f + g;\x1b");
+        assert_eq!(code, "var v = a + b + c + d + e + f + g;");
+        let comment = type_keys(&mut c, "", "i// one two three four five six\x1b");
+        assert_eq!(comment, "// one two three\n// four five six");
+    }
+
+    /// A `.cfg` value never wraps: a break inside a quoted value would turn
+    /// it into a multi-line string.
+    #[test]
+    fn cfg_values_never_wrap() {
+        let mut c = VimController::new();
+        c.apply_settings(&SettingsSnapshot::for_tests(5, 20, 1000));
+        let cfg = Signals {
+            script_class: None,
+            highlighter_class: Some("EditorConfigFileSyntaxHighlighter".into()),
+            comment_delimiters: Vec::new(),
+        };
+        c.setup_filetype(InstanceId::from_i64(1), &cfg);
+        assert_eq!(c.engine().filetype(), Some("cfg"));
+        let out = type_keys(&mut c, "", "idescription=\"A small game\"\x1b");
+        assert_eq!(out, "description=\"A small game\"");
+    }
+
     #[test]
     fn filetype_off_detects_nothing() {
         let mut c = VimController::new();
