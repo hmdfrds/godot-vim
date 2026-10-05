@@ -384,7 +384,9 @@ The filetype comes from what Godot says about the editor, in this order:
    extension, such as `.log`, has no filetype, as in Vim. So does a file
    whose entry the script list does not show: one hidden by the script
    list's filter when its tab first gets the cursor, or a new file not yet
-   saved.
+   saved. Once a tab's path has been read, a later visit that cannot read
+   it (because the filter now hides the file) keeps the filetype from the
+   earlier path, so the plugin and your `:setlocal` changes stay.
 3. The comment delimiters: `#` means `gdscript`. Anything else gives no
    filetype, and no plugin runs.
 

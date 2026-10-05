@@ -20,7 +20,9 @@
 //!    for it **the file's extension** decides, read from the script list
 //!    (see [`script_list_path`]). Only `.txt` is `text`; a path that cannot
 //!    be read or an extension Vim has no filetype for, like `.log`, gives
-//!    none.
+//!    none. The caller remembers the last path read for each buffer and
+//!    passes it when a later attach reads none (see
+//!    `VimController::setup_filetype`).
 //! 3. **The comment delimiters.** Script tabs set them from the script's
 //!    language and the shader editor sets `//` and `/* */`; text tabs set
 //!    none. `#` is taken as GDScript. `//` is ambiguous (shader or C#) and

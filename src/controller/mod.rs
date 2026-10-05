@@ -617,7 +617,9 @@ impl VimController {
     /// filetype, the plugin switch or the delimiter changes. A `:setlocal`
     /// the user made in between therefore survives buffer switches, which
     /// save and restore the buffer's options with the rest of its engine
-    /// state. Must run after [`restore_buffer_engine_state`].
+    /// state. A path the script list does not show on a later attach does
+    /// not count as a change: the buffer's last readable path is used.
+    /// Must run after [`restore_buffer_engine_state`].
     ///
     /// The old commentstring sync wrote the global value on every attach,
     /// so a shader's `//` leaked into the next text file and a user's
@@ -630,6 +632,27 @@ impl VimController {
         signals: &crate::ftplugin::detect::Signals,
     ) {
         use crate::ftplugin::{detect, runtime};
+        // An unreadable path is no news: the script list hides a file its
+        // filter does not match, and the buffer's file has not changed, so
+        // detect from the last path read rather than undo its plugin.
+        let buffer = self.shell_state_mut().buffer(editor_id);
+        let remembered;
+        let signals = match &signals.file_path {
+            Some(path) => {
+                buffer.set_file_path(path.clone());
+                signals
+            }
+            None => match buffer.file_path() {
+                Some(path) => {
+                    remembered = detect::Signals {
+                        file_path: Some(path.to_owned()),
+                        ..signals.clone()
+                    };
+                    &remembered
+                }
+                None => signals,
+            },
+        };
         let switches = self.ctx.filetype;
         let filetype = if switches.detection {
             detect::detect(signals)
@@ -1921,6 +1944,24 @@ mod tests {
             c.setup_filetype(InstanceId::from_i64(1), &plain_text_signals(path));
             assert_eq!(c.engine().filetype(), None, "{path:?}");
         }
+    }
+
+    /// Detection runs on every attach, and the script list hides a file
+    /// its filter does not match. A file detected from its path keeps its
+    /// filetype when a later attach cannot read the path, so a YAML value
+    /// does not start wrapping after the user filters the script list.
+    #[test]
+    fn unreadable_path_on_a_later_attach_keeps_the_filetype() {
+        let mut c = VimController::new();
+        c.apply_settings(&SettingsSnapshot::for_tests(5, 20, 1000));
+        let id = InstanceId::from_i64(1);
+        c.setup_filetype(id, &plain_text_signals(Some("res://config.yml")));
+        assert_eq!(c.engine().filetype(), Some("yaml"));
+        c.setup_filetype(id, &plain_text_signals(None));
+        assert_eq!(c.engine().filetype(), Some("yaml"));
+        assert_eq!(effective_str(&c, OptionId::FormatOptions), "jcql");
+        let value = type_keys(&mut c, "", "iname: one two three four five six\x1b");
+        assert_eq!(value, "name: one two three four five six");
     }
 
     #[test]
