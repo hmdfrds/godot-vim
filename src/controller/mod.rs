@@ -357,11 +357,18 @@ impl VimController {
             }
         }
         self.engine_mut().invalidate_option_cache();
-        if prev
-            .as_ref()
-            .is_none_or(|p| p.filetype_plugin != snapshot.filetype_plugin)
-        {
-            self.ctx.filetype.plugin = snapshot.filetype_plugin;
+        // The setting is `filetype plugin on|off`: turning it on turns
+        // detection on too, as `filetype plugin on` does after a vimrc
+        // `filetype off`. A full push only seeds the plugin switch.
+        match prev {
+            Some(ref p) if p.filetype_plugin != snapshot.filetype_plugin => {
+                self.ctx.filetype.apply(crate::ftplugin::FiletypeCommand {
+                    detection: snapshot.filetype_plugin.then_some(true),
+                    plugin: Some(snapshot.filetype_plugin),
+                });
+            }
+            Some(_) => {}
+            None => self.ctx.filetype.plugin = snapshot.filetype_plugin,
         }
         self.ctx.last_applied = Some(snapshot.clone());
         self.set_passthrough_keys(&snapshot.passthrough_keys);
@@ -1769,6 +1776,28 @@ mod tests {
         on.filetype_plugin = true;
         c.apply_settings(&on);
         assert!(c.ctx.filetype.plugins_run(), "changing the setting wins");
+    }
+
+    /// The setting is `filetype plugin on`, which turns detection on too:
+    /// after a vimrc `filetype off`, turning the setting on must run the
+    /// plugins again.
+    #[test]
+    fn turning_the_setting_on_after_filetype_off_runs_the_plugins() {
+        let mut c = VimController::new();
+        let snap = SettingsSnapshot::for_tests(5, 20, 1000);
+        c.apply_settings(&snap);
+        c.reload_config("filetype off");
+        assert!(!c.ctx.filetype.plugins_run());
+
+        let mut off = snap.clone();
+        off.filetype_plugin = false;
+        c.apply_settings(&off);
+        c.apply_settings(&snap);
+        assert!(c.ctx.filetype.plugins_run());
+        c.setup_filetype(InstanceId::from_i64(1), &gd_signals());
+        assert_eq!(effective_str(&c, OptionId::FormatOptions), "jcql");
+        let code = type_keys(&mut c, "", "ivar total = alpha + beta + gamma + delta\x1b");
+        assert_eq!(code, "var total = alpha + beta + gamma + delta");
     }
 
     /// `:filetype` takes a trailing `"` comment and a `|`, and a leading

@@ -432,8 +432,9 @@ multi-line string still counts as a comment.
 - **Turning plugins off:** the **Filetype Plugin** setting, or
   `filetype plugin off` in a `.godot-vimrc` (`filetype plugin on` turns
   them back on; `filetype off` stops detection altogether). Whichever you
-  changed last wins. The current script follows at once and other scripts
-  the next time you switch to them, their plugin undone. The
+  changed last wins; turning the setting on also turns detection back on,
+  as `filetype plugin on` does. The current script follows at once and
+  other scripts the next time you switch to them, their plugin undone. The
   `commentstring` from Godot's delimiters is set either way.
 
 ---
@@ -457,7 +458,7 @@ All settings are in **Editor > Editor Settings > Plugins > GodotVim**.
 |---------|-----|------|---------|-------------|
 | Scroll Off | `plugins/GodotVim/editor/scrolloff` | `int` | `5` | Minimum lines above/below cursor (0-20). |
 | Textwidth | `plugins/GodotVim/editor/textwidth` | `int` | `0` | Vim `textwidth`, 0 to 200: the width at which typing breaks lines where `formatoptions` allows it. In GDScript and shaders only comments wrap, JSON never does (see [Filetype Plugins](#filetype-plugins)). `0` never breaks; `gq` formats at 79 when it is `0`. Shown as **Textwidth** under **Godot Vim > Editor**; filter for `textwidth` to find it. |
-| Filetype Plugin | `plugins/GodotVim/editor/filetype_plugin` | `bool` | `true` | Vim's `filetype plugin on`: run the [filetype plugins](#filetype-plugins). Off is `filetype plugin off`. A change here wins over the vimrc line until the vimrc is sourced again. |
+| Filetype Plugin | `plugins/GodotVim/editor/filetype_plugin` | `bool` | `true` | Vim's `filetype plugin on`: run the [filetype plugins](#filetype-plugins), and turn detection back on after a vimrc `filetype off`. Off is `filetype plugin off`. A change here wins over the vimrc line until the vimrc is sourced again. |
 | Clipboard | `plugins/GodotVim/editor/clipboard_enabled` | `bool` | `false` | Sync Vim registers with system clipboard. |
 | Ignore Case | `plugins/GodotVim/editor/ignorecase` | `bool` | `false` | Case-insensitive search. |
 | Smart Case | `plugins/GodotVim/editor/smartcase` | `bool` | `false` | Uppercase in pattern overrides Ignore Case. |
