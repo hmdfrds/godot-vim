@@ -973,7 +973,6 @@ impl VimController {
 
         // The engine skips `:filetype`, which is the host's to handle.
         for line in text.lines() {
-            let line = line.trim_start().trim_start_matches(':');
             if let Some(cmd) = crate::ftplugin::parse_filetype_command(line) {
                 self.ctx.filetype.apply(cmd);
             }
@@ -1770,6 +1769,28 @@ mod tests {
         on.filetype_plugin = true;
         c.apply_settings(&on);
         assert!(c.ctx.filetype.plugins_run(), "changing the setting wins");
+    }
+
+    /// `:filetype` takes a trailing `"` comment and a `|`, and a leading
+    /// colon, as in Vim.
+    #[test]
+    fn vimrc_filetype_lines_take_comments_bars_and_a_colon() {
+        for line in [
+            "filetype plugin off \" no plugins",
+            "filetype plugin off | set tw=10",
+            ":filetype plugin off",
+            "  :filetype plugin off",
+        ] {
+            let mut c = VimController::new();
+            let tw = c.engine().options().textwidth();
+            c.reload_config(line);
+            assert!(!c.ctx.filetype.plugins_run(), "{line}");
+            assert_eq!(
+                c.engine().options().textwidth(),
+                tw,
+                "{line}: after | is not run"
+            );
+        }
     }
 
     #[test]

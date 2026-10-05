@@ -68,10 +68,30 @@ pub(crate) struct FiletypeCommand {
 ///   `filetype indent on` still turns detection on, as in Vim.
 /// - `filetype detect` changes nothing.
 ///
-/// Returns `None` for anything else, including a bare `:filetype`, which
-/// only prints the state.
+/// Leading colons, a trailing `"` comment and a `|` with a command after
+/// it are accepted, as Vim's `:filetype` takes them (see
+/// [`split_filetype_line`]). Returns `None` for anything else, including a
+/// bare `:filetype`, which only prints the state.
 pub(crate) fn parse_filetype_command(line: &str) -> Option<FiletypeCommand> {
-    let mut words = line.split_whitespace();
+    split_filetype_line(line).map(|(cmd, _)| cmd)
+}
+
+/// [`parse_filetype_command`], plus the text after a `|` that ends the
+/// command, if any. The host runs only the `:filetype` part; the sandbox
+/// uses the rest to judge the whole line.
+///
+/// `:filetype` is `EX_TRLBAR` in Vim: its arguments end at the first `"`,
+/// which starts a comment that runs to the end of the line, or at the first
+/// `|`, which starts the next command. Its arguments are plain words, so no
+/// escape is needed before either.
+pub(crate) fn split_filetype_line(line: &str) -> Option<(FiletypeCommand, Option<&str>)> {
+    let line = line.trim_start().trim_start_matches(':');
+    let (args, rest) = match line.find(['"', '|']) {
+        Some(at) if line[at..].starts_with('|') => (&line[..at], Some(&line[at + 1..])),
+        Some(at) => (&line[..at], None),
+        None => (line, None),
+    };
+    let mut words = args.split_whitespace();
     let cmd = words.next()?;
     if !is_filetype_abbrev(cmd) {
         return None;
@@ -103,7 +123,7 @@ pub(crate) fn parse_filetype_command(line: &str) -> Option<FiletypeCommand> {
         },
         _ => FiletypeCommand::default(),
     };
-    Some(out)
+    Some((out, rest))
 }
 
 /// `filet[ype]`, case-sensitive like Vim's Ex command names.
@@ -161,5 +181,43 @@ mod tests {
         assert!(parse_filetype_command("filetype on off").is_none());
         assert!(parse_filetype_command("filetype bogus on").is_none());
         assert!(parse_filetype_command("filetypes on").is_none());
+    }
+
+    /// `:filetype` is EX_TRLBAR in Vim: a `"` starts a comment and a `|`
+    /// ends the command. A leading colon is accepted.
+    #[test]
+    fn trailing_comment_bar_and_colon() {
+        let off = Some(FiletypeCommand {
+            detection: None,
+            plugin: Some(false),
+        });
+        assert_eq!(
+            parse_filetype_command("filetype plugin off \" no plugins"),
+            off
+        );
+        assert_eq!(parse_filetype_command("filetype plugin off\"x"), off);
+        assert_eq!(
+            parse_filetype_command("filetype plugin off | set tw=10"),
+            off
+        );
+        assert_eq!(parse_filetype_command("filetype plugin off|syntax on"), off);
+        assert_eq!(parse_filetype_command(":filetype plugin off"), off);
+        assert_eq!(parse_filetype_command("::filet plugin off"), off);
+        assert!(run(&[
+            "filetype plugin off",
+            "filetype plugin indent on | syntax on"
+        ])
+        .plugins_run());
+        assert!(parse_filetype_command("filetype \" plugin off").is_none());
+        assert!(parse_filetype_command("filetype | plugin off").is_none());
+        assert_eq!(
+            split_filetype_line("filetype plugin off | set tw=10").map(|(_, rest)| rest),
+            Some(Some(" set tw=10"))
+        );
+        assert_eq!(
+            split_filetype_line("filetype plugin off \" x | !rm").map(|(_, rest)| rest),
+            Some(None),
+            "a bar inside the comment is part of the comment"
+        );
     }
 }

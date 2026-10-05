@@ -236,9 +236,11 @@ fn is_safe_non_mapping_line(trimmed: &str) -> bool {
         return !has_blocked;
     }
     // `:filetype plugin off` and the rest of `:filetype` only switch the
-    // built-in filetype plugins on or off; nothing in them runs code.
-    if crate::ftplugin::parse_filetype_command(trimmed).is_some() {
-        return true;
+    // built-in filetype plugins on or off; nothing in them runs code. What
+    // follows a `|` is another command, so the line is safe only when that
+    // command is too.
+    if let Some((_, rest)) = crate::ftplugin::split_filetype_line(trimmed) {
+        return rest.is_none_or(|rest| is_safe_non_mapping_line(rest.trim()));
     }
     // Only allow `let mapleader` / `let g:mapleader` -- NOT `let mapleader_hack`
     // (which could contain `system(...)` in the value expression).
@@ -1176,6 +1178,9 @@ imap jj <Esc>
             "filetype plugin on",
             "filetype plugin indent on",
             "filet off",
+            ":filetype plugin off",
+            "filetype plugin off \" no plugins",
+            "filetype off | set tw=10",
         ] {
             let output = sandbox_config_text(&format!("{line}\n"));
             assert!(!output.contains("[sandbox] stripped"), "{line}: {output}");
@@ -1184,7 +1189,13 @@ imap jj <Esc>
 
     #[test]
     fn strips_malformed_filetype_lines() {
-        for line in ["filetype plugin off | !rm", "filetype plugin"] {
+        for line in [
+            "filetype plugin off | !rm",
+            "filetype plugin",
+            "filetype plugin off | set shell=/bin/evil",
+            "filetype plugin indent on | syntax on",
+            "filetype on | filetype on | !rm",
+        ] {
             let output = sandbox_config_text(&format!("{line}\n"));
             assert!(output.contains("[sandbox] stripped"), "{line}: {output}");
         }

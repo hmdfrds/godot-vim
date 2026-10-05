@@ -614,7 +614,7 @@ Place a `.godot-vimrc` file at your project root (`res://.godot-vimrc`) or user 
 | `let mapleader = "x"` | Set leader key (must come before `<Leader>` mappings) |
 | `set timeoutlen=N` | Mapping timeout in milliseconds |
 | `set {option}` / `setlocal {option}` | Any option from [Vim Options](#vim-options-set); `setlocal` acts like `set` here |
-| `filetype plugin on` / `filetype plugin off` | Turn the [filetype plugins](#filetype-plugins) on or off; `filetype on` / `filetype off` turn detection on or off |
+| `filetype plugin on` / `filetype plugin off` | Turn the [filetype plugins](#filetype-plugins) on or off; `filetype on` / `filetype off` turn detection on or off. A leading `:`, a trailing `" comment` and `\| next-command` are accepted; the command after `\|` is not run. |
 | `nmap` / `nnoremap` | Normal mode mapping |
 | `imap` / `inoremap` | Insert mode mapping |
 | `vmap` / `vnoremap` | Visual mode mapping |
