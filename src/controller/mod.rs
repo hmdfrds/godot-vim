@@ -134,6 +134,9 @@ pub(crate) struct ControllerContext {
     /// only if a panic interrupted the swap, leaving a fresh engine that never
     /// received the settings or the vimrc.
     pub(crate) swap_in_flight: bool,
+    /// Vim's `:filetype` switches, written by the `filetype_plugin` Editor
+    /// Setting and by `filetype` lines in the vimrc, whichever changed last.
+    pub(crate) filetype: crate::ftplugin::Switches,
 }
 
 /// Per-editor orchestrator that bridges Godot's event-driven input to
@@ -180,6 +183,7 @@ impl VimController {
                 last_applied: None,
                 synced_indent: None,
                 swap_in_flight: false,
+                filetype: crate::ftplugin::Switches::default(),
             },
         }
     }
@@ -353,6 +357,12 @@ impl VimController {
             }
         }
         self.engine_mut().invalidate_option_cache();
+        if prev
+            .as_ref()
+            .is_none_or(|p| p.filetype_plugin != snapshot.filetype_plugin)
+        {
+            self.ctx.filetype.plugin = snapshot.filetype_plugin;
+        }
         self.ctx.last_applied = Some(snapshot.clone());
         self.set_passthrough_keys(&snapshot.passthrough_keys);
         self.set_security_policy(crate::host::SecurityPolicy {
@@ -590,10 +600,62 @@ impl VimController {
         true
     }
 
-    /// Sync from CodeEdit's language-specific comment delimiters (e.g., `"# %s"`
-    /// for GDScript) so the `gc` commentary operator uses the right format.
-    pub(crate) fn set_commentstring(&mut self, cs: &str) {
-        self.engine_mut().options_mut().set_commentstring(cs);
+    /// Detect the attached buffer's filetype and bring its own options up to
+    /// date: the `commentstring` from Godot's comment delimiter and, when
+    /// filetype plugins run, the plugin's `:setlocal` lines (see
+    /// [`crate::ftplugin`]).
+    ///
+    /// Runs once per buffer: the record kept with the buffer's shell state
+    /// says what was applied, and nothing is written again until the
+    /// filetype, the plugin switch or the delimiter changes. A `:setlocal`
+    /// the user made in between therefore survives buffer switches, which
+    /// save and restore the buffer's options with the rest of its engine
+    /// state. Must run after [`restore_buffer_engine_state`].
+    ///
+    /// The old commentstring sync wrote the global value on every attach,
+    /// so a shader's `//` leaked into the next text file and a user's
+    /// `:set cms` was overwritten; this writes the buffer's own value.
+    ///
+    /// [`restore_buffer_engine_state`]: Self::restore_buffer_engine_state
+    pub(crate) fn setup_filetype(
+        &mut self,
+        editor_id: InstanceId,
+        signals: &crate::ftplugin::detect::Signals,
+    ) {
+        use crate::ftplugin::{detect, runtime};
+        let switches = self.ctx.filetype;
+        let filetype = if switches.detection {
+            detect::detect(signals)
+        } else {
+            None
+        };
+        let setup = runtime::Setup {
+            filetype,
+            plugin: switches.plugins_run(),
+            commentstring: detect::line_comment_delimiter(&signals.comment_delimiters)
+                .map(|d| format!("{d} %s")),
+        };
+        // Only for filetype-specific mappings; options are set below.
+        self.engine_mut()
+            .set_filetype(filetype.map(detect::Filetype::name));
+
+        let prev = self.shell_state_mut().buffer(editor_id).ftplugin().cloned();
+        let engine = self.engine_mut();
+        let mut overrides = engine.take_buffer_overrides();
+        let applied = runtime::update(prev.as_ref(), setup, engine.options(), &mut overrides);
+        engine.set_buffer_overrides(overrides);
+        if let Some(applied) = applied {
+            log::debug!(
+                "ftplugin: editor #{} filetype={:?} plugin={} touched={:?}",
+                editor_id.to_i64(),
+                applied.setup.filetype.map(detect::Filetype::name),
+                applied.setup.plugin,
+                applied.touched
+            );
+            self.shell_state_mut()
+                .buffer(editor_id)
+                .set_ftplugin(applied);
+        }
     }
 
     /// Sync auto-brace pairs from CodeEdit so the engine handles auto-pairing
@@ -638,8 +700,9 @@ impl VimController {
     /// buffer_mappings, and exchange.
     pub(crate) fn restore_buffer_engine_state(&mut self, editor_id: InstanceId) {
         let engine_state = self
-            .host_state_mut()
-            .and_then(|s| s.buffer(editor_id).take_engine_state())
+            .shell_state_mut()
+            .buffer(editor_id)
+            .take_engine_state()
             .unwrap_or_default();
         self.engine_mut().on_buffer_enter(engine_state);
     }
@@ -907,6 +970,14 @@ impl VimController {
              nmap <leader>mf :cursorfilter \n\
              nmap <leader>mF :cursorfilter! ",
         );
+
+        // The engine skips `:filetype`, which is the host's to handle.
+        for line in text.lines() {
+            let line = line.trim_start().trim_start_matches(':');
+            if let Some(cmd) = crate::ftplugin::parse_filetype_command(line) {
+                self.ctx.filetype.apply(cmd);
+            }
+        }
 
         let mut response = self.engine_mut().source_config_text(text);
         let effects = response.take_effects();
@@ -1391,6 +1462,7 @@ mod tests {
                 last_applied: _,               // push record
                 synced_indent: _,              // push record
                 swap_in_flight: _,             // swap guard
+                filetype: _,                   // config
             } = ctx;
         }
     }
@@ -1485,6 +1557,229 @@ mod tests {
             OptionValue::Unsigned(8),
             "only the value that moved is written"
         );
+    }
+
+    // ── Filetype setup ────────────────────────────────────────────────
+
+    use crate::ftplugin::detect::Signals;
+    use vim_core::primitives::{OptionId, OptionValue};
+
+    fn gd_signals() -> Signals {
+        Signals {
+            script_class: Some("GDScript".into()),
+            highlighter_class: Some("GDScriptSyntaxHighlighter".into()),
+            comment_delimiters: vec!["##".into(), "#".into()],
+        }
+    }
+
+    fn json_signals() -> Signals {
+        Signals {
+            script_class: None,
+            highlighter_class: Some("EditorJSONSyntaxHighlighter".into()),
+            comment_delimiters: Vec::new(),
+        }
+    }
+
+    fn effective_str(c: &VimController, id: OptionId) -> String {
+        match c.engine().effective_option(id) {
+            OptionValue::Str(s) => s.to_string(),
+            other => panic!("{id:?}: {other:?}"),
+        }
+    }
+
+    /// Feed `keys` to the engine over `text`, applying the edit and cursor
+    /// effects the way the host would, and return the final text.
+    fn type_keys(c: &mut VimController, text: &str, keys: &str) -> String {
+        use vim_core::effects::Effect;
+        use vim_core::execution::InputContext;
+        use vim_core::keymap::KeyEvent;
+        let mut text = text.to_owned();
+        let mut cursor = 0;
+        for ch in keys.chars() {
+            let key = match ch {
+                '\x1b' => KeyEvent::escape(),
+                '\r' => KeyEvent::enter(),
+                _ => KeyEvent::char(ch),
+            };
+            let doc = crate::bridge::document::GodotDocument::new(&text);
+            let ctx = InputContext::new(&doc, cursor).validate_clamped();
+            let mut response = c.engine_mut().process(key, ctx);
+            for effect in response.take_effects() {
+                match effect {
+                    Effect::Insert { offset, text: t } => text.insert_str(offset.get(), &t),
+                    Effect::Delete { range } => {
+                        text.replace_range(range.start().get()..range.end().get(), "");
+                    }
+                    Effect::Replace { range, text: t } => {
+                        text.replace_range(range.start().get()..range.end().get(), &t);
+                    }
+                    Effect::SetCursor { offset } => cursor = offset.get(),
+                    _ => {}
+                }
+            }
+        }
+        text
+    }
+
+    #[test]
+    fn gdscript_setup_writes_the_buffer_value_only() {
+        let mut c = VimController::new();
+        let global_cms = c.engine().options().commentstring().to_owned();
+        c.setup_filetype(InstanceId::from_i64(1), &gd_signals());
+        assert_eq!(effective_str(&c, OptionId::FormatOptions), "jcql");
+        assert_eq!(effective_str(&c, OptionId::Comments), "b:##,b:#");
+        assert_eq!(effective_str(&c, OptionId::CommentString), "# %s");
+        assert_eq!(c.engine().options().commentstring(), global_cms);
+        assert_eq!(c.engine().filetype(), Some("gdscript"));
+    }
+
+    /// The point of #77: with a width set, GDScript code is never broken,
+    /// and a comment wraps with its leader.
+    #[test]
+    fn gdscript_code_never_wraps_and_comments_do() {
+        let mut c = VimController::new();
+        let mut snap = SettingsSnapshot::for_tests(5, 20, 1000);
+        snap.filetype_plugin = true;
+        c.apply_settings(&snap);
+        c.setup_filetype(InstanceId::from_i64(1), &gd_signals());
+
+        let code = type_keys(&mut c, "", "ivar total = alpha + beta + gamma + delta\x1b");
+        assert_eq!(code, "var total = alpha + beta + gamma + delta");
+
+        let comment = type_keys(&mut c, "", "i# one two three four five six\x1b");
+        assert_eq!(comment, "# one two three four\n# five six");
+    }
+
+    #[test]
+    fn json_never_wraps() {
+        let mut c = VimController::new();
+        c.apply_settings(&SettingsSnapshot::for_tests(5, 20, 1000));
+        c.setup_filetype(InstanceId::from_i64(1), &json_signals());
+        let out = type_keys(&mut c, "", "i\"key\": \"one two three four five six\"\x1b");
+        assert!(!out.contains('\n'), "{out:?}");
+    }
+
+    /// The old sync wrote the global commentstring from Godot's delimiters
+    /// on every attach. The buffer must still get it with plugins off, and
+    /// a shader's `//` must not leak into the next buffer.
+    #[test]
+    fn commentstring_comes_from_godot_with_plugins_off() {
+        let mut c = VimController::new();
+        c.reload_config("filetype plugin off");
+        c.setup_filetype(InstanceId::from_i64(1), &gd_signals());
+        assert_eq!(effective_str(&c, OptionId::FormatOptions), "tcqj");
+        assert_eq!(effective_str(&c, OptionId::CommentString), "# %s");
+    }
+
+    #[test]
+    fn a_shader_commentstring_stays_in_its_buffer() {
+        let mut c = VimController::new();
+        let shader = Signals {
+            script_class: None,
+            highlighter_class: Some("GDShaderSyntaxHighlighter".into()),
+            comment_delimiters: vec!["//".into(), "/* */".into()],
+        };
+        c.engine_mut().options_mut().set_commentstring("/* %s */");
+        c.engine_mut().invalidate_option_cache();
+        c.setup_filetype(InstanceId::from_i64(1), &shader);
+        assert_eq!(effective_str(&c, OptionId::CommentString), "// %s");
+        let saved = c.engine_mut().on_buffer_leave(0);
+        c.shell_state_mut()
+            .buffer(InstanceId::from_i64(1))
+            .set_engine_state(saved);
+        c.restore_buffer_engine_state(InstanceId::from_i64(2));
+        c.setup_filetype(InstanceId::from_i64(2), &Signals::default());
+        assert_eq!(effective_str(&c, OptionId::CommentString), "/* %s */");
+    }
+
+    #[test]
+    fn the_engine_ignores_filetype_lines() {
+        let mut engine = vim_core::execution::VimEngine::new();
+        let mut response = engine.source_config_text("filetype plugin off\nfiletype on");
+        let errors = response
+            .take_effects()
+            .into_iter()
+            .filter(|e| matches!(e, vim_core::effects::Effect::ShowError { .. }))
+            .count();
+        assert_eq!(errors, 0);
+    }
+
+    /// Switching buffers saves and restores the buffer's options; the setup
+    /// does not run again, so a `:setlocal` survives.
+    #[test]
+    fn a_setlocal_survives_a_buffer_switch() {
+        let mut c = VimController::new();
+        let a = InstanceId::from_i64(1);
+        let b = InstanceId::from_i64(2);
+        c.setup_filetype(a, &gd_signals());
+        let _ = type_keys(&mut c, "", ":setlocal fo+=t\r");
+        assert_eq!(effective_str(&c, OptionId::FormatOptions), "jcqlt");
+
+        let saved = c.engine_mut().on_buffer_leave(0);
+        c.shell_state_mut().buffer(a).set_engine_state(saved);
+        c.restore_buffer_engine_state(b);
+        c.setup_filetype(b, &json_signals());
+        assert_eq!(effective_str(&c, OptionId::FormatOptions), "cqj");
+
+        let saved = c.engine_mut().on_buffer_leave(0);
+        c.shell_state_mut().buffer(b).set_engine_state(saved);
+        c.restore_buffer_engine_state(a);
+        c.setup_filetype(a, &gd_signals());
+        assert_eq!(effective_str(&c, OptionId::FormatOptions), "jcqlt");
+        assert_eq!(c.engine().filetype(), Some("gdscript"));
+    }
+
+    #[test]
+    fn the_setting_turns_plugins_off_at_the_next_setup() {
+        let mut c = VimController::new();
+        let snap = SettingsSnapshot::for_tests(5, 0, 1000);
+        c.apply_settings(&snap);
+        let id = InstanceId::from_i64(1);
+        c.setup_filetype(id, &gd_signals());
+        assert_eq!(effective_str(&c, OptionId::FormatOptions), "jcql");
+
+        let mut off = snap.clone();
+        off.filetype_plugin = false;
+        c.apply_settings(&off);
+        c.setup_filetype(id, &gd_signals());
+        assert_eq!(effective_str(&c, OptionId::FormatOptions), "tcqj");
+        assert_eq!(effective_str(&c, OptionId::CommentString), "# %s");
+    }
+
+    /// Last change wins between the vimrc and the Editor Setting.
+    #[test]
+    fn vimrc_and_setting_last_change_wins() {
+        let mut c = VimController::new();
+        let snap = SettingsSnapshot::for_tests(5, 0, 1000);
+        c.apply_settings(&snap);
+        c.reload_config("filetype plugin off");
+        assert!(!c.ctx.filetype.plugins_run());
+
+        let mut unrelated = snap.clone();
+        unrelated.ignorecase = true;
+        c.apply_settings(&unrelated);
+        assert!(
+            !c.ctx.filetype.plugins_run(),
+            "unrelated event kept the vimrc"
+        );
+
+        let mut off = unrelated.clone();
+        off.filetype_plugin = false;
+        c.apply_settings(&off);
+        let mut on = off.clone();
+        on.filetype_plugin = true;
+        c.apply_settings(&on);
+        assert!(c.ctx.filetype.plugins_run(), "changing the setting wins");
+    }
+
+    #[test]
+    fn filetype_off_detects_nothing() {
+        let mut c = VimController::new();
+        c.reload_config("filetype off");
+        c.setup_filetype(InstanceId::from_i64(1), &gd_signals());
+        assert_eq!(c.engine().filetype(), None);
+        assert_eq!(effective_str(&c, OptionId::FormatOptions), "tcqj");
+        assert_eq!(effective_str(&c, OptionId::CommentString), "# %s");
     }
 
     #[test]

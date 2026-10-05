@@ -30,6 +30,8 @@ pub(crate) const TEXTWIDTH: &str = "plugins/GodotVim/editor/textwidth";
 pub(crate) const CLIPBOARD_ENABLED: &str = "plugins/GodotVim/editor/clipboard_enabled";
 pub(crate) const IGNORECASE: &str = "plugins/GodotVim/editor/ignorecase";
 pub(crate) const SMARTCASE: &str = "plugins/GodotVim/editor/smartcase";
+/// Vim's `:filetype plugin on|off`: run the per-language `:setlocal` lines.
+pub(crate) const FILETYPE_PLUGIN: &str = "plugins/GodotVim/editor/filetype_plugin";
 pub(crate) const LINE_NUMBER_MODE: &str = "plugins/GodotVim/editor/line_number_mode";
 pub(crate) const INCCOMMAND: &str = "plugins/GodotVim/editor/inccommand";
 pub(crate) const HIGHLIGHT_YANK_DURATION: &str = "plugins/GodotVim/editor/highlight_yank_duration";

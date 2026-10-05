@@ -58,6 +58,7 @@ pub(crate) fn register_all(settings: &mut EditorSettings) {
     );
     register_bool(settings, keys::IGNORECASE, defaults::IGNORECASE);
     register_bool(settings, keys::SMARTCASE, defaults::SMARTCASE);
+    register_bool(settings, keys::FILETYPE_PLUGIN, defaults::FILETYPE_PLUGIN);
     register_enum(
         settings,
         keys::LINE_NUMBER_MODE,

@@ -159,6 +159,8 @@ pub(crate) struct SettingsSnapshot {
     pub(crate) clipboard_enabled: bool,
     pub(crate) ignorecase: bool,
     pub(crate) smartcase: bool,
+    /// `plugins/GodotVim/editor/filetype_plugin`, see [`crate::ftplugin`].
+    pub(crate) filetype_plugin: bool,
     /// Whether Godot's native code completion should auto-trigger on typing.
     /// Read from `text_editor/completion/code_complete_enabled` (native Godot
     /// EditorSetting, not registered by GodotVim).
@@ -267,6 +269,7 @@ impl SettingsSnapshot {
             clipboard_enabled: false,
             ignorecase: false,
             smartcase: false,
+            filetype_plugin: true,
             code_complete_enabled: true,
             line_number_mode: LineNumberMode::Hybrid,
             inccommand: InccommandMode::Nosplit,

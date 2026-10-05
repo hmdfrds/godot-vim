@@ -1,5 +1,5 @@
 //! Editor attachment and detachment: signal wiring, pipeline-driven mode exit,
-//! per-buffer engine state save/restore, indent/commentstring sync, and UI
+//! per-buffer engine state save/restore, filetype setup, indent sync, and UI
 //! lifecycle management.
 
 // Promote #[must_use] warnings to errors so that dropping an EngineOutcome
@@ -89,9 +89,12 @@ impl GodotVimCore {
             controller.restore_buffer_engine_state(new_id);
         }
 
-        // Comment delimiters are language-specific (# for GDScript, // for C#/shaders).
+        // Filetype: commentstring from Godot's delimiters and the filetype
+        // plugin's :setlocal lines, once per buffer. After the restore above,
+        // which brings back this buffer's own options.
         if let Some(controller) = &mut self.controller {
-            sync_commentstring_from_editor(&editor, controller);
+            let signals = crate::ftplugin::detect::read_signals(&editor);
+            controller.setup_filetype(new_id, &signals);
         }
 
         // Godot is the source of truth for tab/space mode and indent size.
@@ -313,44 +316,6 @@ impl GodotVimCore {
             controller.detach_session();
         }
         log::debug!("Detached (teardown_ok={teardown_ok})");
-    }
-}
-
-/// Sync `commentstring` from CodeEdit's registered comment delimiters.
-///
-/// Godot returns delimiters as strings: line comments are single tokens (`#`),
-/// block comments are space-separated pairs (`/* */`). We filter to line
-/// comments only, then pick the **shortest** -- languages like GDScript
-/// register both `#` and `##` (doc comment), and we want the regular prefix.
-fn sync_commentstring_from_editor(
-    editor: &Gd<CodeEdit>,
-    controller: &mut crate::controller::VimController,
-) {
-    let delimiters = editor.get_comment_delimiters();
-    let mut best: Option<String> = None;
-    for i in 0..delimiters.len() {
-        let Some(gstr) = delimiters.get(i) else {
-            continue;
-        };
-        let s = gstr.to_string();
-        // Block comments contain a space separator (e.g. "/* */") -- skip.
-        if s.contains(' ') {
-            continue;
-        }
-        if best.as_ref().is_none_or(|b| s.len() < b.len()) {
-            best = Some(s);
-        }
-    }
-    if let Some(delim) = best {
-        let cs = format!("{delim} %s");
-        log::debug!(
-            "sync_commentstring: '{}' for editor #{}",
-            cs,
-            editor.instance_id().to_i64()
-        );
-        controller.set_commentstring(&cs);
-    } else {
-        log::trace!("sync_commentstring: no line comment delimiter found, keeping default");
     }
 }
 

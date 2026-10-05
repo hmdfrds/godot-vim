@@ -30,6 +30,9 @@ pub(crate) const TEXTWIDTH_UNTIL_1_8_0: i64 = 80;
 pub(crate) const CLIPBOARD_ENABLED: bool = false;
 pub(crate) const IGNORECASE: bool = false;
 pub(crate) const SMARTCASE: bool = false;
+/// On, like `filetype plugin on` in Vim's defaults.vim: GDScript needs its
+/// plugin so that only comments wrap when `textwidth` is set.
+pub(crate) const FILETYPE_PLUGIN: bool = true;
 pub(crate) const LINE_NUMBER_MODE: &str = "Hybrid";
 pub(crate) const LINE_NUMBER_MODE_OPTIONS: &[&str] = &["None", "Absolute", "Relative", "Hybrid"];
 

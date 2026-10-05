@@ -1008,6 +1008,7 @@ impl GodotVimCore {
                 if let Some(controller) = &mut self.controller {
                     controller.apply_settings(&snapshot);
                 }
+                self.refresh_filetype_setup();
 
                 // Re-sync indent from the attached CodeEdit, but only when
                 // its values moved: this signal fires for every EditorSettings
@@ -1445,6 +1446,25 @@ impl GodotVimCore {
         }
     }
 
+    /// Run the filetype setup again for the attached editor, after the
+    /// `:filetype` switches may have changed (a vimrc reload, the
+    /// `filetype_plugin` Editor Setting). Writes nothing when the buffer's
+    /// setup is unchanged; other buffers follow at their next attach.
+    fn refresh_filetype_setup(&mut self) {
+        let Some(editor) = self.attached_editor.clone() else {
+            return;
+        };
+        if !editor.is_instance_valid() {
+            return;
+        }
+        if let Some(controller) = &mut self.controller {
+            if controller.is_attached() {
+                let signals = crate::ftplugin::detect::read_signals(&editor);
+                controller.setup_filetype(editor.instance_id(), &signals);
+            }
+        }
+    }
+
     fn update_cursor_if_attached(&mut self) {
         let Some(editor) = &self.attached_editor else {
             return;
@@ -1510,6 +1530,7 @@ impl GodotVimCore {
                 controller.reload_config(&text);
                 log::info!("{caller}: sourced config from '{}'", resolved.path);
             }
+            self.refresh_filetype_setup();
         }
         self.rebuild_langmap();
         self.rebuild_bindings();
