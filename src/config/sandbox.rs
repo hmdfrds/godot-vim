@@ -52,8 +52,9 @@ const EX_COMMAND_PATTERNS: &[(&str, &str, &str)] = &[
 
 /// Filter config text for sandbox mode using a **whitelist** approach.
 ///
-/// Only known-safe constructs pass through (comments, blanks, safe `:set`,
-/// `:let mapleader`, non-recursive mappings with clean RHS). Everything else
+/// Only known-safe constructs pass through (comments, blanks, safe `:set`
+/// and `:setlocal`, `:filetype`, `:let mapleader`, non-recursive mappings
+/// with clean RHS). Everything else
 /// -- including raw ex-commands like `:source` or `:!` -- is replaced with
 /// a diagnostic comment. This prevents a malicious `res://.godot-vimrc`
 /// from executing arbitrary commands.
@@ -150,7 +151,7 @@ const BLOCKED_SET_OPTIONS: &[&str] = &[
 /// (`=`, `?`, `!`, etc.) and the `no` prefix (`noshell` -> `shell`).
 fn extract_option_name_from_token(token: &str) -> &str {
     let name = token
-        .split(['=', '?', '!', '+', '-', ':'])
+        .split(['=', '?', '!', '+', '-', '^', ':'])
         .next()
         .unwrap_or("");
     name.strip_prefix("no").unwrap_or(name)
@@ -217,9 +218,12 @@ fn is_safe_non_mapping_line(trimmed: &str) -> bool {
     }
     // Case-insensitive: the engine may accept `Set`, `SET`, etc.
     let trimmed_lower = trimmed.to_ascii_lowercase();
+    // `:set` and `:setl[ocal]` take the same options, so they get the same
+    // blocklist. A filetype plugin line in a project vimrc is `setlocal`.
     let after_set = trimmed_lower
-        .strip_prefix("set ")
-        .or_else(|| trimmed_lower.strip_prefix("se "));
+        .split_once([' ', '\t'])
+        .filter(|(cmd, _)| *cmd == "set" || *cmd == "se" || matches_abbrev(cmd, "setl", "setlocal"))
+        .map(|(_, rest)| rest);
     if let Some(options_str) = after_set {
         // Check ALL space-separated options -- `set scrolloff=5 shell=/bin/evil`
         // must be blocked because `shell` is dangerous even if `scrolloff` is safe.
@@ -230,6 +234,11 @@ fn is_safe_non_mapping_line(trimmed: &str) -> bool {
                 .any(|blocked| name.eq_ignore_ascii_case(blocked))
         });
         return !has_blocked;
+    }
+    // `:filetype plugin off` and the rest of `:filetype` only switch the
+    // built-in filetype plugins on or off; nothing in them runs code.
+    if crate::ftplugin::parse_filetype_command(trimmed).is_some() {
+        return true;
     }
     // Only allow `let mapleader` / `let g:mapleader` -- NOT `let mapleader_hack`
     // (which could contain `system(...)` in the value expression).
@@ -1123,6 +1132,64 @@ imap jj <Esc>
         );
     }
 
+    // ── :setlocal and :filetype ──────────────────────────────────────
+
+    #[test]
+    fn preserves_setlocal_with_safe_options() {
+        for line in [
+            "setlocal fo-=t",
+            "setl fo+=cql comments=b:##,b:#",
+            r"setlocal commentstring=#\ %s",
+            "setlo tw=72",
+            "SETLOCAL fo-=t",
+        ] {
+            let output = sandbox_config_text(&format!("{line}\n"));
+            assert!(!output.contains("[sandbox] stripped"), "{line}: {output}");
+        }
+    }
+
+    #[test]
+    fn strips_setlocal_with_a_blocked_option() {
+        for line in [
+            "setlocal shell=/bin/evil",
+            "setl fo-=t makeprg=evil",
+            "setlocal keywordprg^=evil",
+            "setl noshell",
+        ] {
+            let output = sandbox_config_text(&format!("{line}\n"));
+            assert!(output.contains("[sandbox] stripped"), "{line}: {output}");
+        }
+    }
+
+    #[test]
+    fn strips_words_that_only_look_like_setlocal() {
+        for line in ["setlocalx fo-=t", "setg shell=x", "sethandler <C-a> n:host"] {
+            let output = sandbox_config_text(&format!("{line}\n"));
+            assert!(output.contains("[sandbox] stripped"), "{line}: {output}");
+        }
+    }
+
+    #[test]
+    fn preserves_filetype_switches() {
+        for line in [
+            "filetype plugin off",
+            "filetype plugin on",
+            "filetype plugin indent on",
+            "filet off",
+        ] {
+            let output = sandbox_config_text(&format!("{line}\n"));
+            assert!(!output.contains("[sandbox] stripped"), "{line}: {output}");
+        }
+    }
+
+    #[test]
+    fn strips_malformed_filetype_lines() {
+        for line in ["filetype plugin off | !rm", "filetype plugin"] {
+            let output = sandbox_config_text(&format!("{line}\n"));
+            assert!(output.contains("[sandbox] stripped"), "{line}: {output}");
+        }
+    }
+
     // ── The blocklist's delimiter split ──────────────────────────────
 
     #[test]
@@ -1135,7 +1202,7 @@ imap jj <Esc>
         //
         // One token per delimiter Vim accepts, plus the `no` prefix.
         for token in [
-            "shell=x", "shell?", "shell!", "shell:x", "shell+=x", "shell-=x", "noshell",
+            "shell=x", "shell?", "shell!", "shell:x", "shell+=x", "shell-=x", "shell^=x", "noshell",
         ] {
             assert_eq!(
                 extract_option_name_from_token(token),
