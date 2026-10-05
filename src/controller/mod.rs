@@ -215,6 +215,15 @@ impl VimController {
         Some(session.host_mut().state_mut())
     }
 
+    /// The shell state in either phase: the host's while attached, the
+    /// parked one while detached. Saved buffer states live in it both ways.
+    fn shell_state_mut(&mut self) -> &mut ShellState {
+        match self.phase {
+            ControllerPhase::Attached { ref mut session } => session.host_mut().state_mut(),
+            ControllerPhase::Detached { ref mut state, .. } => state,
+        }
+    }
+
     // ── Attach / detach lifecycle ────────────────────────────────────
 
     /// Create a `VimSession<GodotHost>` by taking the detached engine and
@@ -323,14 +332,27 @@ impl VimController {
     /// Push an Editor Settings snapshot into the engine and the host config.
     ///
     /// Engine options get only the fields that changed since the last push
-    /// (see [`SettingsSnapshot::apply_delta`]), so a user's `:set` survives
-    /// unrelated settings events. The host-side fields below are not
-    /// reachable from `:set` and are written every time.
+    /// (see [`SettingsSnapshot::option_delta`]), so a user's `:set` survives
+    /// unrelated settings events. A changed field is written the way `:set`
+    /// writes it, in every buffer (see [`set_option_everywhere`]), so the
+    /// last change wins. A full push (`prev` forgotten) only seeds the
+    /// global values, like a vimrc `:setglobal`: it is not a change the user
+    /// made, and must not drop a `:setlocal` the buffers hold. The host-side
+    /// fields below are not reachable from `:set` and are written every time.
     ///
-    /// [`SettingsSnapshot::apply_delta`]: crate::settings::SettingsSnapshot::apply_delta
+    /// [`SettingsSnapshot::option_delta`]: crate::settings::SettingsSnapshot::option_delta
+    /// [`set_option_everywhere`]: Self::set_option_everywhere
     pub(crate) fn apply_settings(&mut self, snapshot: &crate::settings::SettingsSnapshot) {
         let prev = self.ctx.last_applied.take();
-        snapshot.apply_delta(prev.as_ref(), self.engine_mut().options_mut());
+        let seeding = prev.is_none();
+        for (id, value) in snapshot.option_delta(prev.as_ref()) {
+            if seeding {
+                self.engine_mut().options_mut().set_option(id, &value);
+            } else {
+                self.set_option_everywhere(id, &value);
+            }
+        }
+        self.engine_mut().invalidate_option_cache();
         self.ctx.last_applied = Some(snapshot.clone());
         self.set_passthrough_keys(&snapshot.passthrough_keys);
         self.set_security_policy(crate::host::SecurityPolicy {
@@ -340,6 +362,25 @@ impl VimController {
         });
         self.set_highlight_yank_duration(snapshot.highlight_yank_duration);
         self.ctx.code_complete_enabled = snapshot.code_complete_enabled;
+    }
+
+    /// Set an option the way `:set` does, in the current buffer and in every
+    /// buffer the user has left: the global value changes, and a local value
+    /// any of them got from an earlier `:set` or `:setlocal` is dropped.
+    ///
+    /// Since vim-core v0.8.0 every path reads the resolved options, so a
+    /// local value wins over the global layer. Writing only the global layer
+    /// (`options_mut()`) left a buffer that had run `:set tw=20` wrapping at
+    /// 20 after the user changed the Editor Setting.
+    pub(crate) fn set_option_everywhere(
+        &mut self,
+        id: vim_core::primitives::OptionId,
+        value: &vim_core::primitives::OptionValue,
+    ) {
+        self.engine_mut().set_option(id, value);
+        for saved in self.shell_state_mut().saved_engine_states_mut() {
+            saved.clear_local_option(id);
+        }
     }
 
     /// Forget what was pushed into the engine's options, so the next
@@ -515,16 +556,37 @@ impl VimController {
     /// truth, and Godot updates it from those settings on
     /// `NOTIFICATION_EDITOR_SETTINGS_CHANGED`, after `settings_changed`, so
     /// the plugin resyncs on both.
+    ///
+    /// A value that moved is written the way `:set` writes it, in every
+    /// buffer (see [`set_option_everywhere`](Self::set_option_everywhere)):
+    /// the user changed Godot's indent after any `:set ts` they made, so the
+    /// newer change wins. With nothing synced yet (after
+    /// [`forget_applied_settings`](Self::forget_applied_settings)) it only
+    /// seeds the global values, as on attach.
     pub(crate) fn sync_indent_if_changed(
         &mut self,
         expandtab: bool,
         shiftwidth: usize,
         tabstop: usize,
     ) -> bool {
-        if self.ctx.synced_indent == Some((expandtab, shiftwidth, tabstop)) {
+        use vim_core::primitives::{OptionId, OptionValue};
+        let Some((old_et, old_sw, old_ts)) = self.ctx.synced_indent else {
+            self.sync_indent(expandtab, shiftwidth, tabstop);
+            return true;
+        };
+        if (old_et, old_sw, old_ts) == (expandtab, shiftwidth, tabstop) {
             return false;
         }
-        self.sync_indent(expandtab, shiftwidth, tabstop);
+        if old_et != expandtab {
+            self.set_option_everywhere(OptionId::ExpandTab, &OptionValue::Bool(expandtab));
+        }
+        if old_sw != shiftwidth {
+            self.set_option_everywhere(OptionId::ShiftWidth, &OptionValue::Unsigned(shiftwidth));
+        }
+        if old_ts != tabstop {
+            self.set_option_everywhere(OptionId::TabStop, &OptionValue::Unsigned(tabstop));
+        }
+        self.ctx.synced_indent = Some((expandtab, shiftwidth, tabstop));
         true
     }
 
@@ -1348,6 +1410,81 @@ mod tests {
 
         assert_eq!(c.engine().options().textwidth(), 0);
         assert!(c.engine().options().ignorecase());
+    }
+
+    fn effective_tw(c: &VimController) -> vim_core::primitives::OptionValue {
+        c.engine()
+            .effective_option(vim_core::primitives::OptionId::TextWidth)
+    }
+
+    /// vim-core v0.8.0 reads the resolved options, where the buffer value
+    /// `:set tw=20` leaves wins over the global layer. A changed Editor
+    /// Setting must reach that layer too, or the buffer keeps wrapping at 20.
+    #[test]
+    fn a_changed_setting_wins_over_set_in_the_current_buffer() {
+        use vim_core::primitives::OptionValue;
+        let mut c = VimController::new();
+        let snap = SettingsSnapshot::for_tests(5, 100, 1000);
+        c.apply_settings(&snap);
+        let _ = c.engine_mut().source_config_text("set tw=20");
+        assert_eq!(effective_tw(&c), OptionValue::Unsigned(20));
+
+        let mut next = snap.clone();
+        next.textwidth = 0;
+        c.apply_settings(&next);
+        assert_eq!(effective_tw(&c), OptionValue::Unsigned(0));
+    }
+
+    #[test]
+    fn a_changed_setting_wins_over_set_in_a_saved_buffer() {
+        use vim_core::primitives::OptionValue;
+        let mut c = VimController::new();
+        let snap = SettingsSnapshot::for_tests(5, 100, 1000);
+        c.apply_settings(&snap);
+        let _ = c.engine_mut().source_config_text("set tw=20");
+        let id = InstanceId::from_i64(7);
+        let saved = c.engine_mut().on_buffer_leave(0);
+        c.shell_state_mut().buffer(id).set_engine_state(saved);
+
+        let mut next = snap.clone();
+        next.textwidth = 0;
+        c.apply_settings(&next);
+        let saved = c.shell_state_mut().buffer(id).take_engine_state();
+        c.engine_mut().on_buffer_enter(saved.unwrap_or_default());
+        assert_eq!(effective_tw(&c), OptionValue::Unsigned(0));
+    }
+
+    /// A full push is a seed, not a change: it must not drop the local
+    /// value a buffer holds.
+    #[test]
+    fn a_full_push_keeps_a_local_value() {
+        use vim_core::primitives::OptionValue;
+        let mut c = VimController::new();
+        let snap = SettingsSnapshot::for_tests(5, 100, 1000);
+        c.apply_settings(&snap);
+        let _ = c.engine_mut().source_config_text("set tw=20");
+        c.forget_applied_settings();
+        c.apply_settings(&snap);
+        assert_eq!(effective_tw(&c), OptionValue::Unsigned(20));
+    }
+
+    #[test]
+    fn a_changed_code_edit_indent_wins_over_set() {
+        use vim_core::primitives::{OptionId, OptionValue};
+        let mut c = VimController::new();
+        c.sync_indent(true, 4, 4);
+        let _ = c.engine_mut().source_config_text("set ts=8 sw=8");
+        assert!(c.sync_indent_if_changed(true, 4, 2));
+        let e = c.engine();
+        assert_eq!(
+            e.effective_option(OptionId::TabStop),
+            OptionValue::Unsigned(2)
+        );
+        assert_eq!(
+            e.effective_option(OptionId::ShiftWidth),
+            OptionValue::Unsigned(8),
+            "only the value that moved is written"
+        );
     }
 
     #[test]

@@ -73,6 +73,11 @@ impl BufferState {
         self.engine_state.take()
     }
 
+    /// The engine state saved when this buffer was left, if any.
+    pub(crate) fn engine_state_mut(&mut self) -> Option<&mut BufferLocalState> {
+        self.engine_state.as_mut()
+    }
+
     pub(crate) fn undo_store(&self) -> &UndoStore {
         &self.undo_store
     }

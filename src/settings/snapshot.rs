@@ -172,64 +172,90 @@ pub(crate) struct SettingsSnapshot {
 }
 
 impl SettingsSnapshot {
-    /// Push the Editor Settings that changed since `prev` into the engine's
-    /// `VimOptions`. `None` writes every field (startup, the enable edge, and
-    /// after anything that may have rebuilt the engine).
+    /// The engine options that changed since `prev`, as `(id, value)`
+    /// pairs. `None` yields every field (startup, the enable edge, and after
+    /// anything that may have rebuilt the engine). The controller routes
+    /// each pair itself, see `VimController::apply_settings`.
     ///
-    /// **Writes only what changed** because `settings_changed` fires for
+    /// **Yields only what changed** because `settings_changed` fires for
     /// every EditorSettings write, ours or not, including an Output log
     /// filter toggle. Rewriting every field on each event would revert a
     /// `:set tw=0` or a vimrc `set ignorecase` behind the user's back. With
     /// the delta, whichever wrote last wins: a `:set` holds until the user
     /// changes that same Editor Setting.
     ///
-    /// **Mutates in place** rather than replacing `VimOptions` wholesale,
-    /// because `VimOptions` also contains indent settings (`expandtab`,
-    /// `tabstop`, `shiftwidth`) and `commentstring` that are synced from
-    /// Godot's CodeEdit on attach -- not from Editor Settings. Replacing
-    /// the whole struct would clobber those per-editor values.
-    pub(crate) fn apply_delta(&self, prev: Option<&Self>, opts: &mut vim_core::VimOptions) {
+    /// **One option at a time** rather than a whole `VimOptions`, because
+    /// the engine's options also hold indent settings (`expandtab`,
+    /// `tabstop`, `shiftwidth`) and `commentstring`, synced from Godot's
+    /// CodeEdit and not from Editor Settings. Replacing the whole struct
+    /// would clobber those.
+    pub(crate) fn option_delta(
+        &self,
+        prev: Option<&Self>,
+    ) -> Vec<(
+        vim_core::primitives::OptionId,
+        vim_core::primitives::OptionValue,
+    )> {
         use super::defaults;
+        use vim_core::primitives::{OptionId, OptionValue};
         let changed = |same: fn(&Self, &Self) -> bool| prev.is_none_or(|p| !same(p, self));
+        let mut out = Vec::new();
         if changed(|a, b| a.scrolloff == b.scrolloff) {
-            opts.set_scrolloff(usize::try_from(self.scrolloff.max(0)).unwrap_or(0));
+            out.push((
+                OptionId::ScrollOff,
+                OptionValue::Unsigned(usize::try_from(self.scrolloff.max(0)).unwrap_or(0)),
+            ));
         }
         if changed(|a, b| a.textwidth == b.textwidth) {
-            opts.set_textwidth(usize::try_from(self.textwidth.max(0)).unwrap_or(0));
+            out.push((
+                OptionId::TextWidth,
+                OptionValue::Unsigned(usize::try_from(self.textwidth.max(0)).unwrap_or(0)),
+            ));
         }
         if changed(|a, b| a.timeoutlen == b.timeoutlen) {
-            opts.set_timeoutlen_ms(
-                u32::try_from(
-                    self.timeoutlen
-                        .clamp(defaults::TIMEOUTLEN_MIN, defaults::TIMEOUTLEN_MAX),
-                )
-                .unwrap_or(u32::MAX),
-            );
+            let ms = self
+                .timeoutlen
+                .clamp(defaults::TIMEOUTLEN_MIN, defaults::TIMEOUTLEN_MAX);
+            out.push((
+                OptionId::TimeoutLen,
+                OptionValue::Unsigned(usize::try_from(ms).unwrap_or(usize::MAX)),
+            ));
         }
         if changed(|a, b| a.clipboard_enabled == b.clipboard_enabled) {
-            if self.clipboard_enabled {
-                opts.set_clipboard("unnamedplus");
+            let value = if self.clipboard_enabled {
+                "unnamedplus"
             } else {
-                opts.set_clipboard("");
-            }
+                ""
+            };
+            out.push((OptionId::Clipboard, OptionValue::Str(value.into())));
         }
         if changed(|a, b| a.inccommand == b.inccommand) {
-            opts.set_inccommand(match self.inccommand {
+            let value = match self.inccommand {
                 InccommandMode::Nosplit => "nosplit",
                 InccommandMode::Off => "",
-            });
+            };
+            out.push((OptionId::IncCommand, OptionValue::Str(value.into())));
         }
         if changed(|a, b| a.ignorecase == b.ignorecase) {
-            opts.set_ignorecase(self.ignorecase);
+            out.push((OptionId::IgnoreCase, OptionValue::Bool(self.ignorecase)));
         }
         if changed(|a, b| a.smartcase == b.smartcase) {
-            opts.set_smartcase(self.smartcase);
+            out.push((OptionId::SmartCase, OptionValue::Bool(self.smartcase)));
         }
+        out
     }
 }
 
 #[cfg(test)]
 impl SettingsSnapshot {
+    /// Write [`option_delta`](Self::option_delta) straight into a
+    /// `VimOptions`, for tests of the delta itself.
+    pub(crate) fn apply_delta(&self, prev: Option<&Self>, opts: &mut vim_core::VimOptions) {
+        for (id, value) in self.option_delta(prev) {
+            opts.set_option(id, &value);
+        }
+    }
+
     /// Build a snapshot with parametrized numeric fields; everything else
     /// uses hardcoded defaults to isolate what each test is verifying.
     pub(crate) fn for_tests(scrolloff: i64, textwidth: i64, timeoutlen: i64) -> Self {
