@@ -3,6 +3,41 @@
 Notes for people arriving from an older release. Nothing here applies to a
 fresh install.
 
+## From v1.8.1
+
+**GDScript wraps only comments, never code.** GodotVim now detects each
+script's filetype and runs Vim's filetype plugins for it, transcribed from
+Vim 9.1 (see [Filetype Plugins](REFERENCE.md#filetype-plugins)). With a
+Textwidth above `0`:
+
+- GDScript and shader code no longer breaks while you type. `#`, `##` and
+  `//` comment lines break at the last blank before the width and continue
+  with the same indent and leader. This deliberately differs from Vim's
+  `gdscript.vim`, which lets code wrap.
+- JSON never wraps. Markdown and text wrap as prose, as in Vim.
+- The break no longer misplaces or deletes the characters you type, and it
+  happens where Vim breaks: when you type a non-blank character past the
+  width, at the last blank before the cursor.
+
+The default Textwidth stays `0`, so nothing wraps unless you set a width.
+
+**`formatoptions` and `comments` can be set.** `:set fo-=t`,
+`:setlocal fo+=t` and `:set comments^=b:##` work as in Vim, including in a
+`.godot-vimrc`. `:setlocal` now changes typing as well as `gq`, and a
+change to an Editor Setting wins over an earlier `:set` everywhere, so the
+caveat about local values in the v1.8.0 notes below no longer applies.
+
+**`commentstring` is per script.** It used to be copied from the script
+editor's comment delimiters into the global value on every tab switch, so a
+shader's `//` could reach the next text file and a `set commentstring` in
+your vimrc was overwritten. Each script now gets its own value once. A
+`:setlocal commentstring` you make stays with that script.
+
+**To keep the old behaviour** (Vim's defaults in every script, so code wraps
+with a width set), turn off **Godot Vim > Editor > Filetype Plugin**, or put
+`filetype plugin off` in your `.godot-vimrc`. The commentstring still comes
+from the script editor either way.
+
 ## From v1.8.0
 
 **Textwidth now defaults to `0`, as in Vim.** With the old default of 80,

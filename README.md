@@ -191,7 +191,8 @@ GodotVim is a native extension, so it ships restrictive:
 - Shell execution is **Disabled**. `:!` is blocked until you turn it on.
 - File access is **ProjectOnly**. `:w`, `:r` and `:e` stay inside `res://` and `user://`.
 - A `.godot-vimrc` committed to the project is **Sandboxed**. Only known-safe
-  constructs pass: comments, most `set` options, `let mapleader`, the `noremap`
+  constructs pass: comments, most `set` and `setlocal` options, `filetype`
+  lines, `let mapleader`, the `noremap`
   forms, `panelunmap`, and `panelmap` lines targeting a registered `godotvim.*`
   action. Everything else, including the recursive `map` forms and raw
   ex-commands, is commented out with a reason rather than deleted, so nothing
@@ -274,7 +275,7 @@ Settings live under **Editor Settings > Plugins > GodotVim**.
 | A `panelmap` line looks ignored | `:panelmap` with no argument lists every live binding plus every config line that was rejected and why. If yours is not listed at all the verb is misspelled: `panelmp` is never claimed as a panel line. Set **Log Level** to `Warn` to watch rejections as the file loads. |
 | `.godot-vimrc` is not loading | Only one file is read. If **Mapping > Config File Path** is set it wins, and your `res://.godot-vimrc` is never seen. If **Security > Project Vimrc** is `Disabled`, a project file is skipped entirely, which Log Level `Info` reports. After a hand edit, run `:source`. |
 | Lines in a committed config are silently disabled | Under the default `Sandbox` policy a `res://.godot-vimrc` keeps only known-safe lines, and the recursive `map`, `nmap`, `vmap`, `imap`, `omap` and `cmap` forms are stripped whatever they map to. Use the `noremap` forms, or move the file to `user://.godot-vimrc`. |
-| Lines break by themselves while typing | **Editor > Textwidth** is above `0` (filter for `textwidth` in Editor Settings; it shows as **Textwidth** under **Godot Vim > Editor**). Typing in Insert mode on a line longer than that breaks the line, wherever the cursor is (a tab counts as one column in this version). That splits a GDScript statement, and in this version the break can also misplace the characters you type next. Set it to `0`, the default. `gq` still formats, at 79 columns. `:set fo-=t` is not supported yet. |
+| Lines break by themselves while typing | By default nothing breaks: **Editor > Textwidth** is `0`, as in Vim (filter for `textwidth` in Editor Settings; it shows as **Textwidth** under **Godot Vim > Editor**). With a width set, only comments wrap in GDScript and shaders, with their `#`, `##` or `//` leader, and code never does; JSON never wraps; Markdown and text wrap as prose. That comes from the [filetype plugins](docs/REFERENCE.md#filetype-plugins). If code still wraps, check for `set fo+=t` or `setlocal fo+=t` in your vimrc and whether **Editor > Filetype Plugin** is off. Set Textwidth to `0` to stop all wrapping, or use `:set fo-=t` / `:setlocal fo-=t` the Vim way. `gq` still formats, at 79 columns when the width is `0`. |
 | Clipboard does not sync | Turn on **Editor > Clipboard Enabled**; it is off by default. With it on, plain `y` and `p` use the system clipboard too. `"+y` and `"+p` reach it either way. |
 | The cursor does not render | The overlay uses a GLSL shader. Set **Cursor > Enabled** to `false` to fall back to Godot's native caret. |
 | macOS: held keys do not repeat | macOS's Press and Hold accent picker interferes. Run `defaults write org.godotengine.godot ApplePressAndHoldEnabled -bool false` in Terminal and restart Godot. GodotVim falls back to the physical key when macOS sends no character, but turning Press and Hold off is more reliable. |

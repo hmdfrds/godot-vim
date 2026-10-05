@@ -19,6 +19,7 @@ Complete reference for settings, commands, modes, motions, operators, text objec
 - [Undo Tree](#undo-tree)
 - [Fold Commands](#fold-commands)
 - [Vim Options (`:set`)](#vim-options-set)
+- [Filetype Plugins](#filetype-plugins)
 - [Settings](#settings)
 - [Custom Commands](#custom-commands)
 - [Preset Mappings](#preset-mappings)
@@ -287,7 +288,7 @@ In addition to the [Godot-specific commands](#custom-commands), the following st
 | Command | Description |
 |---------|-------------|
 | `:set {option}[={value}]` | Set a Vim option |
-| `:setlocal {option}[={value}]` | Set option locally |
+| `:setlocal {option}[={value}]` | Set an option for the current script only (see [Filetype Plugins](#filetype-plugins)) |
 | `:echo {expr}` | Echo expression |
 | `:!{cmd}` | Execute shell command (when enabled) |
 | `:actionlist [filter]` | List available Godot editor actions |
@@ -331,7 +332,7 @@ Undo, redo, and time-based navigation.
 
 ## Vim Options (`:set`)
 
-The following Vim options are supported via `:set`, `:setlocal`, and `.godot-vimrc`:
+The following Vim options are supported via `:set`, `:setlocal`, and `.godot-vimrc`. `:set` changes the global value and the current script's own value; `:setlocal` changes only the current script's, which it keeps when you switch scripts and come back. In a `.godot-vimrc`, which no script is open for, `:setlocal` acts like `:set`.
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
@@ -344,7 +345,10 @@ The following Vim options are supported via `:set`, `:setlocal`, and `.godot-vim
 | `tabstop` / `ts` | `int` | (from Godot) | Number of spaces a tab counts for |
 | `shiftwidth` / `sw` | `int` | (from Godot) | Number of spaces for indent |
 | `scrolloff` / `so` | `int` | `5` | Minimum lines above/below cursor |
-| `textwidth` / `tw` | `int` | `0` | Width past which typing in Insert mode breaks lines, when `formatoptions` contains `t` (the default; `formatoptions` cannot be changed with `:set` yet). In this version the whole line counts, with a tab as one column: typing a character other than a blank on a line longer than this breaks it, wherever the cursor is. `0` disables it. `gq` formats at 79 when it is `0`. Seeded from the **Textwidth** setting, and pushed again only when that setting changes. Typing reads only the global value, so `:setlocal tw` changes `gq` but not the breaking while typing. `:set tw` sets both: after a later change to **Textwidth**, typing follows the setting while `gq` in that script keeps the `:set` value. |
+| `textwidth` / `tw` | `int` | `0` | Width at which typing in Insert mode breaks lines, when `formatoptions` allows it (`t` for text, `c` for comments). The break happens when you type a non-blank character past this display column (a tab counts as `tabstop` columns, a wide character as 2), at the last blank before the cursor. `0` never breaks while typing; `gq` then formats at 79. Seeded from the **Textwidth** setting; changing that setting later wins over an earlier `:set tw` or `:setlocal tw` in every script, and unrelated Editor Settings changes leave it alone. A script's filetype plugin decides what may wrap: in GDScript only comments do, see [Filetype Plugins](#filetype-plugins). `wrapmargin` is not supported. |
+| `formatoptions` / `fo` | `string` | `tcqj` | Vim's flags for automatic formatting. `t` wraps text and `c` wraps comments (inserting the comment leader) at `textwidth`, `q` lets `gq` format comments, `l` leaves lines that were already long when the insert started. Also acted on: `w`, `2`, `v`, `b`, `1`, `p`. Accepted but without effect yet: `r`, `o`, `/`, `a`, `n`, `m`, `]`, `j`. An unknown letter is refused with `E539`. Takes `+=`, `-=` and `^=`, one flag at a time: `:set fo-=t`. Set per script by the filetype plugins. |
+| `comments` / `com` | `string` | `s1:/*,mb:*,ex:*/,://,b:#,:%,:XCOMM,n:>,fb:-` | Vim's comment leaders, used by `c` and `q` in `formatoptions` and by `gq`. Same syntax as Vim (`b:#`, `s1:/*,mb:*,ex:*/`). Takes `+=`, `-=` and `^=` on whole items. Set per script by the filetype plugins. |
+| `commentstring` / `cms` | `string` | `// %s` | Comment template. Set per script from Godot's comment delimiters (`# %s` in GDScript, `// %s` in shaders) and by the filetype plugins. |
 | `timeoutlen` / `tm` | `int` | `1000` | Mapping timeout in milliseconds |
 | `number` / `nu` | `bool` | `false` | Show line numbers. Engine-only: nothing in GodotVim reads it, and the gutter is driven by the **Line Numbers** setting. |
 | `relativenumber` / `rnu` | `bool` | `false` | Show relative line numbers. Engine-only: nothing in GodotVim reads it, and the gutter is driven by the **Line Numbers** setting. |
@@ -354,6 +358,83 @@ The following Vim options are supported via `:set`, `:setlocal`, and `.godot-vim
 | `whichwrap` / `ww` | `string` | `b,s` | Keys that wrap across lines |
 | `virtualedit` / `ve` | `string` | `""` | Allow cursor beyond end of line |
 | `selection` / `sel` | `string` | `inclusive` | Visual selection behavior |
+
+---
+
+## Filetype Plugins
+
+Vim gives each language its own formatting through filetype plugins: when a
+buffer gets its filetype, a plugin runs a few `:setlocal` lines. GodotVim
+does the same each time a script editor tab first gets the Vim cursor.
+
+### Detection
+
+The filetype comes from what Godot says about the editor, in this order:
+
+1. The script's class, for script tabs: `GDScript` (files and built-in
+   scripts in a scene) is `gdscript`, `CSharpScript` is `cs`.
+2. The syntax highlighter Godot picked for the file, which you can change
+   from the script editor's **Syntax Highlighter** menu: GDScript,
+   GDShader (`gdshader`), JSON (`json`), Markdown (`markdown`), Plain Text
+   (`text`) and ConfigFile (`cfg`).
+3. The comment delimiters: `#` means `gdscript`. Anything else gives no
+   filetype, and no plugin runs.
+
+The detected name is also what filetype-specific mappings match.
+
+### What each plugin sets
+
+Every line is transcribed from Vim 9.1's runtime ftplugin of the same name,
+limited to the options GodotVim formats with. No plugin turns on `r` or `o`.
+Indent is not touched: it always follows the script editor.
+
+| Filetype | Lines | Source |
+|----------|-------|--------|
+| `gdscript` | `setlocal commentstring=#\ %s comments=b:##,b:# formatoptions-=t formatoptions+=cql` | `gdscript.vim` for `commentstring`; `comments` and `formatoptions` deviate, see below |
+| `gdshader` | `setlocal comments=sO:*\ -,mO:*\ \ ,exO:*/,s1:/*,mb:*,ex:*/,:// commentstring=//\ %s formatoptions-=t formatoptions+=cql` | `gdshader.vim`; `formatoptions` as in `c.vim` without `r` and `o` |
+| `json` | `setlocal formatoptions-=t comments= commentstring=` | `json.vim` |
+| `markdown` | `setlocal comments=fb:*,fb:-,fb:+,n:> commentstring=<!--\ %s\ --> formatoptions+=tcqln formatoptions-=r formatoptions-=o` | `markdown.vim` (`n` has no effect yet) |
+| `text` | `setlocal comments=fb:-,fb:*,n:> commentstring=` | `text.vim` |
+| `cs`, `cfg`, anything else | nothing | |
+
+With the default `textwidth=0` none of this wraps anything. Set a width (the
+**Textwidth** setting, or `:set tw=100`) and:
+
+- **GDScript and shader code never wraps; comments do.** A `#`, `##` or `//`
+  comment line breaks at the last blank before the width, and the new line
+  starts with the same indent and leader, so the script still parses. A
+  trailing comment after code (`x = 1  # note`) counts as code.
+- **JSON never wraps.**
+- **Markdown and text wrap as prose**, as in Vim.
+
+**GDScript deviates from Vim on purpose.** Vim's `gdscript.vim`, like
+`python.vim`, leaves `formatoptions` alone, so `t` wraps code as you type.
+In GDScript a newline ends the statement, so a break outside brackets is a
+parse error or silently changes what the line means. GodotVim drops `t` and
+adds `c`, `q` and `l`, as `c.vim` does for C. `comments` is `b:##,b:#`
+rather than Python's `b:#,fb:-`: `##` doc comments continue with `##`, and
+without `fb:-` a code line that starts with `- ` (a continued expression)
+is not mistaken for a list item and wrapped. A `# ` line inside a
+multi-line string still counts as a comment.
+
+### Changing it
+
+- `:setlocal fo+=t` lets code wrap in the current script, the Vim way. It
+  can break GDScript.
+- `:set fo-=t` or `:set comments^=b:##` work as in Vim. In a `.godot-vimrc`
+  they set the global value, which the plugins then adjust per script, as
+  `setlocal` in an ftplugin overrides your vimrc in Vim.
+- A plugin runs once per script. A `:setlocal` you make afterwards stays
+  when you switch scripts and come back. If the script's filetype changes
+  (you pick another syntax highlighter), the old plugin is undone first,
+  each option it set going back to the global value, like Vim's
+  `setlocal fo<`.
+- **Turning plugins off:** the **Filetype Plugin** setting, or
+  `filetype plugin off` in a `.godot-vimrc` (`filetype plugin on` turns
+  them back on; `filetype off` stops detection altogether). Whichever you
+  changed last wins. The current script follows at once and other scripts
+  the next time you switch to them, their plugin undone. The
+  `commentstring` from Godot's delimiters is set either way.
 
 ---
 
@@ -375,7 +456,8 @@ All settings are in **Editor > Editor Settings > Plugins > GodotVim**.
 | Setting | Key | Type | Default | Description |
 |---------|-----|------|---------|-------------|
 | Scroll Off | `plugins/GodotVim/editor/scrolloff` | `int` | `5` | Minimum lines above/below cursor (0-20). |
-| Textwidth | `plugins/GodotVim/editor/textwidth` | `int` | `0` | Vim `textwidth`, 0 to 200. Typing in Insert mode breaks a line longer than this (vim-core's `formatoptions` contains `t` by default). `0` disables it. `gq` formats at 79 when it is `0`. Shown as **Textwidth** under **Godot Vim > Editor**; filter for `textwidth` to find it. |
+| Textwidth | `plugins/GodotVim/editor/textwidth` | `int` | `0` | Vim `textwidth`, 0 to 200: the width at which typing breaks lines where `formatoptions` allows it. In GDScript and shaders only comments wrap, JSON never does (see [Filetype Plugins](#filetype-plugins)). `0` never breaks; `gq` formats at 79 when it is `0`. Shown as **Textwidth** under **Godot Vim > Editor**; filter for `textwidth` to find it. |
+| Filetype Plugin | `plugins/GodotVim/editor/filetype_plugin` | `bool` | `true` | Vim's `filetype plugin on`: run the [filetype plugins](#filetype-plugins). Off is `filetype plugin off`. A change here wins over the vimrc line until the vimrc is sourced again. |
 | Clipboard | `plugins/GodotVim/editor/clipboard_enabled` | `bool` | `false` | Sync Vim registers with system clipboard. |
 | Ignore Case | `plugins/GodotVim/editor/ignorecase` | `bool` | `false` | Case-insensitive search. |
 | Smart Case | `plugins/GodotVim/editor/smartcase` | `bool` | `false` | Uppercase in pattern overrides Ignore Case. |
@@ -531,6 +613,8 @@ Place a `.godot-vimrc` file at your project root (`res://.godot-vimrc`) or user 
 |--------|-------------|
 | `let mapleader = "x"` | Set leader key (must come before `<Leader>` mappings) |
 | `set timeoutlen=N` | Mapping timeout in milliseconds |
+| `set {option}` / `setlocal {option}` | Any option from [Vim Options](#vim-options-set); `setlocal` acts like `set` here |
+| `filetype plugin on` / `filetype plugin off` | Turn the [filetype plugins](#filetype-plugins) on or off; `filetype on` / `filetype off` turn detection on or off |
 | `nmap` / `nnoremap` | Normal mode mapping |
 | `imap` / `inoremap` | Insert mode mapping |
 | `vmap` / `vnoremap` | Visual mode mapping |
@@ -833,7 +917,7 @@ GodotVim defaults to a locked-down security posture:
 
 - **Shell execution disabled**: `:!` commands are blocked by default. Enable in EditorSettings under `security/shell_execution`.
 - **File access scoped to project**: `:w`, `:r`, `:e` restricted to `res://` and `user://` paths by default.
-- **Sandboxed project vimrc:** Under the default `Sandbox` policy a project-level `.godot-vimrc` is filtered by **whitelist**, not by pattern-stripping: only known-safe constructs survive. Comments and blanks, safe `set` options, `let mapleader`, the non-recursive `noremap` forms with a clean right-hand side, `panelunmap`, and `panelmap` lines targeting a registered `godotvim.*` action all pass. Everything else is stripped, including **every recursive `map` form regardless of its right-hand side** (`map`, `nmap`, `vmap`, `imap`, `omap`, `cmap`), because a recursive expansion can compose safe fragments into a dangerous one at runtime. Stripped means commented out with a `" [sandbox] stripped` comment naming the reason, never deleted, so nothing changes silently. Three policies: Disabled, Sandbox (default), Trusted.
+- **Sandboxed project vimrc:** Under the default `Sandbox` policy a project-level `.godot-vimrc` is filtered by **whitelist**, not by pattern-stripping: only known-safe constructs survive. Comments and blanks, safe `set` and `setlocal` options, `filetype` lines, `let mapleader`, the non-recursive `noremap` forms with a clean right-hand side, `panelunmap`, and `panelmap` lines targeting a registered `godotvim.*` action all pass. Everything else is stripped, including **every recursive `map` form regardless of its right-hand side** (`map`, `nmap`, `vmap`, `imap`, `omap`, `cmap`), because a recursive expansion can compose safe fragments into a dangerous one at runtime. Stripped means commented out with a `" [sandbox] stripped` comment naming the reason, never deleted, so nothing changes silently. Three policies: Disabled, Sandbox (default), Trusted.
 - **Panel bindings are honoured from a project vimrc**, but only because their right-hand side is a closed vocabulary. Under the default `Sandbox` policy a committed `res://.godot-vimrc` may use `panelunmap` (it can only *remove* a binding), `native` (it can only *reduce* what the plugin consumes), and any registered `godotvim.*` action id with integer-only parameters. None of those can expand into `:!`, `:source`, or another mapping, and an unregistered action id is refused at load. A `panelmap` line that fails to parse is stripped rather than trusted, "unparseable" and "harmless" are different claims. Stripping means commenting the line out with a reason, never deleting it, so nothing changes silently. `Trusted` honours the file verbatim; `Disabled` skips it entirely. Lines in `user://.godot-vimrc`, or in a file you named yourself under Config File Path, are trusted at every tier. See [Panel Key Bindings](#panel-key-bindings-panelmap).
 
 ---
