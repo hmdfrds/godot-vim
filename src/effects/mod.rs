@@ -7,6 +7,7 @@
 //! adjustments, undo grouping, register syncing, and search highlighting.
 
 pub(crate) mod auto_brace;
+pub(crate) mod completion;
 mod compound;
 pub(crate) mod cursor;
 pub(crate) mod dispatch;

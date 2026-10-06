@@ -3,15 +3,11 @@
 //! Godot's CodeEdit autocomplete is driven by `_gui_input()`, which never
 //! fires when Vim consumes the key via `set_input_as_handled()`. This module
 //! dispatches completion-relevant keys *before* the engine so the popup can
-//! trigger, filter, navigate, and confirm, all without engine changes.
-//!
-//! Two phases:
-//! - **Pre-engine** ([`dispatch_overlay`]): runs whatever the
-//!   `editor.completion` overlay resolved for this keystroke, folded by the
-//!   SAME `resolve::dispose` every other surface uses, so flags, params and
-//!   the decline-and-fall-through rule mean the same thing here.
-//! - **Post-engine** ([`maybe_retrigger_completion`]): re-triggers the popup
-//!   after printable/backspace keystrokes so filtering stays in sync.
+//! trigger, navigate, and confirm, all without engine changes:
+//! [`dispatch_overlay`] runs whatever the `editor.completion` overlay
+//! resolved for this keystroke, folded by the SAME `resolve::dispose` every
+//! other surface uses. Keeping the popup in step with engine edits is
+//! `effects::completion`, at the end of every engine pass.
 //!
 //! # One pipeline, and still on this transport
 //!
@@ -32,20 +28,15 @@
 
 use godot::classes::CodeEdit;
 use godot::prelude::*;
-use vim_core::execution::{VimEngine, VimSession};
-use vim_core::keymap::{Key, KeyEvent, Modifiers};
+use vim_core::execution::VimSession;
 
 use crate::actions::action::{ActionCtx, CompletionOps};
 use crate::actions::outcome::Outcome;
 use crate::actions::resolve::{self, CandidateTarget, Disposition};
 use crate::bridge;
+use crate::bridge::code_edit_ext::CodeEditExt;
 use crate::bridge::codec::usize_to_i32;
 use crate::bridge::godot_host::GodotHost;
-
-/// Godot returns -1 when no completion popup is visible.
-fn is_completion_active(editor: &Gd<CodeEdit>) -> bool {
-    editor.get_code_completion_selected_index() >= 0
-}
 
 /// Whether the current completion selection was chosen by the user.
 ///
@@ -57,14 +48,26 @@ fn is_completion_active(editor: &Gd<CodeEdit>) -> bool {
 /// `explicit` standing, which is what lets the port's own write survive the
 /// keystroke that opened the popup.
 ///
-/// Two documented residuals, both failing toward a newline rather than an
-/// unwanted insert: clicking an already-selected row, and wrapping round to
-/// row 0.
+/// A navigation key is a choice even when the index cannot move (one row, or
+/// a wrap to row 0), so the port marks it through [`Provenance::chosen`].
+///
+/// One documented residual, failing toward a newline rather than an unwanted
+/// insert: clicking an already-selected row.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct Provenance {
     last_index: Option<i32>,
     last_caret: (i32, i32),
     pub(crate) explicit: bool,
+}
+
+impl Provenance {
+    /// A user-initiated port write or navigation key.
+    pub(crate) fn chosen(self) -> Self {
+        Self {
+            explicit: true,
+            ..self
+        }
+    }
 }
 
 /// Pure. The Godot reads happen once in `handle_gui_input_impl`; this is the
@@ -103,12 +106,10 @@ pub(crate) fn advance(
 /// all — `Gd<CodeEdit>` and `VimSession<GodotHost>` cannot be constructed under
 /// `cargo test` in a `cdylib`.
 ///
-/// INVARIANT the provenance write-through depends on:
-/// `maybe_retrigger_completion` calls `request_code_completion_ex()` on the
-/// raw editor and never touches this port, so a port `request` (or `select`)
-/// is reachable only from a user-initiated verb, and marking the selection
-/// explicit there is sound. A future retrigger refactor that routes through
-/// the port breaks this silently; do not.
+/// INVARIANT the provenance write-through depends on: `effects::completion`
+/// cancels and re-requests on the raw editor and never touches this port, so
+/// a port `request`, `select` or `navigated` is reachable only from a
+/// user-initiated verb, and marking the selection explicit there is sound.
 struct CompletionPort<'a> {
     session: &'a mut VimSession<GodotHost>,
     editor: &'a mut Gd<CodeEdit>,
@@ -117,7 +118,7 @@ struct CompletionPort<'a> {
 
 impl CompletionOps for CompletionPort<'_> {
     fn popup_visible(&self) -> bool {
-        is_completion_active(self.editor)
+        self.editor.completion_popup_open()
     }
 
     fn option_count(&self) -> i32 {
@@ -131,13 +132,17 @@ impl CompletionOps for CompletionPort<'_> {
     fn request(&mut self, force: bool) {
         // User-initiated by the port invariant above, so the selection Godot
         // preselects on this request was asked for by name.
-        self.provenance.explicit = true;
+        *self.provenance = self.provenance.chosen();
         self.editor.request_code_completion_ex().force(force).done();
     }
 
     fn select(&mut self, index: i32) {
-        self.provenance.explicit = true;
+        *self.provenance = self.provenance.chosen();
         self.editor.set_code_completion_selected_index(index);
+    }
+
+    fn navigated(&mut self) {
+        *self.provenance = self.provenance.chosen();
     }
 
     fn confirm(&mut self) {
@@ -189,61 +194,6 @@ pub(crate) fn dispatch_overlay(
         log::trace!("completion: {} -> {outcome:?}", spec.id);
         outcome
     })
-}
-
-/// After the engine processes an insert-mode key, re-trigger or dismiss
-/// CodeEdit's completion popup to match Godot's native behavior.
-///
-/// Godot natively calls the private `_filter_code_completion_candidates_impl`
-/// after each typed character, which re-filters candidates and cancels the
-/// popup when the word prefix is empty. We replicate that cancel logic here:
-/// word chars and completion-prefix chars (`.`, etc.) retrigger; everything
-/// else (`;`, `)`, space) cancels. Prefix chars come from CodeEdit's
-/// `code_completion_prefixes`, which for the script editor is the hardcoded
-/// per-editor set `{".", ",", "(", "=", "$", "@", quote, apostrophe}` written
-/// by `CodeTextEditor` (godot editor/gui/code_editor.cpp), not a per-language
-/// list.
-///
-/// Gated on `code_complete_enabled` so typing doesn't auto-trigger the popup
-/// when the user has disabled auto-completion in EditorSettings.
-pub(crate) fn maybe_retrigger_completion(
-    engine: &VimEngine,
-    key: KeyEvent,
-    editor: &mut Gd<CodeEdit>,
-    code_complete_enabled: bool,
-) {
-    if !code_complete_enabled {
-        return;
-    }
-
-    let mode = engine.mode();
-    if !mode.is_insert() && !mode.is_replace() {
-        return;
-    }
-
-    match key.key() {
-        Key::Char(c) if !c.is_control() && key.modifiers() == Modifiers::NONE => {
-            if c.is_alphanumeric() || c == '_' || is_completion_prefix(editor, c) {
-                editor.request_code_completion_ex().force(false).done();
-            } else {
-                editor.cancel_code_completion();
-            }
-        }
-        Key::Backspace => {
-            editor.request_code_completion_ex().force(false).done();
-        }
-        _ => {}
-    }
-}
-
-/// Check if `ch` is in CodeEdit's `code_completion_prefixes` (e.g., `.` for
-/// member access). A per-editor set: the script editor's is hardcoded by
-/// `CodeTextEditor`, not configured per language.
-fn is_completion_prefix(editor: &Gd<CodeEdit>, ch: char) -> bool {
-    let prefixes = editor.get_code_completion_prefixes();
-    let mut buf = [0u8; 4];
-    let ch_str = ch.encode_utf8(&mut buf);
-    prefixes.iter_shared().any(|p| *p.to_string() == *ch_str)
 }
 
 /// Confirm the selected completion and reconcile the text delta with the
@@ -358,6 +308,24 @@ mod tests {
                 prov(Some(2), (1, 4), true),
                 facts(2, (1, 4)),
                 prov(Some(2), (1, 4), true),
+            ),
+            (
+                "a navigation key on a one-row list is a choice",
+                prov(Some(0), (1, 4), false).chosen(),
+                facts(0, (1, 4)),
+                prov(Some(0), (1, 4), true),
+            ),
+            (
+                "a navigation key that wraps to row 0 is a choice",
+                prov(Some(2), (1, 4), false).chosen(),
+                facts(0, (1, 4)),
+                prov(Some(0), (1, 4), true),
+            ),
+            (
+                "typing after a navigation key resets it",
+                prov(Some(0), (1, 4), false).chosen(),
+                facts(0, (1, 5)),
+                prov(Some(0), (1, 5), false),
             ),
         ];
         for (what, prev, f, want) in rows {

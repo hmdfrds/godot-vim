@@ -250,12 +250,10 @@ pub(crate) static CONFIRM: ActionSpec = ActionSpec {
         };
         if want_selection && !ops.selection_is_explicit() {
             // Vim's rule (insert.txt:1399-1410): Enter inserts a newline
-            // unless the selection was explicitly moved. Cancel first, or a
-            // <Tab> on the same line meets a popup describing text that no
-            // longer exists; `maybe_retrigger_completion` fires for neither
-            // Key::Tab nor Key::Enter. Cancelling is cleanup, NOT a
-            // consumption decision: consumption is the rule's declared
-            // policy, read by `dispose` downstream of this outcome.
+            // unless the selection was explicitly moved, and the menu closes.
+            // The engine's newline alone would only re-derive the popup.
+            // Cancelling is cleanup, NOT a consumption decision: consumption
+            // is the rule's declared policy, read by `dispose` downstream.
             ops.cancel();
             return Outcome::Declined;
         }
@@ -298,9 +296,10 @@ pub(crate) static NAVIGATE: ActionSpec = ActionSpec {
     // declaration to a capability no classified path can satisfy.
     default_consume: Some(Consumption::Handoff),
     run: |cx| {
-        if ops(cx).is_none() {
+        let Some(ops) = ops(cx) else {
             return Outcome::Declined;
-        }
+        };
+        ops.navigated();
         Outcome::Handled
     },
 };
@@ -420,6 +419,10 @@ mod tests {
             self.log.push(format!("select({index})"));
             self.explicit = true;
             self.selected = index;
+        }
+        fn navigated(&mut self) {
+            self.log.push("navigated".into());
+            self.explicit = true;
         }
         fn confirm(&mut self) {
             self.log.push("confirm".into());
@@ -650,7 +653,11 @@ mod tests {
         // marked handled".
         let mut popup = FakePopup::open(3, 0);
         assert_eq!(run(&NAVIGATE, Params::new(), &mut popup), Outcome::Handled);
-        assert!(popup.log.is_empty(), "the control does the moving, not us");
+        assert_eq!(
+            popup.log,
+            ["navigated"],
+            "the control does the moving, not us"
+        );
         assert_eq!(
             popup.selected, 0,
             "we must not move the selection ourselves"
@@ -660,6 +667,14 @@ mod tests {
             fold(&NAVIGATE, Params::new(), &mut popup),
             Disposition::Handoff
         );
+    }
+
+    #[test]
+    fn navigating_a_one_row_list_then_enter_accepts() {
+        let mut popup = FakePopup::open(1, 0);
+        assert_eq!(run(&NAVIGATE, Params::new(), &mut popup), Outcome::Handled);
+        assert_eq!(run(&CONFIRM, Params::new(), &mut popup), Outcome::Handled);
+        assert_eq!(popup.log, ["navigated", "confirm"]);
     }
 
     #[test]
@@ -1001,8 +1016,8 @@ mod tests {
         // rule would trap the user in Insert; the engine's own
         // `SetMode(Normal)` cancels the popup instead. `Backspace` is
         // deliberately absent too: it was never a routing decision, it is
-        // the post-engine re-filter in `maybe_retrigger_completion`, which
-        // runs AFTER the key was already handled and so has no binding to be.
+        // the post-engine re-filter in `effects::completion`, which runs
+        // AFTER the key was already handled and so has no binding to be.
         let lines: Vec<&str> = DEFAULTS.lines().filter(|l| !l.is_empty()).collect();
         assert_eq!(lines.len(), 9);
         for notation in [

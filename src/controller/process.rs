@@ -11,8 +11,8 @@
 //!   +- passthrough check
 //!   +- pre-processing: refresh_from_editor, set config
 //!   +- session.process_key(key) -> ProcessResult
+//!   +- finish_engine_pass: carets, then the completion popup
 //!   +- post-processing: deferred actions, pending UI, undo balance
-//!   +- completion re-trigger (post-engine)
 //!   +- IME lifecycle
 //!   +- per-keystroke debug logging
 //! ```
@@ -51,9 +51,8 @@ pub(super) fn process_cycle_impl(
     // Advances on EVERY keystroke that reaches the editor, typed characters
     // included, with no early return above it (the vimdebug step intercept
     // holds no popup: entering step mode leaves Insert). That is what makes
-    // the caret-move reset work: `maybe_retrigger_completion` reopens the
-    // popup on the raw editor as the user types, and typing is exactly what
-    // must clear an inherited selection.
+    // the caret-move reset work: typing re-derives the popup on the raw
+    // editor (`effects::completion`), and must clear an inherited selection.
     ctx.transient.completion = completion::advance(ctx.transient.completion, &plan.facts);
 
     // The overlay fold, at the source line try_handle_completion occupied.
@@ -61,8 +60,8 @@ pub(super) fn process_cycle_impl(
     // ensure_undo_balanced fires on the same two branches;
     // CompletionConsumed.may_have_moved_cursor() stays true (Fix 4C); the
     // early return still precedes import_godot_carets_into_engine and
-    // sync_multi_cursors_to_godot, so the multi-cursor gap neither widens nor
-    // moves; and the block still precedes should_passthrough_key, so mapping
+    // finish_engine_pass, so the multi-cursor gap neither widens nor moves;
+    // and the block still precedes should_passthrough_key, so mapping
     // precedence is byte-for-byte today's.
     if !plan.candidates.is_empty() {
         let disposition =
@@ -139,8 +138,7 @@ pub(super) fn process_cycle_impl(
 
     ctx.transient.operations_this_cycle = ctx.transient.operations_this_cycle.saturating_add(1);
 
-    // ── Gap 1 & 5: Sync multi-cursor positions to Godot ────────────
-    sync_multi_cursors_to_godot(session);
+    finish_engine_pass(session);
 
     // ── Post-processing: deferred actions ───────────────────────────
     for action in &result.deferred_actions {
@@ -166,14 +164,6 @@ pub(super) fn process_cycle_impl(
     // ── Post-processing: ensure undo balanced ───────────────────────
     let mode = session.engine().mode();
     session.host_mut().ensure_undo_balanced(mode);
-
-    // ── Post-processing: completion re-trigger ──────────────────────
-    completion::maybe_retrigger_completion(
-        session.engine(),
-        key,
-        editor,
-        ctx.code_complete_enabled,
-    );
 
     let total_elapsed = total_start.elapsed();
 
@@ -352,8 +342,7 @@ pub(super) fn resolve_mapping_timeout_impl(
         ctx.transient.operations_this_cycle = ctx.transient.operations_this_cycle.saturating_add(1);
     }
 
-    // Gaps 1 & 5: Sync multi-cursor positions after drain.
-    sync_multi_cursors_to_godot(session);
+    finish_engine_pass(session);
 
     // Handle any deferred actions produced during drain.
     let pending_actions = session.host_mut().take_pending_ui_actions();
@@ -743,14 +732,22 @@ fn import_godot_carets_into_engine(session: &mut vim_core::execution::VimSession
     buf.set_last_caret_count(current_count);
 }
 
+/// The last write of an engine pass into the CodeEdit: the engine's carets,
+/// then the completion popup derived from them.
+pub(crate) fn finish_engine_pass(session: &mut vim_core::execution::VimSession<GodotHost>) {
+    sync_multi_cursors_to_godot(session);
+    let mode = session.engine().mode();
+    session
+        .host_mut()
+        .follow_completion(mode.is_insert() || mode.is_replace());
+}
+
 /// Gaps 1 & 5: Sync multi-cursor positions (and visual selections) to Godot
 /// after process_key completes.
 ///
 /// Only activates when cursor_count > 1 (multi-cursor is active). When only
 /// one cursor exists, the normal single-cursor path handles positioning.
-pub(crate) fn sync_multi_cursors_to_godot(
-    session: &mut vim_core::execution::VimSession<GodotHost>,
-) {
+fn sync_multi_cursors_to_godot(session: &mut vim_core::execution::VimSession<GodotHost>) {
     let cursor_count = session.engine().state().multi_cursor().selections().len();
 
     // Single cursor: let the normal path handle it.

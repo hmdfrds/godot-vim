@@ -234,8 +234,8 @@ impl VimController {
     /// pairing it with a new `GodotHost` wrapping the given editor.
     ///
     /// Must only be called when detached.
-    /// Syncs controller-level config (security policy, highlight yank duration)
-    /// into the new host.
+    /// Syncs controller-level config (security policy, highlight yank duration,
+    /// auto-complete) into the new host.
     pub(crate) fn attach_session(&mut self, editor: Gd<CodeEdit>) {
         self.ctx.swap_in_flight = true;
         let old_phase = std::mem::replace(
@@ -261,6 +261,7 @@ impl VimController {
         host.set_state(state);
         host.set_security_policy(self.ctx.security_policy);
         host.set_highlight_yank_duration_ms(self.ctx.highlight_yank_duration_ms);
+        host.set_code_complete_enabled(self.ctx.code_complete_enabled);
         let mut session = VimSession::from_parts(engine, host);
         let initial_text = session.host().text().to_owned();
         session.engine_mut().set_shadow_text(initial_text);
@@ -379,6 +380,11 @@ impl VimController {
         });
         self.set_highlight_yank_duration(snapshot.highlight_yank_duration);
         self.ctx.code_complete_enabled = snapshot.code_complete_enabled;
+        if let ControllerPhase::Attached { ref mut session } = self.phase {
+            session
+                .host_mut()
+                .set_code_complete_enabled(snapshot.code_complete_enabled);
+        }
     }
 
     /// Set an option the way `:set` does, in the current buffer and in every
@@ -919,7 +925,7 @@ impl VimController {
         // pipeline-driven mode exit. Without this, multi-cursor Godot
         // carets can be stale and orphaned undo groups can leak.
         if let ControllerPhase::Attached { ref mut session } = self.phase {
-            process::sync_multi_cursors_to_godot(session);
+            process::finish_engine_pass(session);
             let mode = session.engine().mode();
             session.host_mut().ensure_undo_balanced(mode);
         }
