@@ -250,9 +250,10 @@ pub(crate) static CONFIRM: ActionSpec = ActionSpec {
         };
         if want_selection && !ops.selection_is_explicit() {
             // Vim's rule (insert.txt:1399-1410): Enter inserts a newline
-            // unless the selection was explicitly moved. Cancelling is
-            // cleanup, NOT a consumption decision: consumption is the rule's
-            // declared policy, read by `dispose` downstream of this outcome.
+            // unless the selection was explicitly moved, and the menu closes.
+            // The engine's newline alone would only re-derive the popup.
+            // Cancelling is cleanup, NOT a consumption decision: consumption
+            // is the rule's declared policy, read by `dispose` downstream.
             ops.cancel();
             return Outcome::Declined;
         }

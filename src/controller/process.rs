@@ -60,8 +60,8 @@ pub(super) fn process_cycle_impl(
     // ensure_undo_balanced fires on the same two branches;
     // CompletionConsumed.may_have_moved_cursor() stays true (Fix 4C); the
     // early return still precedes import_godot_carets_into_engine and
-    // sync_multi_cursors_to_godot, so the multi-cursor gap neither widens nor
-    // moves; and the block still precedes should_passthrough_key, so mapping
+    // finish_engine_pass, so the multi-cursor gap neither widens nor moves;
+    // and the block still precedes should_passthrough_key, so mapping
     // precedence is byte-for-byte today's.
     if !plan.candidates.is_empty() {
         let disposition =
