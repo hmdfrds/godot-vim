@@ -118,12 +118,24 @@ impl log::Log for GodotLogger {
         let level = record.level();
         let args = record.args();
 
+        // Statement arms: godot_error! and godot_warn! expand to a block that
+        // ends in a semicolon, which is an error in expression position.
         match level {
-            Level::Error => godot_error!("[{}] {}", target, args),
-            Level::Warn => godot_warn!("[{}] {}", target, args),
-            Level::Info => godot_print!("[{}] {}", target, args),
-            Level::Debug => godot_print!("[DBG][{}] {}", target, args),
-            Level::Trace => godot_print!("[TRC][{}] {}", target, args),
+            Level::Error => {
+                godot_error!("[{}] {}", target, args);
+            }
+            Level::Warn => {
+                godot_warn!("[{}] {}", target, args);
+            }
+            Level::Info => {
+                godot_print!("[{}] {}", target, args);
+            }
+            Level::Debug => {
+                godot_print!("[DBG][{}] {}", target, args);
+            }
+            Level::Trace => {
+                godot_print!("[TRC][{}] {}", target, args);
+            }
         }
     }
 
