@@ -247,6 +247,8 @@ pub(crate) trait CompletionOps {
     /// selected index are valid immediately after the call.
     fn request(&mut self, force: bool);
     fn select(&mut self, index: i32);
+    /// The user pressed a key `CodeEdit` moves the selection on by itself.
+    fn navigated(&mut self);
     /// Accept the selected candidate and reconcile the text delta with the
     /// engine, so dot-repeat and macro recording capture the completed text.
     fn confirm(&mut self);

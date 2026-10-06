@@ -295,9 +295,10 @@ pub(crate) static NAVIGATE: ActionSpec = ActionSpec {
     // declaration to a capability no classified path can satisfy.
     default_consume: Some(Consumption::Handoff),
     run: |cx| {
-        if ops(cx).is_none() {
+        let Some(ops) = ops(cx) else {
             return Outcome::Declined;
-        }
+        };
+        ops.navigated();
         Outcome::Handled
     },
 };
@@ -417,6 +418,10 @@ mod tests {
             self.log.push(format!("select({index})"));
             self.explicit = true;
             self.selected = index;
+        }
+        fn navigated(&mut self) {
+            self.log.push("navigated".into());
+            self.explicit = true;
         }
         fn confirm(&mut self) {
             self.log.push("confirm".into());
@@ -647,7 +652,11 @@ mod tests {
         // marked handled".
         let mut popup = FakePopup::open(3, 0);
         assert_eq!(run(&NAVIGATE, Params::new(), &mut popup), Outcome::Handled);
-        assert!(popup.log.is_empty(), "the control does the moving, not us");
+        assert_eq!(
+            popup.log,
+            ["navigated"],
+            "the control does the moving, not us"
+        );
         assert_eq!(
             popup.selected, 0,
             "we must not move the selection ourselves"
@@ -657,6 +666,14 @@ mod tests {
             fold(&NAVIGATE, Params::new(), &mut popup),
             Disposition::Handoff
         );
+    }
+
+    #[test]
+    fn navigating_a_one_row_list_then_enter_accepts() {
+        let mut popup = FakePopup::open(1, 0);
+        assert_eq!(run(&NAVIGATE, Params::new(), &mut popup), Outcome::Handled);
+        assert_eq!(run(&CONFIRM, Params::new(), &mut popup), Outcome::Handled);
+        assert_eq!(popup.log, ["navigated", "confirm"]);
     }
 
     #[test]

@@ -52,14 +52,26 @@ fn is_completion_active(editor: &Gd<CodeEdit>) -> bool {
 /// `explicit` standing, which is what lets the port's own write survive the
 /// keystroke that opened the popup.
 ///
-/// Two documented residuals, both failing toward a newline rather than an
-/// unwanted insert: clicking an already-selected row, and wrapping round to
-/// row 0.
+/// A navigation key is a choice even when the index cannot move (one row, or
+/// a wrap to row 0), so the port marks it through [`Provenance::chosen`].
+///
+/// One documented residual, failing toward a newline rather than an unwanted
+/// insert: clicking an already-selected row.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub(crate) struct Provenance {
     last_index: Option<i32>,
     last_caret: (i32, i32),
     pub(crate) explicit: bool,
+}
+
+impl Provenance {
+    /// A user-initiated port write or navigation key.
+    pub(crate) fn chosen(self) -> Self {
+        Self {
+            explicit: true,
+            ..self
+        }
+    }
 }
 
 /// Pure. The Godot reads happen once in `handle_gui_input_impl`; this is the
@@ -100,7 +112,7 @@ pub(crate) fn advance(
 ///
 /// INVARIANT the provenance write-through depends on: `effects::completion`
 /// cancels and re-requests on the raw editor and never touches this port, so
-/// a port `request` or `select` is reachable only from a
+/// a port `request`, `select` or `navigated` is reachable only from a
 /// user-initiated verb, and marking the selection explicit there is sound.
 struct CompletionPort<'a> {
     session: &'a mut VimSession<GodotHost>,
@@ -124,13 +136,17 @@ impl CompletionOps for CompletionPort<'_> {
     fn request(&mut self, force: bool) {
         // User-initiated by the port invariant above, so the selection Godot
         // preselects on this request was asked for by name.
-        self.provenance.explicit = true;
+        *self.provenance = self.provenance.chosen();
         self.editor.request_code_completion_ex().force(force).done();
     }
 
     fn select(&mut self, index: i32) {
-        self.provenance.explicit = true;
+        *self.provenance = self.provenance.chosen();
         self.editor.set_code_completion_selected_index(index);
+    }
+
+    fn navigated(&mut self) {
+        *self.provenance = self.provenance.chosen();
     }
 
     fn confirm(&mut self) {
@@ -296,6 +312,24 @@ mod tests {
                 prov(Some(2), (1, 4), true),
                 facts(2, (1, 4)),
                 prov(Some(2), (1, 4), true),
+            ),
+            (
+                "a navigation key on a one-row list is a choice",
+                prov(Some(0), (1, 4), false).chosen(),
+                facts(0, (1, 4)),
+                prov(Some(0), (1, 4), true),
+            ),
+            (
+                "a navigation key that wraps to row 0 is a choice",
+                prov(Some(2), (1, 4), false).chosen(),
+                facts(0, (1, 4)),
+                prov(Some(0), (1, 4), true),
+            ),
+            (
+                "typing after a navigation key resets it",
+                prov(Some(0), (1, 4), false).chosen(),
+                facts(0, (1, 5)),
+                prov(Some(0), (1, 5), false),
             ),
         ];
         for (what, prev, f, want) in rows {
