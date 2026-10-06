@@ -20,7 +20,8 @@ use super::clipboard::GodotClipboard;
 use super::code_edit_ext::CodeEditExt;
 use super::codec::{self, LineIndex};
 use super::context::{OwnedGodotFoldProvider, OwnedGodotIndentProvider};
-use super::port_impl::{AutoBraceSnapshot, SyntaxRegion};
+use super::port_impl::{AutoBraceSnapshot, CodeEditPort, SyntaxRegion};
+use crate::effects::completion::{Caret, Edit};
 use crate::effects::dispatch::{AutoBraceMode, DispatchContext};
 use crate::host::SecurityPolicy;
 use crate::settings::{FileAccessScope, ProjectVimrc, ShellExecution};
@@ -107,6 +108,9 @@ pub(crate) struct GodotHost {
     highlight_yank_duration_ms: u32,
     auto_brace_eligible: bool,
     engine_auto_pairs_active: bool,
+    code_complete_enabled: bool,
+    /// Caret and text version when the engine pass began.
+    pass_start: (Caret, u32),
     #[allow(clippy::type_complexity)]
     brace_pair_cache: Option<(InstanceId, std::rc::Rc<Vec<(String, String)>>)>,
 
@@ -457,6 +461,7 @@ impl GodotHost {
             line_index.line_col_to_byte(&text, editor.get_caret_line(), editor.get_caret_column());
         let editor_id = editor.instance_id();
         let generation = editor.get_version() as u64;
+        let pass_start = (Caret::of(&text, cursor_offset), editor.get_version());
         Self {
             fold_provider: OwnedGodotFoldProvider::new(editor.clone()),
             indent_provider: OwnedGodotIndentProvider::new(editor.clone()),
@@ -484,6 +489,8 @@ impl GodotHost {
             highlight_yank_duration_ms: 150,
             auto_brace_eligible: false,
             engine_auto_pairs_active: false,
+            code_complete_enabled: true,
+            pass_start,
             brace_pair_cache: None,
             pending_ui_actions: Vec::new(),
             vimdebug_enabled: false,
@@ -494,11 +501,13 @@ impl GodotHost {
 
     /// Sync text cache, cursor, and viewport from the live CodeEdit.
     ///
-    /// Called before every `VimSession::process_key()` to ensure the host's
-    /// document snapshot matches the editor's authoritative state.
+    /// Called before every engine pass to ensure the host's document snapshot
+    /// matches the editor's authoritative state, and the start of the pass
+    /// [`Self::follow_completion`] compares against.
     pub(crate) fn refresh_from_editor(&mut self) {
         let editor_id = self.editor.instance_id();
-        let live_generation = self.editor.get_version() as u64;
+        let live_generation_raw = self.editor.get_version();
+        let live_generation = u64::from(live_generation_raw);
         if editor_id != self.cache_editor_id {
             // Buffer switch — full refresh.
             self.text_cache = self.editor.get_text().to_string();
@@ -516,12 +525,38 @@ impl GodotHost {
             self.editor.get_caret_line(),
             self.editor.get_caret_column(),
         );
+        self.pass_start = (
+            Caret::of(&self.text_cache, self.cursor_offset),
+            live_generation_raw,
+        );
         // Viewport.
         self.viewport = ViewportInfo {
             first_line: codec::i32_to_usize(self.editor.get_first_visible_line()),
             height: self.editor.safe_visible_line_count(),
             width: approximate_viewport_width(&self.editor),
         };
+    }
+
+    /// Re-derive Godot's completion popup from what this engine pass did.
+    /// Runs once the engine's carets are in the editor, so caret 0 is final.
+    pub(crate) fn follow_completion(&mut self, insert_like: bool) {
+        let (before, version) = self.pass_start;
+        let after_offset = self.line_index.line_col_to_byte(
+            &self.text_cache,
+            self.editor.get_caret_line(),
+            self.editor.get_caret_column(),
+        );
+        let edit = Edit::classify(
+            self.editor.get_version() != version,
+            before,
+            Caret::of(&self.text_cache, after_offset),
+        );
+        crate::effects::completion::follow_engine_edit(
+            &mut CodeEditPort(&mut self.editor, &mut self.pending_ui_actions),
+            edit,
+            insert_like,
+            self.code_complete_enabled,
+        );
     }
 
     /// Force a full text cache rebuild from the editor.
@@ -539,6 +574,10 @@ impl GodotHost {
 
     pub(crate) fn set_engine_auto_pairs_active(&mut self, active: bool) {
         self.engine_auto_pairs_active = active;
+    }
+
+    pub(crate) fn set_code_complete_enabled(&mut self, enabled: bool) {
+        self.code_complete_enabled = enabled;
     }
 
     pub(crate) fn set_scrolloff(&mut self, scrolloff: i32) {

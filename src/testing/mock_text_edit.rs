@@ -86,6 +86,10 @@ pub(crate) struct MockTextEdit {
     v_scroll: f64,
     h_scroll: i32,
     visible_line_count: i32,
+
+    /// Completion popup calls, in order, and whether a popup is up.
+    pub(crate) completion_log: Vec<String>,
+    pub(crate) popup_open: bool,
 }
 
 impl MockTextEdit {
@@ -109,6 +113,8 @@ impl MockTextEdit {
             v_scroll: 0.0,
             h_scroll: 0,
             visible_line_count: 25,
+            completion_log: Vec::new(),
+            popup_open: false,
         }
     }
 
@@ -662,14 +668,30 @@ impl TextEditorPort for MockTextEdit {
 }
 
 // ─── Extension trait implementations ────────────────────────────────────────
-// All default no-ops. The mock has no real fold/IDE/navigation behavior, but
-// dispatch tests exercise these trait paths to verify the bridge doesn't panic
-// when the engine emits fold or IDE effects.
+// Fold and navigation are default no-ops. The completion popup is a recorder:
+// no candidates, only the order of calls.
 
 use crate::bridge::port::{FoldCapable, IdeCapable, NavigationCapable};
 
 impl FoldCapable for MockTextEdit {}
-impl IdeCapable for MockTextEdit {}
+impl IdeCapable for MockTextEdit {
+    fn cancel_code_completion(&mut self) {
+        self.completion_log.push("cancel".into());
+        self.popup_open = false;
+    }
+
+    fn completion_popup_open(&self) -> bool {
+        self.popup_open
+    }
+
+    fn is_completion_prefix(&self, ch: char) -> bool {
+        matches!(ch, '.' | ',' | '(' | '=' | '$' | '@' | '"' | '\'')
+    }
+
+    fn request_code_completion(&mut self, force: bool) {
+        self.completion_log.push(format!("request(force={force})"));
+    }
+}
 impl NavigationCapable for MockTextEdit {}
 
 // ─── Inherent methods for test assertions ───────────────────────────────────

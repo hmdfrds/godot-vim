@@ -3,15 +3,11 @@
 //! Godot's CodeEdit autocomplete is driven by `_gui_input()`, which never
 //! fires when Vim consumes the key via `set_input_as_handled()`. This module
 //! dispatches completion-relevant keys *before* the engine so the popup can
-//! trigger, filter, navigate, and confirm, all without engine changes.
-//!
-//! Two phases:
-//! - **Pre-engine** ([`dispatch_overlay`]): runs whatever the
-//!   `editor.completion` overlay resolved for this keystroke, folded by the
-//!   SAME `resolve::dispose` every other surface uses, so flags, params and
-//!   the decline-and-fall-through rule mean the same thing here.
-//! - **Post-engine** ([`maybe_retrigger_completion`]): re-triggers the popup
-//!   after printable/backspace keystrokes so filtering stays in sync.
+//! trigger, navigate, and confirm, all without engine changes:
+//! [`dispatch_overlay`] runs whatever the `editor.completion` overlay
+//! resolved for this keystroke, folded by the SAME `resolve::dispose` every
+//! other surface uses. Keeping the popup in step with engine edits is
+//! `effects::completion`, at the end of every engine pass.
 //!
 //! # One pipeline, and still on this transport
 //!
@@ -32,8 +28,7 @@
 
 use godot::classes::CodeEdit;
 use godot::prelude::*;
-use vim_core::execution::{VimEngine, VimSession};
-use vim_core::keymap::{Key, KeyEvent, Modifiers};
+use vim_core::execution::VimSession;
 
 use crate::actions::action::{ActionCtx, CompletionOps};
 use crate::actions::outcome::Outcome;
@@ -103,12 +98,10 @@ pub(crate) fn advance(
 /// all — `Gd<CodeEdit>` and `VimSession<GodotHost>` cannot be constructed under
 /// `cargo test` in a `cdylib`.
 ///
-/// INVARIANT the provenance write-through depends on:
-/// `maybe_retrigger_completion` calls `request_code_completion_ex()` on the
-/// raw editor and never touches this port, so a port `request` (or `select`)
-/// is reachable only from a user-initiated verb, and marking the selection
-/// explicit there is sound. A future retrigger refactor that routes through
-/// the port breaks this silently; do not.
+/// INVARIANT the provenance write-through depends on: `effects::completion`
+/// cancels and re-requests on the raw editor and never touches this port, so
+/// a port `request` or `select` is reachable only from a
+/// user-initiated verb, and marking the selection explicit there is sound.
 struct CompletionPort<'a> {
     session: &'a mut VimSession<GodotHost>,
     editor: &'a mut Gd<CodeEdit>,
@@ -189,61 +182,6 @@ pub(crate) fn dispatch_overlay(
         log::trace!("completion: {} -> {outcome:?}", spec.id);
         outcome
     })
-}
-
-/// After the engine processes an insert-mode key, re-trigger or dismiss
-/// CodeEdit's completion popup to match Godot's native behavior.
-///
-/// Godot natively calls the private `_filter_code_completion_candidates_impl`
-/// after each typed character, which re-filters candidates and cancels the
-/// popup when the word prefix is empty. We replicate that cancel logic here:
-/// word chars and completion-prefix chars (`.`, etc.) retrigger; everything
-/// else (`;`, `)`, space) cancels. Prefix chars come from CodeEdit's
-/// `code_completion_prefixes`, which for the script editor is the hardcoded
-/// per-editor set `{".", ",", "(", "=", "$", "@", quote, apostrophe}` written
-/// by `CodeTextEditor` (godot editor/gui/code_editor.cpp), not a per-language
-/// list.
-///
-/// Gated on `code_complete_enabled` so typing doesn't auto-trigger the popup
-/// when the user has disabled auto-completion in EditorSettings.
-pub(crate) fn maybe_retrigger_completion(
-    engine: &VimEngine,
-    key: KeyEvent,
-    editor: &mut Gd<CodeEdit>,
-    code_complete_enabled: bool,
-) {
-    if !code_complete_enabled {
-        return;
-    }
-
-    let mode = engine.mode();
-    if !mode.is_insert() && !mode.is_replace() {
-        return;
-    }
-
-    match key.key() {
-        Key::Char(c) if !c.is_control() && key.modifiers() == Modifiers::NONE => {
-            if c.is_alphanumeric() || c == '_' || is_completion_prefix(editor, c) {
-                editor.request_code_completion_ex().force(false).done();
-            } else {
-                editor.cancel_code_completion();
-            }
-        }
-        Key::Backspace => {
-            editor.request_code_completion_ex().force(false).done();
-        }
-        _ => {}
-    }
-}
-
-/// Check if `ch` is in CodeEdit's `code_completion_prefixes` (e.g., `.` for
-/// member access). A per-editor set: the script editor's is hardcoded by
-/// `CodeTextEditor`, not configured per language.
-fn is_completion_prefix(editor: &Gd<CodeEdit>, ch: char) -> bool {
-    let prefixes = editor.get_code_completion_prefixes();
-    let mut buf = [0u8; 4];
-    let ch_str = ch.encode_utf8(&mut buf);
-    prefixes.iter_shared().any(|p| *p.to_string() == *ch_str)
 }
 
 /// Confirm the selected completion and reconcile the text delta with the

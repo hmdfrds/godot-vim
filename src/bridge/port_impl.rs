@@ -354,6 +354,26 @@ impl IdeCapable for CodeEditPort<'_> {
     fn dismiss_code_hint(&mut self) {
         super::godot_calls::dismiss_code_hint(self.0);
     }
+
+    /// Godot returns -1 when no popup is visible.
+    fn completion_popup_open(&self) -> bool {
+        self.0.get_code_completion_selected_index() >= 0
+    }
+
+    /// The script editor's set is hardcoded by `CodeTextEditor`
+    /// (editor/gui/code_editor.cpp), not configured per language.
+    fn is_completion_prefix(&self, ch: char) -> bool {
+        let mut buf = [0u8; 4];
+        let ch = ch.encode_utf8(&mut buf);
+        self.0
+            .get_code_completion_prefixes()
+            .iter_shared()
+            .any(|p| p.to_string() == *ch)
+    }
+
+    fn request_code_completion(&mut self, force: bool) {
+        self.0.request_code_completion_ex().force(force).done();
+    }
 }
 
 impl NavigationCapable for CodeEditPort<'_> {

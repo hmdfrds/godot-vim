@@ -255,8 +255,7 @@ pub(crate) trait CompletionOps {
     /// preselected by Godot.
     ///
     /// Answered from the provenance machine on the port. Sound because
-    /// `controller::completion::maybe_retrigger_completion` calls
-    /// `request_code_completion_ex()` on the raw editor and never touches
+    /// `effects::completion` re-requests on the raw editor and never touches
     /// this port, so a port `request` is reachable only from a user-initiated
     /// verb.
     fn selection_is_explicit(&self) -> bool;

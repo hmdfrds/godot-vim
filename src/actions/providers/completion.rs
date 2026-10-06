@@ -250,12 +250,9 @@ pub(crate) static CONFIRM: ActionSpec = ActionSpec {
         };
         if want_selection && !ops.selection_is_explicit() {
             // Vim's rule (insert.txt:1399-1410): Enter inserts a newline
-            // unless the selection was explicitly moved. Cancel first, or a
-            // <Tab> on the same line meets a popup describing text that no
-            // longer exists; `maybe_retrigger_completion` fires for neither
-            // Key::Tab nor Key::Enter. Cancelling is cleanup, NOT a
-            // consumption decision: consumption is the rule's declared
-            // policy, read by `dispose` downstream of this outcome.
+            // unless the selection was explicitly moved. Cancelling is
+            // cleanup, NOT a consumption decision: consumption is the rule's
+            // declared policy, read by `dispose` downstream of this outcome.
             ops.cancel();
             return Outcome::Declined;
         }
@@ -1001,8 +998,8 @@ mod tests {
         // rule would trap the user in Insert; the engine's own
         // `SetMode(Normal)` cancels the popup instead. `Backspace` is
         // deliberately absent too: it was never a routing decision, it is
-        // the post-engine re-filter in `maybe_retrigger_completion`, which
-        // runs AFTER the key was already handled and so has no binding to be.
+        // the post-engine re-filter in `effects::completion`, which runs
+        // AFTER the key was already handled and so has no binding to be.
         let lines: Vec<&str> = DEFAULTS.lines().filter(|l| !l.is_empty()).collect();
         assert_eq!(lines.len(), 9);
         for notation in [
