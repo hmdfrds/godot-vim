@@ -11,6 +11,7 @@ use std::rc::Rc;
 use godot::classes::{CodeEdit, EditorInterface, InputEventShortcut};
 use godot::prelude::*;
 
+use super::code_edit_ext::CodeEditExt;
 use super::port::{FoldCapable, IdeCapable, NavigationCapable, TextEditorPort, ViewportAdjust};
 use crate::bridge::godot_calls;
 
@@ -355,9 +356,18 @@ impl IdeCapable for CodeEditPort<'_> {
         super::godot_calls::dismiss_code_hint(self.0);
     }
 
-    /// Godot returns -1 when no popup is visible.
     fn completion_popup_open(&self) -> bool {
-        self.0.get_code_completion_selected_index() >= 0
+        self.0.completion_popup_open()
+    }
+
+    fn completion_popup_holds_paths(&self) -> bool {
+        self.0.completion_popup_holds_paths()
+    }
+
+    fn caret_in_string(&self) -> bool {
+        let line = self.0.get_caret_line();
+        let column = self.0.get_caret_column();
+        self.0.is_in_string_ex(line).column(column).done() != -1
     }
 
     /// The script editor's set is hardcoded by `CodeTextEditor`

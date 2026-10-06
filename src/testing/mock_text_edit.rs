@@ -87,9 +87,11 @@ pub(crate) struct MockTextEdit {
     h_scroll: i32,
     visible_line_count: i32,
 
-    /// Completion popup calls, in order, and whether a popup is up.
+    /// Completion popup calls, in order, and what the popup and caret are on.
     pub(crate) completion_log: Vec<String>,
     pub(crate) popup_open: bool,
+    pub(crate) popup_paths: bool,
+    pub(crate) in_string: bool,
 }
 
 impl MockTextEdit {
@@ -115,6 +117,8 @@ impl MockTextEdit {
             visible_line_count: 25,
             completion_log: Vec::new(),
             popup_open: false,
+            popup_paths: false,
+            in_string: false,
         }
     }
 
@@ -682,6 +686,14 @@ impl IdeCapable for MockTextEdit {
 
     fn completion_popup_open(&self) -> bool {
         self.popup_open
+    }
+
+    fn completion_popup_holds_paths(&self) -> bool {
+        self.popup_open && self.popup_paths
+    }
+
+    fn caret_in_string(&self) -> bool {
+        self.in_string
     }
 
     fn is_completion_prefix(&self, ch: char) -> bool {

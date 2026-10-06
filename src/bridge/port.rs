@@ -4,7 +4,7 @@
 //!
 //! - **`TextEditorPort`** (33 methods) — core text editing (required).
 //! - **`FoldCapable`** (5 methods, default no-ops) — code folding.
-//! - **`IdeCapable`** (5 methods, default no-ops) — autocomplete/hints.
+//! - **`IdeCapable`** (7 methods, default no-ops): autocomplete/hints.
 //! - **`NavigationCapable`** (2 methods, default no-ops) — go-to-definition, hover docs.
 //!
 //! Production: `CodeEditPort` (in `port_impl.rs`) implements all four.
@@ -108,6 +108,13 @@ pub(crate) trait IdeCapable: TextEditorPort {
     fn cancel_code_completion(&mut self) {}
     fn dismiss_code_hint(&mut self) {}
     fn completion_popup_open(&self) -> bool {
+        false
+    }
+    /// The selected option is a node or file path.
+    fn completion_popup_holds_paths(&self) -> bool {
+        false
+    }
+    fn caret_in_string(&self) -> bool {
         false
     }
     fn is_completion_prefix(&self, _ch: char) -> bool {

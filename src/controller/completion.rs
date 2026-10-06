@@ -34,13 +34,9 @@ use crate::actions::action::{ActionCtx, CompletionOps};
 use crate::actions::outcome::Outcome;
 use crate::actions::resolve::{self, CandidateTarget, Disposition};
 use crate::bridge;
+use crate::bridge::code_edit_ext::CodeEditExt;
 use crate::bridge::codec::usize_to_i32;
 use crate::bridge::godot_host::GodotHost;
-
-/// Godot returns -1 when no completion popup is visible.
-fn is_completion_active(editor: &Gd<CodeEdit>) -> bool {
-    editor.get_code_completion_selected_index() >= 0
-}
 
 /// Whether the current completion selection was chosen by the user.
 ///
@@ -122,7 +118,7 @@ struct CompletionPort<'a> {
 
 impl CompletionOps for CompletionPort<'_> {
     fn popup_visible(&self) -> bool {
-        is_completion_active(self.editor)
+        self.editor.completion_popup_open()
     }
 
     fn option_count(&self) -> i32 {

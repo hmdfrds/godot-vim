@@ -11,6 +11,7 @@
 //! skip distance, but its semantics are non-obvious (see impl comments), so
 //! `move_up_visible`/`move_down_visible` wrap it into a clear interface.
 
+use godot::classes::code_edit::CodeCompletionKind;
 use godot::classes::CodeEdit;
 use godot::prelude::*;
 
@@ -47,6 +48,11 @@ pub(crate) trait CodeEditExt {
 
     fn move_up_visible(&self, current_line: i32) -> i32;
     fn move_down_visible(&self, current_line: i32) -> i32;
+
+    /// Godot returns -1 for the selected index when no popup is visible.
+    fn completion_popup_open(&self) -> bool;
+    /// The selected completion option is a node or file path.
+    fn completion_popup_holds_paths(&self) -> bool;
 }
 
 impl CodeEditExt for Gd<CodeEdit> {
@@ -92,5 +98,23 @@ impl CodeEditExt for Gd<CodeEdit> {
         let from = (current_line + 1).clamp(0, last_line_i32);
         let offset = self.get_next_visible_line_offset_from(from, 1);
         (current_line + offset).min(last_line_i32)
+    }
+
+    fn completion_popup_open(&self) -> bool {
+        self.get_code_completion_selected_index() >= 0
+    }
+
+    fn completion_popup_holds_paths(&self) -> bool {
+        let index = self.get_code_completion_selected_index();
+        if index < 0 {
+            return false;
+        }
+        let kind = self
+            .get_code_completion_option(index)
+            .get("kind")
+            .and_then(|k| k.try_to::<i64>().ok());
+        [CodeCompletionKind::NODE_PATH, CodeCompletionKind::FILE_PATH]
+            .iter()
+            .any(|path| kind == Some(i64::from(path.ord())))
     }
 }
