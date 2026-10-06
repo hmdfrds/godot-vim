@@ -3,6 +3,71 @@
 Notes for people arriving from an older release. Nothing here applies to a
 fresh install.
 
+## From v1.8.0
+
+**Textwidth now defaults to `0`, as in Vim.** With the old default of 80,
+typing in Insert mode on a line longer than 80 characters broke the line,
+because vim-core's `formatoptions` contains `t`. In GDScript that splits a
+statement, and the break could also misplace the characters typed next.
+
+1. **If you never changed Textwidth**, it moves to `0` the first time this
+   version loads: when you restart the editor, or when you disable and enable
+   the plugin again under Project Settings > Plugins. Nothing breaks lines
+   while you type, and `gq` formats at 79 columns.
+2. **If you set another width**, such as 100, it is kept. Typing past it
+   now wraps only comments in GDScript and shaders, as described below. Set
+   it to `0` to stop wrapping entirely.
+3. **If you deliberately wanted exactly 80**, set it again under
+   **Godot Vim > Editor > Textwidth**. Godot saved the old default of 80
+   for everyone, so an 80 stored by an earlier version cannot be told apart
+   from a setting nobody touched, and it moves to `0` once. An 80 you set
+   from now on is kept.
+
+**`:set` values now survive unrelated Editor Settings changes.** Every
+change to any Editor Setting used to push all of GodotVim's settings into
+the engine again, and copy tab size, indent size and spaces-or-tabs from the
+script editor, which undid a `:set tw=0`, `:set ignorecase` or `:set ts=8`
+from your vimrc or the command line. Now a setting is pushed only when it
+changes, and the indent is copied only when the script editor's own indent
+changes.
+
+**GDScript wraps only comments, never code.** GodotVim now detects each
+script's filetype and runs Vim's filetype plugins for it, transcribed from
+Vim 9.1 (see [Filetype Plugins](REFERENCE.md#filetype-plugins)). With a
+Textwidth above `0`:
+
+- GDScript, shader and C# code no longer breaks while you type. `#`, `##`,
+  `//` and `///` comment lines break at the last blank before the width
+  and continue with the same indent and leader. For GDScript and shaders
+  this deliberately differs from Vim's `gdscript.vim` and `gdshader.vim`,
+  which let code wrap.
+- JSON and `.cfg` values never wrap. Markdown and text wrap as prose, as in
+  Vim.
+- The break no longer misplaces or deletes the characters you type, and it
+  happens where Vim breaks: when you type a non-blank character past the
+  width, at the last blank before the cursor.
+
+Nothing wraps unless you set a width, since the default is now `0`.
+
+**`formatoptions` and `comments` can be set.** `:set fo-=t`,
+`:setlocal fo+=t` and `:set comments^=b:##` work as in Vim, including in a
+`.godot-vimrc`. `:setlocal` changes typing as well as `gq`, and a
+change to an Editor Setting wins over an earlier `:set` everywhere, in every
+script.
+
+**`commentstring` is per script.** It used to be copied from the script
+editor's comment delimiters into the global value on every tab switch, so a
+shader's `//` could reach the next text file. Each script with comment
+delimiters (GDScript, shaders, C#) now gets its own value from them once,
+so a `set commentstring` in your vimrc reaches only scripts without
+delimiters, such as text files. A `:setlocal commentstring` you make
+overrides it in that script and stays with it.
+
+**To keep the old behaviour** (Vim's defaults in every script, so code wraps
+with a width set), turn off **Godot Vim > Editor > Filetype Plugin**, or put
+`filetype plugin off` in your `.godot-vimrc`. The commentstring still comes
+from the script editor either way.
+
 ## From v1.7.x
 
 The completion popup keys now resolve through the same pipeline as every

@@ -426,7 +426,7 @@ pub(crate) fn path_reserves(index: &BindingIndex, path: &SurfacePath) -> Option<
 /// hardcoded constant there would silently ignore the user's own setting in
 /// precisely the state where dock bindings are all there is.
 ///
-/// Clamped to the same bounds `SettingsSnapshot::apply_to_options` uses, so a
+/// Clamped to the same bounds `SettingsSnapshot::option_delta` uses, so a
 /// hand-edited EditorSettings value cannot arm a 0ms (instant) or multi-minute
 /// timer.
 pub(crate) fn timeoutlen_ms(from_engine: Option<u32>, from_settings: Option<i64>) -> i64 {

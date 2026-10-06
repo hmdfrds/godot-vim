@@ -53,6 +53,16 @@ impl ShellState {
         self.buffers.get(&id)
     }
 
+    /// Every engine state saved by a buffer leave, for a change that must
+    /// reach buffers the engine is not holding right now.
+    pub(crate) fn saved_engine_states_mut(
+        &mut self,
+    ) -> impl Iterator<Item = &mut vim_core::execution::BufferLocalState> {
+        self.buffers
+            .values_mut()
+            .filter_map(BufferState::engine_state_mut)
+    }
+
     /// Evict buffer entries whose `InstanceId` is no longer valid (e.g.
     /// editor tab closed). Returns removed IDs for downstream cleanup
     /// (global marks, etc.). Predicate-based so this module stays free

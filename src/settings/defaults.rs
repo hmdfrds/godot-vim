@@ -20,10 +20,19 @@ pub(crate) const ENABLED: bool = true;
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub(crate) const SCROLLOFF: i64 = 5;
-pub(crate) const TEXTWIDTH: i64 = 80;
+/// Vim's default. Any non-zero width makes vim-core break lines while you
+/// type in Insert mode (its `formatoptions` carries `t` by default), which
+/// is not something a user should get without asking for it.
+pub(crate) const TEXTWIDTH: i64 = 0;
+/// The default up to 1.8.0. A stored 80 from those versions is moved to
+/// [`TEXTWIDTH`] once (see `registration::legacy_defaults`).
+pub(crate) const TEXTWIDTH_UNTIL_1_8_0: i64 = 80;
 pub(crate) const CLIPBOARD_ENABLED: bool = false;
 pub(crate) const IGNORECASE: bool = false;
 pub(crate) const SMARTCASE: bool = false;
+/// On, like `filetype plugin on` in Vim's defaults.vim: GDScript needs its
+/// plugin so that only comments wrap when `textwidth` is set.
+pub(crate) const FILETYPE_PLUGIN: bool = true;
 pub(crate) const LINE_NUMBER_MODE: &str = "Hybrid";
 pub(crate) const LINE_NUMBER_MODE_OPTIONS: &[&str] = &["None", "Absolute", "Relative", "Hybrid"];
 

@@ -84,14 +84,6 @@ pub(crate) enum InccommandMode {
     Nosplit,
 }
 
-impl InccommandMode {
-    #[inline]
-    #[must_use]
-    pub(crate) fn is_enabled(self) -> bool {
-        self != Self::Off
-    }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // CursorSettings
 // ─────────────────────────────────────────────────────────────────────────────
@@ -167,6 +159,8 @@ pub(crate) struct SettingsSnapshot {
     pub(crate) clipboard_enabled: bool,
     pub(crate) ignorecase: bool,
     pub(crate) smartcase: bool,
+    /// `plugins/GodotVim/editor/filetype_plugin`, see [`crate::ftplugin`].
+    pub(crate) filetype_plugin: bool,
     /// Whether Godot's native code completion should auto-trigger on typing.
     /// Read from `text_editor/completion/code_complete_enabled` (native Godot
     /// EditorSetting, not registered by GodotVim).
@@ -180,50 +174,94 @@ pub(crate) struct SettingsSnapshot {
 }
 
 impl SettingsSnapshot {
-    /// Push snapshot values into the engine's `VimOptions`.
+    /// The engine options that changed since `prev`, as `(id, value)`
+    /// pairs. `None` yields every field (startup, the enable edge, and after
+    /// anything that may have rebuilt the engine). The controller routes
+    /// each pair itself, see `VimController::apply_settings`.
     ///
-    /// **Mutates in place** rather than replacing `VimOptions` wholesale,
-    /// because `VimOptions` also contains indent settings (`expandtab`,
-    /// `tabstop`, `shiftwidth`) and `commentstring` that are synced from
-    /// Godot's CodeEdit on attach -- not from Editor Settings. Replacing
-    /// the whole struct would clobber those per-editor values.
-    pub(crate) fn apply_to_options(&self, opts: &mut vim_core::VimOptions) {
+    /// **Yields only what changed** because `settings_changed` fires for
+    /// every EditorSettings write, ours or not, including an Output log
+    /// filter toggle. Rewriting every field on each event would revert a
+    /// `:set tw=0` or a vimrc `set ignorecase` behind the user's back. With
+    /// the delta, whichever wrote last wins: a `:set` holds until the user
+    /// changes that same Editor Setting.
+    ///
+    /// **One option at a time** rather than a whole `VimOptions`, because
+    /// the engine's options also hold indent settings (`expandtab`,
+    /// `tabstop`, `shiftwidth`), synced from Godot's CodeEdit and not from
+    /// Editor Settings, and every option a vimrc `:set` changed. Replacing
+    /// the whole struct would clobber those.
+    pub(crate) fn option_delta(
+        &self,
+        prev: Option<&Self>,
+    ) -> Vec<(
+        vim_core::primitives::OptionId,
+        vim_core::primitives::OptionValue,
+    )> {
         use super::defaults;
-        opts.set_scrolloff(usize::try_from(self.scrolloff.max(0)).unwrap_or(0));
-        opts.set_textwidth(usize::try_from(self.textwidth.max(0)).unwrap_or(0));
-        opts.set_timeoutlen_ms(
-            u32::try_from(
-                self.timeoutlen
-                    .clamp(defaults::TIMEOUTLEN_MIN, defaults::TIMEOUTLEN_MAX),
-            )
-            .unwrap_or(u32::MAX),
-        );
-        if self.clipboard_enabled {
-            opts.set_clipboard("unnamedplus");
-        } else {
-            opts.set_clipboard("");
+        use vim_core::primitives::{OptionId, OptionValue};
+        let changed = |same: fn(&Self, &Self) -> bool| prev.is_none_or(|p| !same(p, self));
+        let mut out = Vec::new();
+        if changed(|a, b| a.scrolloff == b.scrolloff) {
+            out.push((
+                OptionId::ScrollOff,
+                OptionValue::Unsigned(usize::try_from(self.scrolloff.max(0)).unwrap_or(0)),
+            ));
         }
-        opts.set_inccommand(match self.inccommand {
-            InccommandMode::Nosplit => "nosplit",
-            InccommandMode::Off => "",
-        });
-        opts.set_ignorecase(self.ignorecase);
-        opts.set_smartcase(self.smartcase);
+        if changed(|a, b| a.textwidth == b.textwidth) {
+            out.push((
+                OptionId::TextWidth,
+                OptionValue::Unsigned(usize::try_from(self.textwidth.max(0)).unwrap_or(0)),
+            ));
+        }
+        if changed(|a, b| a.timeoutlen == b.timeoutlen) {
+            let ms = self
+                .timeoutlen
+                .clamp(defaults::TIMEOUTLEN_MIN, defaults::TIMEOUTLEN_MAX);
+            out.push((
+                OptionId::TimeoutLen,
+                OptionValue::Unsigned(usize::try_from(ms).unwrap_or(usize::MAX)),
+            ));
+        }
+        if changed(|a, b| a.clipboard_enabled == b.clipboard_enabled) {
+            let value = if self.clipboard_enabled {
+                "unnamedplus"
+            } else {
+                ""
+            };
+            out.push((OptionId::Clipboard, OptionValue::Str(value.into())));
+        }
+        if changed(|a, b| a.inccommand == b.inccommand) {
+            let value = match self.inccommand {
+                InccommandMode::Nosplit => "nosplit",
+                InccommandMode::Off => "",
+            };
+            out.push((OptionId::IncCommand, OptionValue::Str(value.into())));
+        }
+        if changed(|a, b| a.ignorecase == b.ignorecase) {
+            out.push((OptionId::IgnoreCase, OptionValue::Bool(self.ignorecase)));
+        }
+        if changed(|a, b| a.smartcase == b.smartcase) {
+            out.push((OptionId::SmartCase, OptionValue::Bool(self.smartcase)));
+        }
+        out
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Tests
-// ─────────────────────────────────────────────────────────────────────────────
-
 #[cfg(test)]
-mod tests {
-    use super::*;
+impl SettingsSnapshot {
+    /// Write [`option_delta`](Self::option_delta) straight into a
+    /// `VimOptions`, for tests of the delta itself.
+    pub(crate) fn apply_delta(&self, prev: Option<&Self>, opts: &mut vim_core::VimOptions) {
+        for (id, value) in self.option_delta(prev) {
+            opts.set_option(id, &value);
+        }
+    }
 
     /// Build a snapshot with parametrized numeric fields; everything else
     /// uses hardcoded defaults to isolate what each test is verifying.
-    fn make_snapshot(scrolloff: i64, textwidth: i64, timeoutlen: i64) -> SettingsSnapshot {
-        SettingsSnapshot {
+    pub(crate) fn for_tests(scrolloff: i64, textwidth: i64, timeoutlen: i64) -> Self {
+        Self {
             log_level: crate::logging::LogLevel::Info,
             enabled: true,
             scrolloff,
@@ -231,6 +269,7 @@ mod tests {
             clipboard_enabled: false,
             ignorecase: false,
             smartcase: false,
+            filetype_plugin: true,
             code_complete_enabled: true,
             line_number_mode: LineNumberMode::Hybrid,
             inccommand: InccommandMode::Nosplit,
@@ -264,12 +303,25 @@ mod tests {
             project_vimrc: ProjectVimrc::Sandbox,
         }
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tests
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_snapshot(scrolloff: i64, textwidth: i64, timeoutlen: i64) -> SettingsSnapshot {
+        SettingsSnapshot::for_tests(scrolloff, textwidth, timeoutlen)
+    }
 
     #[test]
     fn typical_values_map_correctly() {
         let snap = make_snapshot(5, 80, 1000);
         let mut opts = vim_core::VimOptions::default();
-        snap.apply_to_options(&mut opts);
+        snap.apply_delta(None, &mut opts);
 
         assert_eq!(opts.scrolloff(), 5);
         assert_eq!(opts.textwidth(), 80);
@@ -280,7 +332,7 @@ mod tests {
     fn custom_values_map_correctly() {
         let snap = make_snapshot(10, 120, 500);
         let mut opts = vim_core::VimOptions::default();
-        snap.apply_to_options(&mut opts);
+        snap.apply_delta(None, &mut opts);
 
         assert_eq!(opts.scrolloff(), 10);
         assert_eq!(opts.textwidth(), 120);
@@ -293,25 +345,33 @@ mod tests {
 
     #[test]
     fn scrolloff_zero_is_valid() {
-        let snap = make_snapshot(0, 80, 1000);
+        let snap = make_snapshot(0, 0, 1000);
         let mut opts = vim_core::VimOptions::default();
-        snap.apply_to_options(&mut opts);
+        snap.apply_delta(None, &mut opts);
         assert_eq!(opts.scrolloff(), 0);
     }
 
     #[test]
     fn scrolloff_negative_clamped_to_zero() {
-        let snap = make_snapshot(-3, 80, 1000);
+        let snap = make_snapshot(-3, 0, 1000);
         let mut opts = vim_core::VimOptions::default();
-        snap.apply_to_options(&mut opts);
+        snap.apply_delta(None, &mut opts);
         assert_eq!(opts.scrolloff(), 0);
+    }
+
+    /// Vim's own default, so a user who never touched the setting gets no
+    /// line breaking while typing, exactly as in Vim.
+    #[test]
+    fn textwidth_default_matches_vim() {
+        assert_eq!(crate::settings::defaults::TEXTWIDTH, 0);
+        assert_eq!(vim_core::VimOptions::default().textwidth(), 0);
     }
 
     #[test]
     fn textwidth_zero_means_no_limit() {
         let snap = make_snapshot(5, 0, 1000);
         let mut opts = vim_core::VimOptions::default();
-        snap.apply_to_options(&mut opts);
+        snap.apply_delta(None, &mut opts);
         assert_eq!(opts.textwidth(), 0);
     }
 
@@ -319,81 +379,81 @@ mod tests {
     fn textwidth_negative_clamped_to_zero() {
         let snap = make_snapshot(5, -10, 1000);
         let mut opts = vim_core::VimOptions::default();
-        snap.apply_to_options(&mut opts);
+        snap.apply_delta(None, &mut opts);
         assert_eq!(opts.textwidth(), 0);
     }
 
     #[test]
     fn timeoutlen_at_minimum_boundary() {
-        let snap = make_snapshot(5, 80, 100);
+        let snap = make_snapshot(5, 0, 100);
         let mut opts = vim_core::VimOptions::default();
-        snap.apply_to_options(&mut opts);
+        snap.apply_delta(None, &mut opts);
         assert_eq!(opts.timeoutlen_ms(), 100);
     }
 
     #[test]
     fn timeoutlen_at_maximum_boundary() {
-        let snap = make_snapshot(5, 80, 5000);
+        let snap = make_snapshot(5, 0, 5000);
         let mut opts = vim_core::VimOptions::default();
-        snap.apply_to_options(&mut opts);
+        snap.apply_delta(None, &mut opts);
         assert_eq!(opts.timeoutlen_ms(), 5000);
     }
 
     #[test]
     fn timeoutlen_below_minimum_clamped() {
-        let snap = make_snapshot(5, 80, 50);
+        let snap = make_snapshot(5, 0, 50);
         let mut opts = vim_core::VimOptions::default();
-        snap.apply_to_options(&mut opts);
+        snap.apply_delta(None, &mut opts);
         assert_eq!(opts.timeoutlen_ms(), 100);
     }
 
     #[test]
     fn timeoutlen_above_maximum_clamped() {
-        let snap = make_snapshot(5, 80, 10000);
+        let snap = make_snapshot(5, 0, 10000);
         let mut opts = vim_core::VimOptions::default();
-        snap.apply_to_options(&mut opts);
+        snap.apply_delta(None, &mut opts);
         assert_eq!(opts.timeoutlen_ms(), 5000);
     }
 
     #[test]
     fn timeoutlen_zero_clamped_to_minimum() {
-        let snap = make_snapshot(5, 80, 0);
+        let snap = make_snapshot(5, 0, 0);
         let mut opts = vim_core::VimOptions::default();
-        snap.apply_to_options(&mut opts);
+        snap.apply_delta(None, &mut opts);
         assert_eq!(opts.timeoutlen_ms(), 100);
     }
 
     #[test]
     fn timeoutlen_negative_clamped_to_minimum() {
-        let snap = make_snapshot(5, 80, -100);
+        let snap = make_snapshot(5, 0, -100);
         let mut opts = vim_core::VimOptions::default();
-        snap.apply_to_options(&mut opts);
+        snap.apply_delta(None, &mut opts);
         assert_eq!(opts.timeoutlen_ms(), 100);
     }
 
     #[test]
     fn timeoutlen_within_range() {
-        let snap = make_snapshot(5, 80, 750);
+        let snap = make_snapshot(5, 0, 750);
         let mut opts = vim_core::VimOptions::default();
-        snap.apply_to_options(&mut opts);
+        snap.apply_delta(None, &mut opts);
         assert_eq!(opts.timeoutlen_ms(), 750);
     }
 
     #[test]
     fn cursor_enabled_default_is_true() {
-        let snap = make_snapshot(5, 80, 1000);
+        let snap = make_snapshot(5, 0, 1000);
         assert!(snap.cursor.enabled);
     }
 
     #[test]
     fn cursor_lerp_speed_default_is_25() {
-        let snap = make_snapshot(5, 80, 1000);
+        let snap = make_snapshot(5, 0, 1000);
         assert_eq!(snap.cursor.lerp_speed, 25.0);
     }
 
     #[test]
     fn cursor_underline_height_default_is_4() {
-        let snap = make_snapshot(5, 80, 1000);
+        let snap = make_snapshot(5, 0, 1000);
         assert_eq!(snap.cursor.underline_height, 4.0);
     }
 
@@ -401,9 +461,9 @@ mod tests {
 
     #[test]
     fn large_scrolloff() {
-        let snap = make_snapshot(999, 80, 1000);
+        let snap = make_snapshot(999, 0, 1000);
         let mut opts = vim_core::VimOptions::default();
-        snap.apply_to_options(&mut opts);
+        snap.apply_delta(None, &mut opts);
         assert_eq!(opts.scrolloff(), 999);
     }
 
@@ -411,7 +471,7 @@ mod tests {
     fn large_textwidth() {
         let snap = make_snapshot(5, 200, 1000);
         let mut opts = vim_core::VimOptions::default();
-        snap.apply_to_options(&mut opts);
+        snap.apply_delta(None, &mut opts);
         assert_eq!(opts.textwidth(), 200);
     }
 
@@ -421,19 +481,9 @@ mod tests {
     }
 
     #[test]
-    fn inccommand_mode_off_is_not_enabled() {
-        assert!(!InccommandMode::Off.is_enabled());
-    }
-
-    #[test]
-    fn inccommand_mode_nosplit_is_enabled() {
-        assert!(InccommandMode::Nosplit.is_enabled());
-    }
-
-    #[test]
     fn snapshot_default_is_enabled() {
         // make_snapshot takes (scrolloff, textwidth, timeoutlen); other fields hardcoded.
-        let s = make_snapshot(5, 80, 1000);
+        let s = make_snapshot(5, 0, 1000);
         assert!(s.enabled, "plugin should default to enabled (opt-out)");
     }
 
@@ -441,9 +491,160 @@ mod tests {
     fn all_clamped_to_minimums() {
         let snap = make_snapshot(-1, -1, -1);
         let mut opts = vim_core::VimOptions::default();
-        snap.apply_to_options(&mut opts);
+        snap.apply_delta(None, &mut opts);
         assert_eq!(opts.scrolloff(), 0);
         assert_eq!(opts.textwidth(), 0);
         assert_eq!(opts.timeoutlen_ms(), 100);
+    }
+
+    // ── Delta application ─────────────────────────────────────────────────
+
+    /// Set every pushed option to a value no snapshot here produces, so a
+    /// test can see exactly which fields a delta wrote. The setters reject
+    /// invalid strings, so the string sentinels are valid values the host
+    /// itself never writes.
+    fn poison(opts: &mut vim_core::VimOptions) {
+        opts.set_scrolloff(77);
+        opts.set_textwidth(77);
+        opts.set_timeoutlen_ms(777);
+        opts.set_clipboard("unnamed");
+        opts.set_inccommand("split");
+        opts.set_ignorecase(true);
+        opts.set_smartcase(true);
+    }
+
+    fn assert_poisoned(opts: &vim_core::VimOptions) {
+        assert_eq!(opts.scrolloff(), 77);
+        assert_eq!(opts.textwidth(), 77);
+        assert_eq!(opts.timeoutlen_ms(), 777);
+        assert_eq!(opts.clipboard(), "unnamed");
+        assert_eq!(opts.inccommand(), "split");
+        assert!(opts.ignorecase());
+        assert!(opts.smartcase());
+    }
+
+    #[test]
+    fn delta_against_identical_snapshot_writes_nothing() {
+        let prev = make_snapshot(5, 0, 1000);
+        let next = prev.clone();
+        let mut opts = vim_core::VimOptions::default();
+        poison(&mut opts);
+        next.apply_delta(Some(&prev), &mut opts);
+        assert_poisoned(&opts);
+    }
+
+    #[test]
+    fn delta_writes_only_the_changed_field() {
+        let prev = make_snapshot(5, 0, 1000);
+        let mut next = prev.clone();
+        next.textwidth = 100;
+        let mut opts = vim_core::VimOptions::default();
+        poison(&mut opts);
+        next.apply_delta(Some(&prev), &mut opts);
+
+        assert_eq!(opts.textwidth(), 100);
+        assert_eq!(opts.scrolloff(), 77);
+        assert_eq!(opts.timeoutlen_ms(), 777);
+        assert_eq!(opts.clipboard(), "unnamed");
+        assert_eq!(opts.inccommand(), "split");
+        assert!(opts.ignorecase());
+        assert!(opts.smartcase());
+    }
+
+    #[test]
+    fn delta_reaches_every_pushed_field() {
+        // One change per field, each applied alone: a field missing from
+        // apply_delta would keep its sentinel. The booleans start false here
+        // because the edits turn them on.
+        type Edit = fn(&mut SettingsSnapshot);
+        type Written = fn(&vim_core::VimOptions) -> bool;
+        let prev = make_snapshot(5, 0, 1000);
+        let cases: [(&str, Edit, Written); 7] = [
+            ("scrolloff", |s| s.scrolloff = 9, |o| o.scrolloff() == 9),
+            ("textwidth", |s| s.textwidth = 72, |o| o.textwidth() == 72),
+            (
+                "timeoutlen",
+                |s| s.timeoutlen = 300,
+                |o| o.timeoutlen_ms() == 300,
+            ),
+            (
+                "clipboard",
+                |s| s.clipboard_enabled = true,
+                |o| o.clipboard() == "unnamedplus",
+            ),
+            (
+                "inccommand",
+                |s| s.inccommand = InccommandMode::Off,
+                |o| o.inccommand().is_empty(),
+            ),
+            ("ignorecase", |s| s.ignorecase = true, |o| o.ignorecase()),
+            ("smartcase", |s| s.smartcase = true, |o| o.smartcase()),
+        ];
+        for (name, edit, written) in cases {
+            let mut next = prev.clone();
+            edit(&mut next);
+            let mut opts = vim_core::VimOptions::default();
+            poison(&mut opts);
+            opts.set_ignorecase(false);
+            opts.set_smartcase(false);
+            next.apply_delta(Some(&prev), &mut opts);
+            assert!(
+                written(&opts),
+                "{name} changed but apply_delta did not write it"
+            );
+        }
+    }
+
+    #[test]
+    fn delta_without_prev_writes_everything() {
+        let mut snap = make_snapshot(5, 0, 1000);
+        snap.clipboard_enabled = true;
+        let mut opts = vim_core::VimOptions::default();
+        poison(&mut opts);
+        snap.apply_delta(None, &mut opts);
+
+        assert_eq!(opts.scrolloff(), 5);
+        assert_eq!(opts.textwidth(), 0);
+        assert_eq!(opts.timeoutlen_ms(), 1000);
+        assert_eq!(opts.clipboard(), "unnamedplus");
+        assert_eq!(opts.inccommand(), "nosplit");
+        assert!(!opts.ignorecase());
+        assert!(!opts.smartcase());
+    }
+
+    /// Issue #77: `:set tw=0` used to come back as the Editor Setting on the
+    /// next settings event, whatever that event was about.
+    #[test]
+    fn user_set_survives_an_unrelated_refresh() {
+        let mut engine = vim_core::execution::VimEngine::new();
+        let prev = make_snapshot(5, 100, 1000);
+        prev.apply_delta(None, engine.options_mut());
+        assert_eq!(engine.options().textwidth(), 100);
+
+        let _ = engine.source_config_text("set tw=0");
+        assert_eq!(engine.options().textwidth(), 0);
+
+        let mut next = prev.clone();
+        next.ignorecase = true;
+        next.apply_delta(Some(&prev), engine.options_mut());
+
+        assert_eq!(engine.options().textwidth(), 0, ":set tw=0 was reverted");
+        assert!(engine.options().ignorecase());
+    }
+
+    /// The other half of "last writer wins": changing the Editor Setting
+    /// itself overrides an earlier `:set`.
+    #[test]
+    fn changing_the_setting_overrides_a_user_set() {
+        let mut engine = vim_core::execution::VimEngine::new();
+        let prev = make_snapshot(5, 100, 1000);
+        prev.apply_delta(None, engine.options_mut());
+        let _ = engine.source_config_text("set tw=0");
+
+        let mut next = prev.clone();
+        next.textwidth = 60;
+        next.apply_delta(Some(&prev), engine.options_mut());
+
+        assert_eq!(engine.options().textwidth(), 60);
     }
 }

@@ -121,6 +121,22 @@ pub(crate) struct ControllerContext {
     /// Whether Godot's native code completion should auto-trigger on typing.
     /// Mirrors `text_editor/completion/code_complete_enabled` from EditorSettings.
     pub(crate) code_complete_enabled: bool,
+    /// The snapshot last pushed into the engine's options, so the next push
+    /// writes only what changed. `None` makes the next push write everything.
+    pub(crate) last_applied: Option<crate::settings::SettingsSnapshot>,
+    /// The CodeEdit indent (expandtab, shiftwidth, tabstop) last written into
+    /// the engine's options, so a settings refresh rewrites them only when
+    /// the CodeEdit's own values moved.
+    pub(crate) synced_indent: Option<(bool, usize, usize)>,
+    /// Set while [`VimController::attach_session`] or
+    /// [`VimController::detach_session`] has its placeholder engine in
+    /// `phase`, and cleared when the swap completes. Still set afterwards
+    /// only if a panic interrupted the swap, leaving a fresh engine that never
+    /// received the settings or the vimrc.
+    pub(crate) swap_in_flight: bool,
+    /// Vim's `:filetype` switches, written by the `filetype_plugin` Editor
+    /// Setting and by `filetype` lines in the vimrc, whichever changed last.
+    pub(crate) filetype: crate::ftplugin::Switches,
 }
 
 /// Per-editor orchestrator that bridges Godot's event-driven input to
@@ -164,6 +180,10 @@ impl VimController {
                 )
                 .unwrap_or(150),
                 code_complete_enabled: true,
+                last_applied: None,
+                synced_indent: None,
+                swap_in_flight: false,
+                filetype: crate::ftplugin::Switches::default(),
             },
         }
     }
@@ -199,6 +219,15 @@ impl VimController {
         Some(session.host_mut().state_mut())
     }
 
+    /// The shell state in either phase: the host's while attached, the
+    /// parked one while detached. Saved buffer states live in it both ways.
+    fn shell_state_mut(&mut self) -> &mut ShellState {
+        match self.phase {
+            ControllerPhase::Attached { ref mut session } => session.host_mut().state_mut(),
+            ControllerPhase::Detached { ref mut state, .. } => state,
+        }
+    }
+
     // ── Attach / detach lifecycle ────────────────────────────────────
 
     /// Create a `VimSession<GodotHost>` by taking the detached engine and
@@ -208,6 +237,7 @@ impl VimController {
     /// Syncs controller-level config (security policy, highlight yank duration)
     /// into the new host.
     pub(crate) fn attach_session(&mut self, editor: Gd<CodeEdit>) {
+        self.ctx.swap_in_flight = true;
         let old_phase = std::mem::replace(
             &mut self.phase,
             // Temporary placeholder; overwritten below.
@@ -235,6 +265,7 @@ impl VimController {
         let initial_text = session.host().text().to_owned();
         session.engine_mut().set_shadow_text(initial_text);
         self.phase = ControllerPhase::Attached { session };
+        self.ctx.swap_in_flight = false;
     }
 
     /// Decompose the active session: drop the host, reclaim the engine.
@@ -242,6 +273,7 @@ impl VimController {
     /// Returns the `GodotHost` for any final cleanup the caller needs.
     /// No-ops if already detached.
     pub(crate) fn detach_session(&mut self) -> Option<GodotHost> {
+        self.ctx.swap_in_flight = true;
         let old_phase = std::mem::replace(
             &mut self.phase,
             ControllerPhase::Detached {
@@ -249,7 +281,7 @@ impl VimController {
                 state: ShellState::default(),
             },
         );
-        match old_phase {
+        let host = match old_phase {
             ControllerPhase::Attached { session } => {
                 let (engine, mut host) = session.into_parts();
                 let state = host.take_state();
@@ -260,7 +292,25 @@ impl VimController {
                 self.phase = detached;
                 None
             }
+        };
+        self.ctx.swap_in_flight = false;
+        host
+    }
+
+    /// Whether a panic interrupted [`attach_session`](Self::attach_session)
+    /// or [`detach_session`](Self::detach_session) and left its placeholder
+    /// engine in place. Clears the flag. When it was set, the push record is
+    /// forgotten too, since the fresh engine received nothing; the caller
+    /// then pushes the settings and sources the vimrc again.
+    ///
+    /// Panic recovery must check this before it detaches, because a
+    /// completed `detach_session` clears the flag.
+    pub(crate) fn take_replaced_engine(&mut self) -> bool {
+        let replaced = std::mem::take(&mut self.ctx.swap_in_flight);
+        if replaced {
+            self.forget_applied_settings();
         }
+        replaced
     }
 
     /// Whether a session is currently active (editor attached).
@@ -283,8 +333,44 @@ impl VimController {
         self.ctx.highlight_yank_duration_ms = ms;
     }
 
+    /// Push an Editor Settings snapshot into the engine and the host config.
+    ///
+    /// Engine options get only the fields that changed since the last push
+    /// (see [`SettingsSnapshot::option_delta`]), so a user's `:set` survives
+    /// unrelated settings events. A changed field is written the way `:set`
+    /// writes it, in every buffer (see [`set_option_everywhere`]), so the
+    /// last change wins. A full push (`prev` forgotten) only seeds the
+    /// global values, like a vimrc `:setglobal`: it is not a change the user
+    /// made, and must not drop a `:setlocal` the buffers hold. The host-side
+    /// fields below are not reachable from `:set` and are written every time.
+    ///
+    /// [`SettingsSnapshot::option_delta`]: crate::settings::SettingsSnapshot::option_delta
+    /// [`set_option_everywhere`]: Self::set_option_everywhere
     pub(crate) fn apply_settings(&mut self, snapshot: &crate::settings::SettingsSnapshot) {
-        snapshot.apply_to_options(self.engine_mut().options_mut());
+        let prev = self.ctx.last_applied.take();
+        let seeding = prev.is_none();
+        for (id, value) in snapshot.option_delta(prev.as_ref()) {
+            if seeding {
+                self.engine_mut().options_mut().set_option(id, &value);
+            } else {
+                self.set_option_everywhere(id, &value);
+            }
+        }
+        self.engine_mut().invalidate_option_cache();
+        // The setting is `filetype plugin on|off`: turning it on turns
+        // detection on too, as `filetype plugin on` does after a vimrc
+        // `filetype off`. A full push only seeds the plugin switch.
+        match prev {
+            Some(ref p) if p.filetype_plugin != snapshot.filetype_plugin => {
+                self.ctx.filetype.apply(crate::ftplugin::FiletypeCommand {
+                    detection: snapshot.filetype_plugin.then_some(true),
+                    plugin: Some(snapshot.filetype_plugin),
+                });
+            }
+            Some(_) => {}
+            None => self.ctx.filetype.plugin = snapshot.filetype_plugin,
+        }
+        self.ctx.last_applied = Some(snapshot.clone());
         self.set_passthrough_keys(&snapshot.passthrough_keys);
         self.set_security_policy(crate::host::SecurityPolicy {
             shell_execution: snapshot.shell_execution,
@@ -293,6 +379,38 @@ impl VimController {
         });
         self.set_highlight_yank_duration(snapshot.highlight_yank_duration);
         self.ctx.code_complete_enabled = snapshot.code_complete_enabled;
+    }
+
+    /// Set an option the way `:set` does, in the current buffer and in every
+    /// buffer the user has left: the global value changes, and a local value
+    /// any of them got from an earlier `:set` or `:setlocal` is dropped.
+    ///
+    /// Since vim-core v0.8.0 every path reads the resolved options, so a
+    /// local value wins over the global layer. Writing only the global layer
+    /// (`options_mut()`) left a buffer that had run `:set tw=20` wrapping at
+    /// 20 after the user changed the Editor Setting.
+    pub(crate) fn set_option_everywhere(
+        &mut self,
+        id: vim_core::primitives::OptionId,
+        value: &vim_core::primitives::OptionValue,
+    ) {
+        self.engine_mut().set_option(id, value);
+        for saved in self.shell_state_mut().saved_engine_states_mut() {
+            saved.clear_local_option(id);
+        }
+    }
+
+    /// Forget what was pushed into the engine's options, so the next
+    /// [`apply_settings`](Self::apply_settings) writes every field and the
+    /// next indent resync writes unconditionally.
+    ///
+    /// Called wherever the engine's options may no longer hold what was last
+    /// pushed: a delta against a stale record would skip fields the engine
+    /// never received. Only there: forgetting while the engine still holds
+    /// a user's `:set` makes the next unrelated settings event revert it.
+    pub(crate) fn forget_applied_settings(&mut self) {
+        self.ctx.last_applied = None;
+        self.ctx.synced_indent = None;
     }
 
     // ── Public accessors ─────────────────────────────────────────────
@@ -442,12 +560,132 @@ impl VimController {
         opts.set_expandtab(expandtab);
         opts.set_shiftwidth(shiftwidth);
         opts.set_tabstop(tabstop);
+        self.ctx.synced_indent = Some((expandtab, shiftwidth, tabstop));
     }
 
-    /// Sync from CodeEdit's language-specific comment delimiters (e.g., `"# %s"`
-    /// for GDScript) so the `gc` commentary operator uses the right format.
-    pub(crate) fn set_commentstring(&mut self, cs: &str) {
-        self.engine_mut().options_mut().set_commentstring(cs);
+    /// [`sync_indent`](Self::sync_indent), but only when the CodeEdit's
+    /// values differ from the ones last synced. Returns whether it wrote.
+    ///
+    /// For the settings events, which fire for every EditorSettings change:
+    /// rewriting unconditionally there reverted a `:set ts`, `sw` or `et` on
+    /// any unrelated click. Comparing against the CodeEdit, not against
+    /// Godot's indent settings, is deliberate. The CodeEdit is the source of
+    /// truth, and Godot updates it from those settings on
+    /// `NOTIFICATION_EDITOR_SETTINGS_CHANGED`, after `settings_changed`, so
+    /// the plugin resyncs on both.
+    ///
+    /// A value that moved is written the way `:set` writes it, in every
+    /// buffer (see [`set_option_everywhere`](Self::set_option_everywhere)):
+    /// the user changed Godot's indent after any `:set ts` they made, so the
+    /// newer change wins. With nothing synced yet (after
+    /// [`forget_applied_settings`](Self::forget_applied_settings)) it only
+    /// seeds the global values, as on attach.
+    pub(crate) fn sync_indent_if_changed(
+        &mut self,
+        expandtab: bool,
+        shiftwidth: usize,
+        tabstop: usize,
+    ) -> bool {
+        use vim_core::primitives::{OptionId, OptionValue};
+        let Some((old_et, old_sw, old_ts)) = self.ctx.synced_indent else {
+            self.sync_indent(expandtab, shiftwidth, tabstop);
+            return true;
+        };
+        if (old_et, old_sw, old_ts) == (expandtab, shiftwidth, tabstop) {
+            return false;
+        }
+        if old_et != expandtab {
+            self.set_option_everywhere(OptionId::ExpandTab, &OptionValue::Bool(expandtab));
+        }
+        if old_sw != shiftwidth {
+            self.set_option_everywhere(OptionId::ShiftWidth, &OptionValue::Unsigned(shiftwidth));
+        }
+        if old_ts != tabstop {
+            self.set_option_everywhere(OptionId::TabStop, &OptionValue::Unsigned(tabstop));
+        }
+        self.ctx.synced_indent = Some((expandtab, shiftwidth, tabstop));
+        true
+    }
+
+    /// Detect the attached buffer's filetype and bring its own options up to
+    /// date: the `commentstring` from Godot's comment delimiter and, when
+    /// filetype plugins run, the plugin's `:setlocal` lines (see
+    /// [`crate::ftplugin`]).
+    ///
+    /// Runs once per buffer: the record kept with the buffer's shell state
+    /// says what was applied, and nothing is written again until the
+    /// filetype, the plugin switch or the delimiter changes. A `:setlocal`
+    /// the user made in between therefore survives buffer switches, which
+    /// save and restore the buffer's options with the rest of its engine
+    /// state. A path the script list does not show on a later attach does
+    /// not count as a change: the buffer's last readable path is used.
+    /// Must run after [`restore_buffer_engine_state`].
+    ///
+    /// The old commentstring sync wrote the global value on every attach,
+    /// so a shader's `//` leaked into the next text file and a user's
+    /// `:set cms` was overwritten; this writes the buffer's own value.
+    ///
+    /// [`restore_buffer_engine_state`]: Self::restore_buffer_engine_state
+    pub(crate) fn setup_filetype(
+        &mut self,
+        editor_id: InstanceId,
+        signals: &crate::ftplugin::detect::Signals,
+    ) {
+        use crate::ftplugin::{detect, runtime};
+        // An unreadable path is no news: the script list hides a file its
+        // filter does not match, and the buffer's file has not changed, so
+        // detect from the last path read rather than undo its plugin.
+        let buffer = self.shell_state_mut().buffer(editor_id);
+        let remembered;
+        let signals = match &signals.file_path {
+            Some(path) => {
+                buffer.set_file_path(path.clone());
+                signals
+            }
+            None => match buffer.file_path() {
+                Some(path) => {
+                    remembered = detect::Signals {
+                        file_path: Some(path.to_owned()),
+                        ..signals.clone()
+                    };
+                    &remembered
+                }
+                None => signals,
+            },
+        };
+        let switches = self.ctx.filetype;
+        let filetype = if switches.detection {
+            detect::detect(signals)
+        } else {
+            None
+        };
+        let setup = runtime::Setup {
+            filetype,
+            plugin: switches.plugins_run(),
+            commentstring: detect::line_comment_delimiter(&signals.comment_delimiters)
+                .map(|d| format!("{d} %s")),
+        };
+        // Only for filetype-specific mappings; options are set below.
+        self.engine_mut()
+            .set_filetype(filetype.map(detect::Filetype::name));
+
+        let prev = self.shell_state_mut().buffer(editor_id).ftplugin().cloned();
+        let engine = self.engine_mut();
+        let mut overrides = engine.take_buffer_overrides();
+        let applied = runtime::update(prev.as_ref(), setup, engine.options(), &mut overrides);
+        engine.set_buffer_overrides(overrides);
+        if let Some(applied) = applied {
+            log::debug!(
+                "ftplugin: editor #{} filetype={:?} plugin={} touched={:?}",
+                editor_id.to_i64(),
+                applied.setup.filetype.map(detect::Filetype::name),
+                applied.setup.plugin,
+                applied.touched
+            );
+            self.shell_state_mut()
+                .buffer(editor_id)
+                .set_ftplugin(applied);
+        }
     }
 
     /// Sync auto-brace pairs from CodeEdit so the engine handles auto-pairing
@@ -492,8 +730,9 @@ impl VimController {
     /// buffer_mappings, and exchange.
     pub(crate) fn restore_buffer_engine_state(&mut self, editor_id: InstanceId) {
         let engine_state = self
-            .host_state_mut()
-            .and_then(|s| s.buffer(editor_id).take_engine_state())
+            .shell_state_mut()
+            .buffer(editor_id)
+            .take_engine_state()
             .unwrap_or_default();
         self.engine_mut().on_buffer_enter(engine_state);
     }
@@ -761,6 +1000,13 @@ impl VimController {
              nmap <leader>mf :cursorfilter \n\
              nmap <leader>mF :cursorfilter! ",
         );
+
+        // The engine skips `:filetype`, which is the host's to handle.
+        for line in text.lines() {
+            if let Some(cmd) = crate::ftplugin::parse_filetype_command(line) {
+                self.ctx.filetype.apply(cmd);
+            }
+        }
 
         let mut response = self.engine_mut().source_config_text(text);
         let effects = response.take_effects();
@@ -1196,6 +1442,7 @@ impl VimController {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::settings::SettingsSnapshot;
 
     /// Exhaustive field inventory for [`VimController`], [`ControllerPhase`],
     /// and [`ControllerContext`].
@@ -1208,6 +1455,12 @@ mod tests {
     ///   shell      — cleaned selectively by `force_cleanup_without_editor`
     ///   transient  — in `TransientShellState`, cleaned by `transient.reset()`
     ///   config     — set via `apply_settings()`, never reset on cleanup
+    ///   push record: what was last pushed into the engine's options,
+    ///                forgotten by `forget_applied_settings()` on the enable
+    ///                edge and when a panic left a placeholder engine
+    ///   swap guard:  set only inside `attach_session()`/`detach_session()`,
+    ///                read and cleared by `take_replaced_engine()` in panic
+    ///                recovery
     ///   persistent — survives all cleanups
     #[test]
     fn cleanup_field_inventory() {
@@ -1235,7 +1488,609 @@ mod tests {
                 perf: _,                       // persistent
                 highlight_yank_duration_ms: _, // config
                 code_complete_enabled: _,      // config
+                last_applied: _,               // push record
+                synced_indent: _,              // push record
+                swap_in_flight: _,             // swap guard
+                filetype: _,                   // config
             } = ctx;
         }
+    }
+
+    // ── Settings push ─────────────────────────────────────────────────
+
+    #[test]
+    fn apply_settings_keeps_a_user_set_across_an_unrelated_refresh() {
+        let mut c = VimController::new();
+        let snap = SettingsSnapshot::for_tests(5, 100, 1000);
+        c.apply_settings(&snap);
+        let _ = c.engine_mut().source_config_text("set tw=0");
+
+        let mut next = snap.clone();
+        next.ignorecase = true;
+        c.apply_settings(&next);
+
+        assert_eq!(c.engine().options().textwidth(), 0);
+        assert!(c.engine().options().ignorecase());
+    }
+
+    fn effective_tw(c: &VimController) -> vim_core::primitives::OptionValue {
+        c.engine()
+            .effective_option(vim_core::primitives::OptionId::TextWidth)
+    }
+
+    /// vim-core v0.8.0 reads the resolved options, where the buffer value
+    /// `:set tw=20` leaves wins over the global layer. A changed Editor
+    /// Setting must reach that layer too, or the buffer keeps wrapping at 20.
+    #[test]
+    fn a_changed_setting_wins_over_set_in_the_current_buffer() {
+        use vim_core::primitives::OptionValue;
+        let mut c = VimController::new();
+        let snap = SettingsSnapshot::for_tests(5, 100, 1000);
+        c.apply_settings(&snap);
+        let _ = c.engine_mut().source_config_text("set tw=20");
+        assert_eq!(effective_tw(&c), OptionValue::Unsigned(20));
+
+        let mut next = snap.clone();
+        next.textwidth = 0;
+        c.apply_settings(&next);
+        assert_eq!(effective_tw(&c), OptionValue::Unsigned(0));
+    }
+
+    #[test]
+    fn a_changed_setting_wins_over_set_in_a_saved_buffer() {
+        use vim_core::primitives::OptionValue;
+        let mut c = VimController::new();
+        let snap = SettingsSnapshot::for_tests(5, 100, 1000);
+        c.apply_settings(&snap);
+        let _ = c.engine_mut().source_config_text("set tw=20");
+        let id = InstanceId::from_i64(7);
+        let saved = c.engine_mut().on_buffer_leave(0);
+        c.shell_state_mut().buffer(id).set_engine_state(saved);
+
+        let mut next = snap.clone();
+        next.textwidth = 0;
+        c.apply_settings(&next);
+        let saved = c.shell_state_mut().buffer(id).take_engine_state();
+        c.engine_mut().on_buffer_enter(saved.unwrap_or_default());
+        assert_eq!(effective_tw(&c), OptionValue::Unsigned(0));
+    }
+
+    /// A full push is a seed, not a change: it must not drop the local
+    /// value a buffer holds.
+    #[test]
+    fn a_full_push_keeps_a_local_value() {
+        use vim_core::primitives::OptionValue;
+        let mut c = VimController::new();
+        let snap = SettingsSnapshot::for_tests(5, 100, 1000);
+        c.apply_settings(&snap);
+        let _ = c.engine_mut().source_config_text("set tw=20");
+        c.forget_applied_settings();
+        c.apply_settings(&snap);
+        assert_eq!(effective_tw(&c), OptionValue::Unsigned(20));
+    }
+
+    #[test]
+    fn a_changed_code_edit_indent_wins_over_set() {
+        use vim_core::primitives::{OptionId, OptionValue};
+        let mut c = VimController::new();
+        c.sync_indent(true, 4, 4);
+        let _ = c.engine_mut().source_config_text("set ts=8 sw=8");
+        assert!(c.sync_indent_if_changed(true, 4, 2));
+        let e = c.engine();
+        assert_eq!(
+            e.effective_option(OptionId::TabStop),
+            OptionValue::Unsigned(2)
+        );
+        assert_eq!(
+            e.effective_option(OptionId::ShiftWidth),
+            OptionValue::Unsigned(8),
+            "only the value that moved is written"
+        );
+    }
+
+    // ── Filetype setup ────────────────────────────────────────────────
+
+    use crate::ftplugin::detect::Signals;
+    use vim_core::primitives::{OptionId, OptionValue};
+
+    fn gd_signals() -> Signals {
+        Signals {
+            script_class: Some("GDScript".into()),
+            highlighter_class: Some("GDScriptSyntaxHighlighter".into()),
+            comment_delimiters: vec!["##".into(), "#".into()],
+            file_path: None,
+        }
+    }
+
+    fn json_signals() -> Signals {
+        Signals {
+            script_class: None,
+            highlighter_class: Some("EditorJSONSyntaxHighlighter".into()),
+            comment_delimiters: Vec::new(),
+            file_path: None,
+        }
+    }
+
+    fn effective_str(c: &VimController, id: OptionId) -> String {
+        match c.engine().effective_option(id) {
+            OptionValue::Str(s) => s.to_string(),
+            other => panic!("{id:?}: {other:?}"),
+        }
+    }
+
+    /// Feed `keys` to the engine over `text`, applying the edit and cursor
+    /// effects the way the host would, and return the final text.
+    fn type_keys(c: &mut VimController, text: &str, keys: &str) -> String {
+        use vim_core::effects::Effect;
+        use vim_core::execution::InputContext;
+        use vim_core::keymap::KeyEvent;
+        let mut text = text.to_owned();
+        let mut cursor = 0;
+        for ch in keys.chars() {
+            let key = match ch {
+                '\x1b' => KeyEvent::escape(),
+                '\r' => KeyEvent::enter(),
+                _ => KeyEvent::char(ch),
+            };
+            let doc = crate::bridge::document::GodotDocument::new(&text);
+            let ctx = InputContext::new(&doc, cursor).validate_clamped();
+            let mut response = c.engine_mut().process(key, ctx);
+            for effect in response.take_effects() {
+                match effect {
+                    Effect::Insert { offset, text: t } => text.insert_str(offset.get(), &t),
+                    Effect::Delete { range } => {
+                        text.replace_range(range.start().get()..range.end().get(), "");
+                    }
+                    Effect::Replace { range, text: t } => {
+                        text.replace_range(range.start().get()..range.end().get(), &t);
+                    }
+                    Effect::SetCursor { offset } => cursor = offset.get(),
+                    _ => {}
+                }
+            }
+        }
+        text
+    }
+
+    #[test]
+    fn gdscript_setup_writes_the_buffer_value_only() {
+        let mut c = VimController::new();
+        let global_cms = c.engine().options().commentstring().to_owned();
+        c.setup_filetype(InstanceId::from_i64(1), &gd_signals());
+        assert_eq!(effective_str(&c, OptionId::FormatOptions), "jcql");
+        assert_eq!(effective_str(&c, OptionId::Comments), "b:##,b:#");
+        assert_eq!(effective_str(&c, OptionId::CommentString), "# %s");
+        assert_eq!(c.engine().options().commentstring(), global_cms);
+        assert_eq!(c.engine().filetype(), Some("gdscript"));
+    }
+
+    /// The point of #77: with a width set, GDScript code is never broken,
+    /// and a comment wraps with its leader.
+    #[test]
+    fn gdscript_code_never_wraps_and_comments_do() {
+        let mut c = VimController::new();
+        let mut snap = SettingsSnapshot::for_tests(5, 20, 1000);
+        snap.filetype_plugin = true;
+        c.apply_settings(&snap);
+        c.setup_filetype(InstanceId::from_i64(1), &gd_signals());
+
+        let code = type_keys(&mut c, "", "ivar total = alpha + beta + gamma + delta\x1b");
+        assert_eq!(code, "var total = alpha + beta + gamma + delta");
+
+        let comment = type_keys(&mut c, "", "i# one two three four five six\x1b");
+        assert_eq!(comment, "# one two three four\n# five six");
+    }
+
+    #[test]
+    fn json_never_wraps() {
+        let mut c = VimController::new();
+        c.apply_settings(&SettingsSnapshot::for_tests(5, 20, 1000));
+        c.setup_filetype(InstanceId::from_i64(1), &json_signals());
+        let out = type_keys(&mut c, "", "i\"key\": \"one two three four five six\"\x1b");
+        assert!(!out.contains('\n'), "{out:?}");
+    }
+
+    /// The old sync wrote the global commentstring from Godot's delimiters
+    /// on every attach. The buffer must still get it with plugins off, and
+    /// a shader's `//` must not leak into the next buffer.
+    #[test]
+    fn commentstring_comes_from_godot_with_plugins_off() {
+        let mut c = VimController::new();
+        c.reload_config("filetype plugin off");
+        c.setup_filetype(InstanceId::from_i64(1), &gd_signals());
+        assert_eq!(effective_str(&c, OptionId::FormatOptions), "tcqj");
+        assert_eq!(effective_str(&c, OptionId::CommentString), "# %s");
+    }
+
+    #[test]
+    fn a_shader_commentstring_stays_in_its_buffer() {
+        let mut c = VimController::new();
+        let shader = Signals {
+            script_class: None,
+            highlighter_class: Some("GDShaderSyntaxHighlighter".into()),
+            comment_delimiters: vec!["//".into(), "/* */".into()],
+            file_path: None,
+        };
+        c.engine_mut().options_mut().set_commentstring("/* %s */");
+        c.engine_mut().invalidate_option_cache();
+        c.setup_filetype(InstanceId::from_i64(1), &shader);
+        assert_eq!(effective_str(&c, OptionId::CommentString), "// %s");
+        let saved = c.engine_mut().on_buffer_leave(0);
+        c.shell_state_mut()
+            .buffer(InstanceId::from_i64(1))
+            .set_engine_state(saved);
+        c.restore_buffer_engine_state(InstanceId::from_i64(2));
+        c.setup_filetype(InstanceId::from_i64(2), &Signals::default());
+        assert_eq!(effective_str(&c, OptionId::CommentString), "/* %s */");
+    }
+
+    #[test]
+    fn the_engine_ignores_filetype_lines() {
+        let mut engine = vim_core::execution::VimEngine::new();
+        let mut response = engine.source_config_text("filetype plugin off\nfiletype on");
+        let errors = response
+            .take_effects()
+            .into_iter()
+            .filter(|e| matches!(e, vim_core::effects::Effect::ShowError { .. }))
+            .count();
+        assert_eq!(errors, 0);
+    }
+
+    /// Switching buffers saves and restores the buffer's options; the setup
+    /// does not run again, so a `:setlocal` survives.
+    #[test]
+    fn a_setlocal_survives_a_buffer_switch() {
+        let mut c = VimController::new();
+        let a = InstanceId::from_i64(1);
+        let b = InstanceId::from_i64(2);
+        c.setup_filetype(a, &gd_signals());
+        let _ = type_keys(&mut c, "", ":setlocal fo+=t\r");
+        assert_eq!(effective_str(&c, OptionId::FormatOptions), "jcqlt");
+
+        let saved = c.engine_mut().on_buffer_leave(0);
+        c.shell_state_mut().buffer(a).set_engine_state(saved);
+        c.restore_buffer_engine_state(b);
+        c.setup_filetype(b, &json_signals());
+        assert_eq!(effective_str(&c, OptionId::FormatOptions), "cqj");
+
+        let saved = c.engine_mut().on_buffer_leave(0);
+        c.shell_state_mut().buffer(b).set_engine_state(saved);
+        c.restore_buffer_engine_state(a);
+        c.setup_filetype(a, &gd_signals());
+        assert_eq!(effective_str(&c, OptionId::FormatOptions), "jcqlt");
+        assert_eq!(c.engine().filetype(), Some("gdscript"));
+    }
+
+    #[test]
+    fn the_setting_turns_plugins_off_at_the_next_setup() {
+        let mut c = VimController::new();
+        let snap = SettingsSnapshot::for_tests(5, 0, 1000);
+        c.apply_settings(&snap);
+        let id = InstanceId::from_i64(1);
+        c.setup_filetype(id, &gd_signals());
+        assert_eq!(effective_str(&c, OptionId::FormatOptions), "jcql");
+
+        let mut off = snap.clone();
+        off.filetype_plugin = false;
+        c.apply_settings(&off);
+        c.setup_filetype(id, &gd_signals());
+        assert_eq!(effective_str(&c, OptionId::FormatOptions), "tcqj");
+        assert_eq!(effective_str(&c, OptionId::CommentString), "# %s");
+    }
+
+    /// Last change wins between the vimrc and the Editor Setting.
+    #[test]
+    fn vimrc_and_setting_last_change_wins() {
+        let mut c = VimController::new();
+        let snap = SettingsSnapshot::for_tests(5, 0, 1000);
+        c.apply_settings(&snap);
+        c.reload_config("filetype plugin off");
+        assert!(!c.ctx.filetype.plugins_run());
+
+        let mut unrelated = snap.clone();
+        unrelated.ignorecase = true;
+        c.apply_settings(&unrelated);
+        assert!(
+            !c.ctx.filetype.plugins_run(),
+            "unrelated event kept the vimrc"
+        );
+
+        let mut off = unrelated.clone();
+        off.filetype_plugin = false;
+        c.apply_settings(&off);
+        let mut on = off.clone();
+        on.filetype_plugin = true;
+        c.apply_settings(&on);
+        assert!(c.ctx.filetype.plugins_run(), "changing the setting wins");
+    }
+
+    /// The setting is `filetype plugin on`, which turns detection on too:
+    /// after a vimrc `filetype off`, turning the setting on must run the
+    /// plugins again.
+    #[test]
+    fn turning_the_setting_on_after_filetype_off_runs_the_plugins() {
+        let mut c = VimController::new();
+        let snap = SettingsSnapshot::for_tests(5, 20, 1000);
+        c.apply_settings(&snap);
+        c.reload_config("filetype off");
+        assert!(!c.ctx.filetype.plugins_run());
+
+        let mut off = snap.clone();
+        off.filetype_plugin = false;
+        c.apply_settings(&off);
+        c.apply_settings(&snap);
+        assert!(c.ctx.filetype.plugins_run());
+        c.setup_filetype(InstanceId::from_i64(1), &gd_signals());
+        assert_eq!(effective_str(&c, OptionId::FormatOptions), "jcql");
+        let code = type_keys(&mut c, "", "ivar total = alpha + beta + gamma + delta\x1b");
+        assert_eq!(code, "var total = alpha + beta + gamma + delta");
+    }
+
+    /// `:filetype` takes a trailing `"` comment and a `|`, and a leading
+    /// colon, as in Vim.
+    #[test]
+    fn vimrc_filetype_lines_take_comments_bars_and_a_colon() {
+        for line in [
+            "filetype plugin off \" no plugins",
+            "filetype plugin off | set tw=10",
+            ":filetype plugin off",
+            "  :filetype plugin off",
+        ] {
+            let mut c = VimController::new();
+            let tw = c.engine().options().textwidth();
+            c.reload_config(line);
+            assert!(!c.ctx.filetype.plugins_run(), "{line}");
+            assert_eq!(
+                c.engine().options().textwidth(),
+                tw,
+                "{line}: after | is not run"
+            );
+        }
+    }
+
+    /// The point of #77 for C#: code and strings never wrap, comments do.
+    #[test]
+    fn csharp_code_and_strings_never_wrap() {
+        let mut c = VimController::new();
+        c.apply_settings(&SettingsSnapshot::for_tests(5, 20, 1000));
+        let cs = Signals {
+            script_class: Some("CSharpScript".into()),
+            highlighter_class: None,
+            comment_delimiters: vec!["//".into(), "/* */".into()],
+            file_path: None,
+        };
+        c.setup_filetype(InstanceId::from_i64(1), &cs);
+        assert_eq!(c.engine().filetype(), Some("cs"));
+
+        let s = type_keys(&mut c, "", "i\tGD.Print(\"one two three four\");\x1b");
+        assert!(!s.contains('\n'), "{s:?}");
+        let code = type_keys(&mut c, "", "ivar v = a + b + c + d + e + f + g;\x1b");
+        assert_eq!(code, "var v = a + b + c + d + e + f + g;");
+        let comment = type_keys(&mut c, "", "i// one two three four five six\x1b");
+        assert_eq!(comment, "// one two three\n// four five six");
+    }
+
+    /// A `.cfg` value never wraps: a break inside a quoted value would turn
+    /// it into a multi-line string.
+    #[test]
+    fn cfg_values_never_wrap() {
+        let mut c = VimController::new();
+        c.apply_settings(&SettingsSnapshot::for_tests(5, 20, 1000));
+        let cfg = Signals {
+            script_class: None,
+            highlighter_class: Some("EditorConfigFileSyntaxHighlighter".into()),
+            comment_delimiters: Vec::new(),
+            file_path: None,
+        };
+        c.setup_filetype(InstanceId::from_i64(1), &cfg);
+        assert_eq!(c.engine().filetype(), Some("cfg"));
+        let out = type_keys(&mut c, "", "idescription=\"A small game\"\x1b");
+        assert_eq!(out, "description=\"A small game\"");
+    }
+
+    /// A text tab Godot shows with its plain-text highlighter, as it does
+    /// for every text extension it has no highlighter for.
+    fn plain_text_signals(path: Option<&str>) -> Signals {
+        Signals {
+            script_class: None,
+            highlighter_class: Some("EditorPlainTextSyntaxHighlighter".into()),
+            comment_delimiters: Vec::new(),
+            file_path: path.map(str::to_owned),
+        }
+    }
+
+    /// Godot opens `.yml` and `.yaml` with the plain-text highlighter. A
+    /// break inside a value corrupts the YAML, and Vim's yaml.vim drops `t`.
+    #[test]
+    fn yaml_values_never_wrap_and_comments_do() {
+        for path in ["res://data/config.yml", "res://CI.YAML"] {
+            let mut c = VimController::new();
+            c.apply_settings(&SettingsSnapshot::for_tests(5, 20, 1000));
+            c.setup_filetype(InstanceId::from_i64(1), &plain_text_signals(Some(path)));
+            assert_eq!(c.engine().filetype(), Some("yaml"), "{path}");
+            let value = type_keys(&mut c, "", "ititle: \"A small game here\"\x1b");
+            assert_eq!(value, "title: \"A small game here\"", "{path}");
+            let comment = type_keys(&mut c, "", "i# one two three four five six\x1b");
+            assert_eq!(comment, "# one two three four\n# five six", "{path}");
+        }
+    }
+
+    /// Godot opens `.xml` with the plain-text highlighter; xml.vim drops `t`.
+    #[test]
+    fn xml_never_wraps() {
+        let mut c = VimController::new();
+        c.apply_settings(&SettingsSnapshot::for_tests(5, 20, 1000));
+        c.setup_filetype(
+            InstanceId::from_i64(1),
+            &plain_text_signals(Some("res://export/feed.xml")),
+        );
+        assert_eq!(c.engine().filetype(), Some("xml"));
+        let out = type_keys(&mut c, "", "i<name>one two three four five</name>\x1b");
+        assert_eq!(out, "<name>one two three four five</name>");
+    }
+
+    /// Only a `.txt` file is `text`. Without a readable path the highlighter
+    /// says nothing about the file, so no plugin runs.
+    #[test]
+    fn plain_text_is_text_only_for_txt_files() {
+        let mut c = VimController::new();
+        c.setup_filetype(
+            InstanceId::from_i64(1),
+            &plain_text_signals(Some("res://notes.txt")),
+        );
+        assert_eq!(c.engine().filetype(), Some("text"));
+        for path in [None, Some("res://server.log"), Some("Unsaved file.")] {
+            let mut c = VimController::new();
+            c.setup_filetype(InstanceId::from_i64(1), &plain_text_signals(path));
+            assert_eq!(c.engine().filetype(), None, "{path:?}");
+        }
+    }
+
+    /// Detection runs on every attach, and the script list hides a file
+    /// its filter does not match. A file detected from its path keeps its
+    /// filetype when a later attach cannot read the path, so a YAML value
+    /// does not start wrapping after the user filters the script list.
+    #[test]
+    fn unreadable_path_on_a_later_attach_keeps_the_filetype() {
+        let mut c = VimController::new();
+        c.apply_settings(&SettingsSnapshot::for_tests(5, 20, 1000));
+        let id = InstanceId::from_i64(1);
+        c.setup_filetype(id, &plain_text_signals(Some("res://config.yml")));
+        assert_eq!(c.engine().filetype(), Some("yaml"));
+        c.setup_filetype(id, &plain_text_signals(None));
+        assert_eq!(c.engine().filetype(), Some("yaml"));
+        assert_eq!(effective_str(&c, OptionId::FormatOptions), "jcql");
+        let value = type_keys(&mut c, "", "iname: one two three four five six\x1b");
+        assert_eq!(value, "name: one two three four five six");
+    }
+
+    #[test]
+    fn filetype_off_detects_nothing() {
+        let mut c = VimController::new();
+        c.reload_config("filetype off");
+        c.setup_filetype(InstanceId::from_i64(1), &gd_signals());
+        assert_eq!(c.engine().filetype(), None);
+        assert_eq!(effective_str(&c, OptionId::FormatOptions), "tcqj");
+        assert_eq!(effective_str(&c, OptionId::CommentString), "# %s");
+    }
+
+    #[test]
+    fn forget_applied_settings_makes_the_next_push_write_everything() {
+        let mut c = VimController::new();
+        let snap = SettingsSnapshot::for_tests(5, 100, 1000);
+        c.apply_settings(&snap);
+        // Stands in for an engine that lost the push, such as the fresh
+        // placeholder a panic can leave behind.
+        c.engine_mut().options_mut().set_textwidth(0);
+
+        c.apply_settings(&snap);
+        assert_eq!(
+            c.engine().options().textwidth(),
+            0,
+            "same snapshot, no write"
+        );
+
+        c.forget_applied_settings();
+        c.apply_settings(&snap);
+        assert_eq!(c.engine().options().textwidth(), 100);
+    }
+
+    /// Panic recovery used to forget the push record for every panic, so
+    /// the next unrelated settings event rewrote every pushed option and
+    /// the indent, reverting a user's `:set`.
+    #[test]
+    fn recovery_with_the_engine_intact_keeps_a_user_set() {
+        let mut c = VimController::new();
+        let snap = SettingsSnapshot::for_tests(5, 100, 1000);
+        c.apply_settings(&snap);
+        c.sync_indent(true, 4, 4);
+        let _ = c.engine_mut().source_config_text("set tw=0 ts=8");
+
+        // What recover_controller_from_panic does with no editor attached.
+        assert!(!c.take_replaced_engine());
+        c.force_cleanup_without_editor();
+        // An unrelated settings event afterwards.
+        c.apply_settings(&snap);
+        c.sync_indent_if_changed(true, 4, 4);
+
+        assert_eq!(c.engine().options().textwidth(), 0);
+        assert_eq!(c.engine().options().tabstop(), 8);
+    }
+
+    #[test]
+    fn an_interrupted_swap_reports_the_replaced_engine_once() {
+        let mut c = VimController::new();
+        let snap = SettingsSnapshot::for_tests(5, 100, 1000);
+        c.apply_settings(&snap);
+        // What a panic between the swap and its end leaves behind.
+        c.ctx.swap_in_flight = true;
+        c.engine_mut().options_mut().set_textwidth(0);
+
+        assert!(c.take_replaced_engine());
+        c.apply_settings(&snap);
+        assert_eq!(c.engine().options().textwidth(), 100, "full push");
+        assert!(!c.take_replaced_engine());
+    }
+
+    #[test]
+    fn a_completed_swap_does_not_report_a_replaced_engine() {
+        let mut c = VimController::new();
+        assert!(c.detach_session().is_none());
+        assert!(!c.take_replaced_engine());
+    }
+
+    #[test]
+    fn indent_resync_skips_an_unchanged_code_edit() {
+        let mut c = VimController::new();
+        c.sync_indent(true, 4, 4);
+        let _ = c.engine_mut().source_config_text("set ts=8 sw=2 noet");
+
+        assert!(!c.sync_indent_if_changed(true, 4, 4));
+        let opts = c.engine().options();
+        assert_eq!(
+            (opts.expandtab(), opts.shiftwidth(), opts.tabstop()),
+            (false, 2, 8),
+            "an unrelated settings event reverted :set"
+        );
+    }
+
+    #[test]
+    fn indent_resync_follows_a_changed_code_edit() {
+        let mut c = VimController::new();
+        c.sync_indent(true, 4, 4);
+        let _ = c.engine_mut().source_config_text("set ts=8");
+
+        assert!(c.sync_indent_if_changed(false, 2, 2));
+        let opts = c.engine().options();
+        assert_eq!(
+            (opts.expandtab(), opts.shiftwidth(), opts.tabstop()),
+            (false, 2, 2)
+        );
+    }
+
+    /// The order the plugin relies on: Godot's indent change reaches the
+    /// engine at the notification that updates the CodeEdit, so a later
+    /// `:set sw` is not overwritten by the next unrelated settings event.
+    #[test]
+    fn indent_change_then_user_set_then_unrelated_event() {
+        let mut c = VimController::new();
+        c.sync_indent(true, 4, 4);
+        // NOTIFICATION_EDITOR_SETTINGS_CHANGED: the CodeEdit now reports 2.
+        assert!(c.sync_indent_if_changed(true, 2, 4));
+        let _ = c.engine_mut().source_config_text("set sw=8");
+        // settings_changed for an Output filter toggle.
+        assert!(!c.sync_indent_if_changed(true, 2, 4));
+        assert_eq!(c.engine().options().shiftwidth(), 8);
+    }
+
+    #[test]
+    fn indent_resync_writes_after_forget() {
+        let mut c = VimController::new();
+        c.sync_indent(true, 4, 4);
+        c.forget_applied_settings();
+        let _ = c.engine_mut().source_config_text("set ts=8");
+
+        assert!(c.sync_indent_if_changed(true, 4, 4));
+        assert_eq!(c.engine().options().tabstop(), 4);
     }
 }

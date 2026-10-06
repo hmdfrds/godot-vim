@@ -13,6 +13,7 @@
 //! - [`config`] — `.godot-vimrc` parsing, preset management, and mapping dialog.
 //! - [`ui`] — Status bar, cursor overlay (GLSL shader), and line number gutter.
 //! - [`settings`] — EditorSettings registration and typed accessors.
+//! - [`ftplugin`]: filetype detection and the per-language `:setlocal` lines.
 //! - [`navigation`] — Cross-panel `Ctrl+hjkl` focus movement and dock keyboard nav.
 //! - [`plugin`] — [`GodotVimCore`] node that manages controller lifecycle and input routing.
 //!
@@ -63,6 +64,7 @@ mod actions;
 mod bridge;
 mod controller;
 mod effects;
+mod ftplugin;
 mod host;
 mod multi_cursor;
 mod ui;

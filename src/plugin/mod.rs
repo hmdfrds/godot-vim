@@ -21,6 +21,7 @@ mod outcome;
 mod processing_guard;
 mod signals;
 
+use godot::classes::notify::{EditorSettingsNotification, NodeNotification};
 use godot::classes::{
     CodeEdit, Control, DisplayServer, EditorInterface, INode, Input, InputEvent, InputEventKey,
     Time, Timer,
@@ -176,6 +177,19 @@ impl INode for GodotVimCore {
 
     fn process(&mut self, _delta: f64) {
         panic_guard("process", || self.poll_pending_tooltip(), ());
+    }
+
+    /// Godot copies its indent settings into each CodeEdit on
+    /// `NOTIFICATION_EDITOR_SETTINGS_CHANGED`, which `notify_changes`
+    /// propagates from the editor root about 1.5 s after `settings_changed`,
+    /// when the Editor Settings dialog saves. That is when the CodeEdit's
+    /// indent can move, so that is when the engine follows it. Deferred,
+    /// because the propagation may reach this node before the script editor.
+    fn on_notification(&mut self, what: NodeNotification) {
+        if i32::from(what) == i32::from(EditorSettingsNotification::EDITOR_SETTINGS_CHANGED) {
+            self.base_mut()
+                .call_deferred("on_editor_settings_notified", &[]);
+        }
     }
 
     fn enter_tree(&mut self) {
@@ -964,7 +978,9 @@ impl GodotVimCore {
 
     /// Fires for ALL EditorSettings changes (not just ours), so we
     /// unconditionally re-read the full snapshot. The reader falls back
-    /// to defaults for missing or wrong-type values.
+    /// to defaults for missing or wrong-type values. The engine receives
+    /// only the fields that differ from the last push, so a user's `:set`
+    /// is not reverted by an unrelated change.
     #[func]
     fn on_settings_changed(&mut self) {
         // Intentionally ungated — must observe re-enable to become active again.
@@ -992,14 +1008,19 @@ impl GodotVimCore {
                 if let Some(controller) = &mut self.controller {
                     controller.apply_settings(&snapshot);
                 }
+                self.refresh_filetype_setup();
 
-                // Re-sync indent settings from the attached CodeEdit.
-                // EditorSettings changes can affect indent_size / tab_size,
-                // so the engine must pick up the new values.
+                // Re-sync indent from the attached CodeEdit, but only when
+                // its values moved: this signal fires for every EditorSettings
+                // write, and an unconditional sync reverted a user's `:set ts`
+                // on any unrelated click. Godot's own indent settings reach
+                // the CodeEdit later (see on_notification), so this catches
+                // only a CodeEdit changed some other way, such as the script
+                // editor's Convert Indent commands.
                 if let Some(ref editor) = self.attached_editor {
                     if editor.is_instance_valid() {
                         if let Some(controller) = &mut self.controller {
-                            attach::sync_indent_from_editor(editor, controller);
+                            attach::resync_indent_from_editor(editor, controller);
                         }
                     }
                 }
@@ -1014,6 +1035,36 @@ impl GodotVimCore {
                     }
                 }
 
+                true
+            },
+            false,
+        );
+        if !ok {
+            self.recover_controller_from_panic();
+        }
+    }
+
+    /// Deferred from `NOTIFICATION_EDITOR_SETTINGS_CHANGED`, once every
+    /// CodeEdit has applied Godot's indent settings. Writes the engine only
+    /// when the attached CodeEdit's indent moved, so a user's `:set ts`, `sw`
+    /// or `et` survives a notification about anything else, and a change to
+    /// Godot's indent settings reaches the engine when it happens rather than
+    /// at some later, unrelated settings event.
+    #[func]
+    fn on_editor_settings_notified(&mut self) {
+        if !self.enabled || self.controller.is_none() {
+            return;
+        }
+        let ok = panic_guard(
+            "on_editor_settings_notified",
+            || {
+                if let Some(ref editor) = self.attached_editor {
+                    if editor.is_instance_valid() {
+                        if let Some(controller) = &mut self.controller {
+                            attach::resync_indent_from_editor(editor, controller);
+                        }
+                    }
+                }
                 true
             },
             false,
@@ -1057,13 +1108,8 @@ impl GodotVimCore {
             );
             self.wired = true;
             if was_inert {
-                // disabled→enabled edge: single startup-equivalent config load + re-discovery
-                if let Some(s) = self.settings.clone() {
-                    if let Some(c) = &mut self.controller {
-                        c.apply_settings(&s);
-                    }
-                }
-                self.source_config_from_disk("enable");
+                // disabled→enabled edge: single startup-equivalent config load + re-discovery.
+                self.reseed_engine("enable");
                 self.last_editor_id = None;
                 self.base_mut().call_deferred("rediscover_and_attach", &[]);
                 self.base_mut()
@@ -1190,6 +1236,7 @@ impl GodotVimCore {
     /// completed inside `recover_from_panic`, so the engine is in a known-good
     /// state. Godot state may be slightly messy but no UB occurs.
     fn recover_controller_from_panic(&mut self) {
+        let mut engine_replaced = false;
         panic_guard(
             "recover_controller_from_panic",
             || {
@@ -1199,6 +1246,11 @@ impl GodotVimCore {
                     .is_some_and(|e| e.is_instance_valid());
 
                 if let Some(controller) = &mut self.controller {
+                    // Only a panic inside attach_session or detach_session
+                    // can leave a fresh engine behind; Tier 1 cleanup never
+                    // touches options. Checked before the detach below,
+                    // which would clear the flag.
+                    engine_replaced = controller.take_replaced_engine();
                     if has_valid_editor {
                         let mut editor = self.attached_editor.as_ref().unwrap().clone();
                         controller.recover_from_panic(&mut editor);
@@ -1229,6 +1281,13 @@ impl GodotVimCore {
             },
             (),
         );
+        // A fresh engine holds neither the settings nor the vimrc. Give it
+        // both now, as the enable edge does, rather than leaving the full
+        // push to whatever settings event comes next.
+        if engine_replaced {
+            log::warn!("recover_controller_from_panic: engine was replaced, reloading config");
+            panic_guard("recover:config", || self.reseed_engine("recover"), ());
+        }
         // Stop the mapping timer — emergency_reset cleared all pending mapping
         // state, so a stale timeout firing would be a wasted no-op.
         if let Some(timer) = self.mapping_timer.as_mut() {
@@ -1387,6 +1446,25 @@ impl GodotVimCore {
         }
     }
 
+    /// Run the filetype setup again for the attached editor, after the
+    /// `:filetype` switches may have changed (a vimrc reload, the
+    /// `filetype_plugin` Editor Setting). Writes nothing when the buffer's
+    /// setup is unchanged; other buffers follow at their next attach.
+    fn refresh_filetype_setup(&mut self) {
+        let Some(editor) = self.attached_editor.clone() else {
+            return;
+        };
+        if !editor.is_instance_valid() {
+            return;
+        }
+        if let Some(controller) = &mut self.controller {
+            if controller.is_attached() {
+                let signals = crate::ftplugin::detect::read_signals(&editor);
+                controller.setup_filetype(editor.instance_id(), &signals);
+            }
+        }
+    }
+
     fn update_cursor_if_attached(&mut self) {
         let Some(editor) = &self.attached_editor else {
             return;
@@ -1413,6 +1491,21 @@ impl GodotVimCore {
     /// Load config from disk, apply the project-vimrc security policy, and
     /// reload into the engine. Returns `true` if the file existed (regardless
     /// of whether the policy allowed sourcing it).
+    /// Push every Editor Setting into the engine, then source the vimrc on
+    /// top, exactly as at startup. The push record is forgotten first, so
+    /// no field is skipped. For an engine that may hold neither: the
+    /// disabled to enabled edge, and the fresh engine a panic inside a
+    /// session swap leaves behind.
+    fn reseed_engine(&mut self, caller: &str) {
+        if let Some(s) = self.settings.clone() {
+            if let Some(c) = &mut self.controller {
+                c.forget_applied_settings();
+                c.apply_settings(&s);
+            }
+        }
+        self.source_config_from_disk(caller);
+    }
+
     fn source_config_from_disk(&mut self, caller: &str) -> bool {
         let resolved = self.resolve_config_path();
         let Some(text) = crate::config::writer::read_file(&resolved.path) else {
@@ -1437,6 +1530,7 @@ impl GodotVimCore {
                 controller.reload_config(&text);
                 log::info!("{caller}: sourced config from '{}'", resolved.path);
             }
+            self.refresh_filetype_setup();
         }
         self.rebuild_langmap();
         self.rebuild_bindings();

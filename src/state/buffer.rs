@@ -43,6 +43,15 @@ pub(crate) struct BufferState {
     /// Cursor positions (line, col, byte_offset) saved by SaveSelections effect,
     /// restored by RestoreSelections.
     saved_selections: Option<Vec<(usize, usize, usize)>>,
+
+    /// What the filetype setup last applied to this buffer's options, so it
+    /// runs once and can be undone. `None` until the first attach.
+    ftplugin: Option<crate::ftplugin::runtime::Applied>,
+
+    /// The last `res://` path detection read for this buffer. The script
+    /// list hides a file its filter does not match, so a later attach may
+    /// read no path; detection then falls back to this one.
+    file_path: Option<String>,
 }
 
 impl Default for BufferState {
@@ -53,6 +62,8 @@ impl Default for BufferState {
             undo_store: UndoStore::new(),
             last_caret_count: 1,
             saved_selections: None,
+            ftplugin: None,
+            file_path: None,
         }
     }
 }
@@ -71,6 +82,29 @@ impl BufferState {
 
     pub(crate) fn take_engine_state(&mut self) -> Option<BufferLocalState> {
         self.engine_state.take()
+    }
+
+    #[must_use]
+    pub(crate) fn ftplugin(&self) -> Option<&crate::ftplugin::runtime::Applied> {
+        self.ftplugin.as_ref()
+    }
+
+    pub(crate) fn set_ftplugin(&mut self, applied: crate::ftplugin::runtime::Applied) {
+        self.ftplugin = Some(applied);
+    }
+
+    #[must_use]
+    pub(crate) fn file_path(&self) -> Option<&str> {
+        self.file_path.as_deref()
+    }
+
+    pub(crate) fn set_file_path(&mut self, path: String) {
+        self.file_path = Some(path);
+    }
+
+    /// The engine state saved when this buffer was left, if any.
+    pub(crate) fn engine_state_mut(&mut self) -> Option<&mut BufferLocalState> {
+        self.engine_state.as_mut()
     }
 
     pub(crate) fn undo_store(&self) -> &UndoStore {
