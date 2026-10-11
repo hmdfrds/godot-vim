@@ -261,10 +261,8 @@ pub(crate) fn explain_report(
 
     // ── The counterfactual overlay ───────────────────────────────────
     //
-    // The live path can never be a completion path: the command line owns
-    // focus while `:panelmap` is typed, so the popup is already cancelled.
-    // The report answers anyway, through the same `Forest::overlay` and the
-    // same walk, with one input flipped, and says plainly that it is a
+    // The live path is never a completion path (the editor is in Normal
+    // mode), so the overlay is built with one input flipped and labelled a
     // counterfactual.
     if let Some(overlay_path) = overlay {
         let id = overlay_path.ids.first().copied().unwrap_or("<overlay>");
@@ -1021,9 +1019,8 @@ panel  (parent: -, seal: Open)
 
     #[test]
     fn the_report_explains_a_completion_key_through_the_counterfactual_overlay() {
-        // The question this whole section exists to answer: "why is my <CR>
-        // dead / what will it do over the popup?" could never be answered
-        // live, because typing the command puts focus on the command line.
+        // How a popup key resolves cannot be seen live: the popup is closed by
+        // the time the command runs.
         let report = explain_counterfactual("<C-y>", &fs_chain());
         assert!(report.contains("editor.completion"), "{report}");
         assert!(report.contains("caps: Caps(POPUP)"), "{report}");
