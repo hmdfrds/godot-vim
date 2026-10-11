@@ -3,6 +3,24 @@
 Notes for people arriving from an older release. Nothing here applies to a
 fresh install.
 
+## From v1.9.0
+
+**A project vimrc line with several commands is judged command by
+command.** Under the default Sandbox policy, a line was judged by its first
+command, so `set so=5 | nnoremap x :!cmd<CR>` passed because it starts with
+`set`. Now every command after a `|` must pass on its own, or the whole line
+is commented out with the usual `" [sandbox] stripped` reason. Write a bar
+meant for a mapping's right-hand side as `\|` or `<Bar>`, as Vim needs too;
+those stay part of the mapping.
+
+**The project vimrc sandbox strips more.** A mapping whose command line
+defines a mapping, an abbreviation, a handler or the leader, or sets a
+blocked option such as `shell`, is now commented out, and so are
+`langmap` and `langremap` lines. Blanks other than space and tab, such as
+a non-breaking space, are read as the engine reads them, and colons before
+a command are skipped as in Vim, so a command hidden behind either is
+caught. Put such lines in your own `user://.godot-vimrc` if you need them.
+
 ## From v1.8.2
 
 **The completion popup follows Godot again.** Six notes:

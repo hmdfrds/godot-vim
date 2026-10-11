@@ -111,7 +111,8 @@ pub(crate) struct PolicyText {
 ///
 /// Only known-safe constructs pass through (comments, blanks, safe `:set`
 /// and `:setlocal`, `:filetype`, `:let mapleader`, non-recursive mappings
-/// with clean RHS). Everything else
+/// with clean RHS), and a line of several `|` commands only when each one
+/// is. Everything else
 /// -- including raw ex-commands like `:source` or `:!` -- is replaced with
 /// a diagnostic comment. This prevents a malicious `res://.godot-vimrc`
 /// from executing arbitrary commands.
@@ -120,7 +121,17 @@ fn sandbox(text: &str) -> PolicyText {
     let mut stripped = 0;
     for line in text.lines() {
         let trimmed = line.trim();
-        if is_safe_non_mapping_line(trimmed) {
+        if let Some(command) = unsafe_bar_command(trimmed) {
+            log::warn!(
+                "sandbox: stripped line with an unsafe | command ({}) from project vimrc: {}",
+                command,
+                trimmed
+            );
+            output.push_str("\" [sandbox] stripped: ");
+            stripped += 1;
+            output.push_str(trimmed);
+            output.push('\n');
+        } else if is_safe_non_mapping_line(trimmed) {
             output.push_str(line);
             output.push('\n');
         } else if is_mapping_line(trimmed) {
@@ -183,7 +194,43 @@ fn sandbox(text: &str) -> PolicyText {
     }
 }
 
-/// Options that can execute shell commands or exfiltrate data.
+/// The first command of a line holding several that would be stripped on a
+/// line of its own. vim-core splits a config line at every `|` not preceded
+/// by a backslash and runs each command, so every one must pass, not only
+/// the first. Splitting inside a pattern or a string only strips more.
+fn unsafe_bar_command(trimmed: &str) -> Option<&str> {
+    if trimmed.starts_with('"') {
+        return None;
+    }
+    let mut commands = Vec::new();
+    let mut start = 0;
+    for (at, _) in trimmed.match_indices('|') {
+        if !trimmed[..at].ends_with('\\') {
+            commands.push(&trimmed[start..at]);
+            start = at + 1;
+        }
+    }
+    if commands.is_empty() {
+        return None;
+    }
+    commands.push(&trimmed[start..]);
+    commands
+        .into_iter()
+        .map(str::trim)
+        .find(|command| !is_safe_command(command))
+}
+
+/// Whether `trimmed`, as a line of its own, passes the sandbox unchanged.
+fn is_safe_command(trimmed: &str) -> bool {
+    if is_mapping_line(trimmed) {
+        return !is_recursive_map_line(trimmed) && !contains_shell_pattern(trimmed);
+    }
+    is_safe_non_mapping_line(trimmed)
+        || (crate::config::panelmap::is_panel_line(trimmed) && panel_line_is_safe(trimmed))
+}
+
+/// Options that can execute shell commands or exfiltrate data, and the
+/// `langmap` family, which turns a key a right-hand side types into `:`.
 /// Both long and short forms must be listed (Vim accepts either).
 const BLOCKED_SET_OPTIONS: &[&str] = &[
     "shell",
@@ -210,6 +257,12 @@ const BLOCKED_SET_OPTIONS: &[&str] = &[
     "fp",
     "keywordprg",
     "kp",
+    "langmap",
+    "lmap",
+    "langremap",
+    "lrm",
+    "langnoremap",
+    "lnr",
 ];
 
 /// Extract the option name from a `set` token, stripping value delimiters
@@ -220,6 +273,14 @@ fn extract_option_name_from_token(token: &str) -> &str {
         .next()
         .unwrap_or("");
     name.strip_prefix("no").unwrap_or(name)
+}
+
+/// Whether a `set` token, or an option name, names a blocked option.
+fn is_blocked_option(token: &str) -> bool {
+    let name = extract_option_name_from_token(token);
+    BLOCKED_SET_OPTIONS
+        .iter()
+        .any(|blocked| name.eq_ignore_ascii_case(blocked))
 }
 
 /// Whitelist check for non-mapping lines that are safe to pass through.
@@ -292,13 +353,7 @@ fn is_safe_non_mapping_line(trimmed: &str) -> bool {
     if let Some(options_str) = after_set {
         // Check ALL space-separated options -- `set scrolloff=5 shell=/bin/evil`
         // must be blocked because `shell` is dangerous even if `scrolloff` is safe.
-        let has_blocked = options_str.split_whitespace().any(|token| {
-            let name = extract_option_name_from_token(token);
-            BLOCKED_SET_OPTIONS
-                .iter()
-                .any(|blocked| name.eq_ignore_ascii_case(blocked))
-        });
-        return !has_blocked;
+        return !options_str.split_whitespace().any(is_blocked_option);
     }
     // `:filetype plugin off` and the rest of `:filetype` only switch the
     // built-in filetype plugins on or off; nothing in them runs code. What
@@ -572,11 +627,67 @@ fn simulate_command_line(rhs: &str, starts_in_command_line: bool) -> bool {
         || ex.is_some_and(|(buf, _)| line_runs_dangerous(&buf))
 }
 
-/// One committed command line, split on `|` into its commands. Splitting is an
-/// over-approximation (a `|` inside a pattern or string makes extra pieces),
+/// One committed command line, judged by the text check and by vim-core's
+/// parser; either one strips. The text check splits on every `|`, an
+/// over-approximation (a `|` inside a pattern or string makes extra pieces)
 /// which can only strip more, never less.
 fn line_runs_dangerous(line: &str) -> bool {
-    line.split('|').any(starts_dangerous_command)
+    line.split('|').any(starts_dangerous_command) || parses_to_unsafe_command(line)
+}
+
+/// Whether one of the commands vim-core runs for `line` is unsafe, split and
+/// parsed as `execute_ex_line` does. A piece that fails to parse runs nothing.
+fn parses_to_unsafe_command(line: &str) -> bool {
+    use vim_core::grammar::{parse_ex_command_with_modifiers, split_ex_pipeline};
+    let pieces = split_ex_pipeline(line);
+    let pieces = if pieces.len() <= 1 {
+        vec![line]
+    } else {
+        pieces
+    };
+    pieces.into_iter().any(|piece| {
+        parse_ex_command_with_modifiers(piece).is_ok_and(|(_, command)| is_unsafe_command(&command))
+    })
+}
+
+/// A command a right-hand side may not run: the shell, `:source`, one that
+/// changes mappings, abbreviations, handlers or the leader, or a `:set` of a
+/// blocked option.
+fn is_unsafe_command(command: &vim_core::grammar::types::ExCommand) -> bool {
+    use vim_core::grammar::types::{ExCommand, SetAssignment};
+    match command {
+        ExCommand::External { .. }
+        | ExCommand::Filter { .. }
+        | ExCommand::Source { .. }
+        | ExCommand::Map { .. }
+        | ExCommand::Unmap { .. }
+        | ExCommand::MapClear { .. }
+        | ExCommand::Abbreviate { .. }
+        | ExCommand::Unabbreviate { .. }
+        | ExCommand::AbClear { .. }
+        | ExCommand::SetHandler { .. }
+        | ExCommand::LetMapleader { .. } => true,
+        ExCommand::Set { assignments }
+        | ExCommand::SetLocal { assignments }
+        | ExCommand::SetGlobal { assignments } => {
+            assignments.iter().any(|assignment| match assignment {
+                SetAssignment::SetBool(name)
+                | SetAssignment::UnsetBool(name)
+                | SetAssignment::ToggleBool(name)
+                | SetAssignment::Query(name)
+                | SetAssignment::Assign(name, _)
+                | SetAssignment::Append(name, _)
+                | SetAssignment::Remove(name, _)
+                | SetAssignment::Prepend(name, _) => is_blocked_option(name),
+                _ => false,
+            })
+        }
+        ExCommand::Read { path, .. } => path.starts_with('!'),
+        ExCommand::WinDo { command, .. }
+        | ExCommand::BufDo { command, .. }
+        | ExCommand::TabDo { command, .. } => is_unsafe_command(command),
+        _ => false,
+    }
 }
 
 /// How a key acts on a `:` command line.
@@ -701,16 +812,15 @@ fn starts_dangerous_command(text: &str) -> bool {
     }
 }
 
-/// Skips blanks and a range: line numbers, `%`, `*`, `$`, `.`, marks (`'a`,
-/// `'<`), patterns (`/pat/`, `?pat?`, `\/`) and the `,;+-` between them.
+/// Skips blanks (any `char::is_whitespace`, as vim-core reads them), colons
+/// and a range: line numbers, `%`, `*`, `$`, `.`, marks (`'a`, `'<`),
+/// patterns (`/pat/`, `?pat?`, `\/`) and the `,;+-` between them.
 fn skip_range(mut text: &str) -> &str {
     loop {
         text = text.trim_start_matches(|c: char| {
             c.is_ascii_digit()
-                || matches!(
-                    c,
-                    ' ' | '\t' | '%' | '*' | '$' | '.' | ',' | ';' | '+' | '-'
-                )
+                || c.is_whitespace()
+                || matches!(c, ':' | '%' | '*' | '$' | '.' | ',' | ';' | '+' | '-')
         });
         let mut chars = text.chars();
         text = match chars.next() {
@@ -738,7 +848,7 @@ fn strip_command_prefix(text: &str) -> Option<&str> {
     let (word, rest) = text.split_at(end);
     let rest = match rest.strip_prefix('!') {
         Some(after_bang) => after_bang,
-        None if rest.starts_with([' ', '\t']) => rest,
+        None if rest.starts_with(char::is_whitespace) => rest,
         None => return None,
     };
     COMMAND_PREFIXES
@@ -763,7 +873,7 @@ fn matches_ex_pattern(text: &str, min: &str, full: &str, tail: Tail) -> bool {
         }
         match tail {
             Tail::Any => true,
-            Tail::Bang => rest.trim_start_matches([' ', '\t']).starts_with('!'),
+            Tail::Bang => rest.trim_start().starts_with('!'),
         }
     })
 }
@@ -980,8 +1090,7 @@ inoremap jk <Esc>
     }
 
     // A `!`-suffix map and a cmap type their RHS into the command line, so a
-    // shell command in it (no leading `:`, which in an open command line is a
-    // literal colon, not a fresh prompt) is checked and stripped.
+    // shell command in it is checked and stripped.
     #[test]
     fn strips_bang_suffix_map_command() {
         let input = "nnoremap! <Leader>x !ls<CR>\n";
@@ -1003,8 +1112,6 @@ inoremap jk <Esc>
         assert!(output.contains("[sandbox] stripped"));
     }
 
-    /// A normal-mode map opens the command line with `:`, so its RHS runs the
-    /// shell even though a cmap's leading `:` would be a literal colon.
     #[test]
     fn strips_case_insensitive_map_command() {
         let input = "NNOREMAP <Leader>x :!ls<CR>\n";
@@ -1026,12 +1133,15 @@ inoremap jk <Esc>
         assert!(output.contains("[sandbox] stripped"));
     }
 
-    /// In an already-open command line (a cmap) the RHS's leading `:` is a
-    /// literal colon, so `:!ls` is the inert text `:!ls`, not a shell command;
-    /// the engine does not run it, so the mapping is left in place.
+    /// Vim skips colons where a command starts, so `::!ls` is `:!ls`.
     #[test]
-    fn keeps_cmap_whose_leading_colon_is_literal() {
-        assert_all_kept(&["cnoremap <C-x> :!ls<CR>"]);
+    fn strips_shell_behind_extra_colons() {
+        assert_all_stripped(&[
+            "cnoremap <C-x> :!ls<CR>",
+            "nnoremap x ::!ls<CR>",
+            "nnoremap x <Cmd>:!ls<CR>",
+            "nnoremap x :noh<Bar>:so f<CR>",
+        ]);
     }
 
     #[test]
@@ -1213,6 +1323,127 @@ inoremap jk <Esc>
             "nnoremap x :'a,'b!sort<CR>",
             "nnoremap x :/foo/!sort<CR>",
         ]);
+    }
+
+    /// vim-core reads any `char::is_whitespace` character as a blank, not
+    /// only space and tab.
+    #[test]
+    fn strips_shell_and_source_behind_any_blank() {
+        assert_all_stripped(&[
+            "nnoremap x :\u{a0}!echo hi<CR>",
+            "nnoremap x :\u{3000}!echo hi<CR>",
+            "nnoremap x :\u{a0}so f<CR>",
+            "nnoremap x :r\u{a0}!id<CR>",
+            "nnoremap x :1,\u{a0}2!sort<CR>",
+            "nnoremap x <Cmd>\u{b}!ls<CR>",
+        ]);
+    }
+
+    /// Sources `line` into the engine as it is and after the sandbox: the
+    /// engine maps `x` from the line itself, and nothing from what the sandbox
+    /// leaves of it.
+    fn assert_defines_nothing_in_the_engine(lines: &[&str]) {
+        use vim_core::execution::VimEngine;
+        let x = vim_core::keymap::KeyEvent::char('x');
+        for line in lines {
+            let mut trusted = VimEngine::new();
+            let _ = trusted.source_config_text(line);
+            assert!(trusted.could_start_mapping(x), "not a mapping: {line}");
+            let mut engine = VimEngine::new();
+            let _ = engine.source_config_text(&sandbox_config_text(line));
+            assert!(!engine.could_start_mapping(x), "{line}");
+        }
+    }
+
+    #[test]
+    fn a_shell_line_behind_a_unicode_blank_defines_nothing_in_the_engine() {
+        assert_defines_nothing_in_the_engine(&[
+            "nnoremap x :\u{a0}!echo hi<CR>",
+            "nnoremap x :\u{3000}!echo hi<CR>",
+        ]);
+    }
+
+    /// vim-core's parser judges each committed line too, so a right-hand side
+    /// cannot define a mapping, an abbreviation, a handler or the leader, or
+    /// set a blocked option, however the text check reads it.
+    #[test]
+    fn strips_a_right_hand_side_that_changes_mappings_or_blocked_options() {
+        assert_all_stripped(&[
+            "nnoremap x :nnoremap y :!echo hi<lt>CR><CR>",
+            "nnoremap x :nmap y Z<CR>",
+            "nnoremap x :nunmap j<CR>",
+            "nnoremap x :mapclear<CR>",
+            "nnoremap x :iabbrev teh the<CR>",
+            "nnoremap x :unabbreviate teh<CR>",
+            "nnoremap x :abclear<CR>",
+            "nnoremap x :sethandler n:ide<CR>",
+            "nnoremap x :let mapleader = ','<CR>",
+            "nnoremap x :set langmap=q:<CR>",
+            "nnoremap x :setlocal shell=/bin/evil<CR>",
+            "nnoremap x :setglobal kp?<CR>",
+            "nnoremap x :noh<Bar>silent nnoremap y Z<CR>",
+            "nnoremap x <Cmd>nnoremap y Z<CR>",
+            "nnoremap x :windo nnoremap y Z<CR>",
+            "nnoremap x :bufdo set mp=evil<CR>",
+            "cnoremap <C-x> <C-u>nnoremap y Z<CR>",
+            "nnoremap x :nnoremap y Z",
+        ]);
+    }
+
+    #[test]
+    fn keeps_ordinary_command_line_mappings() {
+        assert_all_kept(&[
+            "nnoremap <Leader>w :set wrap!<CR>",
+            "nnoremap <Esc><Esc> :noh<CR>",
+            "nnoremap x :echo 'hi'<CR>",
+            "nnoremap x <Cmd>set hlsearch!<CR>",
+            "nnoremap x :set so=5 tw=80 nonumber ic?<CR>",
+            "nnoremap x :setlocal fo-=t<CR>",
+            "nnoremap x :windo set wrap<CR>",
+            "nnoremap x :r notes.txt<CR>",
+            "nnoremap x :g/TODO/d<CR>",
+            "nnoremap x :e res://main.gd<CR>",
+            "nnoremap x :undefined<CR>",
+        ]);
+    }
+
+    #[test]
+    fn a_mapping_that_defines_a_mapping_defines_nothing_in_the_engine() {
+        assert_defines_nothing_in_the_engine(&["nnoremap x :nnoremap y :!echo hi<lt>CR><CR>"]);
+    }
+
+    /// Each vimrc runs `:!echo hi` when its keys are pressed, and runs nothing
+    /// after the sandbox.
+    #[test]
+    fn the_known_routes_to_the_shell_run_nothing_after_the_sandbox() {
+        use vim_core::execution::{HostRequest, HostSession};
+        let shell_commands = |text: &str, keys: &str| {
+            let mut session = HostSession::new("one\ntwo\n");
+            let _ = session.source_config(text);
+            let mut commands = Vec::new();
+            for ch in keys.chars() {
+                let response = session.process_key_host(vim_core::keymap::KeyEvent::char(ch));
+                for request in response.host_requests {
+                    if let HostRequest::ExternalCommand { command, .. } = request {
+                        commands.push(command.to_string());
+                    }
+                }
+            }
+            commands
+        };
+        for (text, keys) in [
+            ("nnoremap x :!echo hi<CR>\n", "x"),
+            ("nnoremap x :\u{a0}!echo hi<CR>\n", "x"),
+            ("nnoremap x :\u{3000}!echo hi<CR>\n", "x"),
+            ("nnoremap x :nnoremap y :!echo hi<lt>CR><CR>\n", "xy"),
+            ("set langmap=q:\nnnoremap x 0q!echo hi<CR>\n", "x"),
+        ] {
+            assert_eq!(shell_commands(text, keys), ["echo hi"], "{text}");
+            assert!(
+                shell_commands(&sandbox_config_text(text), keys).is_empty(),
+                "{text}"
+            );
+        }
     }
 
     #[test]
@@ -1671,6 +1902,55 @@ imap jj <Esc>
         }
     }
 
+    // ── Several commands on one line ─────────────────────────────────
+
+    #[test]
+    fn strips_a_line_whose_later_bar_command_is_unsafe() {
+        // vim-core runs every `|` command of a config line; these passed
+        // because the line starts with a safe command.
+        for line in [
+            "set so=5 | nnoremap x :!id<CR>",
+            "set so=5 | nmap x :action foo<CR>",
+            "let mapleader=\",\" | nnoremap x :!id<CR>",
+            "nnoremap x y | !id",
+            "set so=5 \" comment | !id",
+            "set so=5 | set sw=4 | so x.vim",
+        ] {
+            let output = sandbox_config_text(&format!("{line}\n"));
+            assert_eq!(output, format!("\" [sandbox] stripped: {line}\n"));
+        }
+    }
+
+    #[test]
+    fn preserves_a_line_whose_bar_commands_are_all_safe() {
+        for line in [
+            "set so=5 | set sw=4",
+            "let mapleader=\",\" | set so=5",
+            "filetype plugin on | set et",
+            "nnoremap x :echo 1 \\| echo 2<CR>",
+            "\" a comment | !id",
+        ] {
+            let output = sandbox_config_text(&format!("{line}\n"));
+            assert_eq!(output, format!("{line}\n"));
+        }
+    }
+
+    #[test]
+    fn a_stripped_bar_line_defines_nothing_in_the_engine() {
+        // Once vim-core runs a config line as a command line, the commands
+        // after a `|` run too.
+        for line in [
+            "set so=5 | nnoremap x :!id<CR>",
+            "set so=5 | nmap x :action foo<CR>",
+            "let mapleader=\",\" | nnoremap x :!id<CR>",
+        ] {
+            let mut engine = vim_core::execution::VimEngine::new();
+            let _ = engine.source_config_text(&sandbox_config_text(&format!("{line}\n")));
+            let x = vim_core::keymap::KeyEvent::char('x');
+            assert!(!engine.could_start_mapping(x), "{line}");
+        }
+    }
+
     // ── The blocklist's delimiter split ──────────────────────────────
 
     #[test]
@@ -1705,6 +1985,35 @@ imap jj <Esc>
                 line.trim()
             );
         }
+    }
+
+    /// `set langmap=q:` makes `q` type `:`, so `nnoremap x 0q!cmd<CR>` runs
+    /// `:!cmd` with no `:` in its right-hand side.
+    #[test]
+    fn strips_langmap_lines() {
+        assert_all_stripped(&[
+            "set langmap=q:",
+            "se lmap=q:",
+            "setlocal langmap+=q:",
+            "set so=5 langremap",
+            "set lrm",
+            "set nolangremap",
+            "set langnoremap",
+            "set nolnr",
+            "set so=5 | set langmap=q:",
+        ]);
+    }
+
+    #[test]
+    fn a_stripped_langmap_line_leaves_the_engine_langmap_empty() {
+        use vim_core::execution::VimEngine;
+        let text = "set langmap=q:\nnnoremap x 0q!echo hi<CR>\n";
+        let mut trusted = VimEngine::new();
+        let _ = trusted.source_config_text(text);
+        assert_eq!(trusted.options().langmap(), "q:");
+        let mut engine = VimEngine::new();
+        let _ = engine.source_config_text(&sandbox_config_text(text));
+        assert_eq!(engine.options().langmap(), "");
     }
 
     // ── panelmap trust tiers (P7) ────────────────────────────────────
@@ -1828,9 +2137,9 @@ imap jj <Esc>
     fn the_policy_counts_the_lines_it_disables() {
         use crate::settings::ProjectVimrc;
         let text = "nnoremap j gj\nnmap Q iBAD<Esc>\nnnoremap K :!ls<CR>\nset tw=10\n\
-                    \" [sandbox] stripped: nmap Q x\n";
+                    set so=5 | !ls\n\" [sandbox] stripped: nmap Q x\n";
         let sandboxed = apply_vimrc_policy(text, true, ProjectVimrc::Sandbox).unwrap();
-        assert_eq!(sandboxed.stripped, 2, "{}", sandboxed.text);
+        assert_eq!(sandboxed.stripped, 3, "{}", sandboxed.text);
         for (is_project_level, policy) in [
             (true, ProjectVimrc::Trusted),
             (false, ProjectVimrc::Sandbox),
