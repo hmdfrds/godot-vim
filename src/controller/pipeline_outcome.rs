@@ -92,6 +92,11 @@ mod tests {
                  <CR> confirms a candidate the user never chose",
             ),
             (
+                "completion::dispatch_host_key(",
+                "a key no row claimed must reach Godot's own popup actions, or \
+                 Enter and Tab stop accepting",
+            ),
+            (
                 "pipeline_outcome::outcome_for(disposition)",
                 "the overlay's disposition must reach the pipeline outcome, or a \
                  handoff is indistinguishable from a consume",

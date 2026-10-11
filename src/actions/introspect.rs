@@ -282,6 +282,13 @@ pub(crate) fn explain_report(
              while the command line has focus. This is how the key would resolve if it were:"
         );
         explain_on_path(&mut out, overlay_path, &probes, index, registry, vim_claims);
+        let _ = writeln!(
+            out,
+            "A key no rule here claims goes to Godot's own popup actions first (Editor \
+             Settings > Shortcuts: ui_text_completion_accept, ui_text_completion_replace, \
+             ui_text_completion_query, ui_up, ui_down, ui_page_up, ui_page_down, \
+             ui_text_caret_line_end), then to the vim engine."
+        );
     }
     out
 }
@@ -544,6 +551,7 @@ mod tests {
                 mode: Some(vim_core::primitives::Mode::Insert),
                 selected_index: 0,
                 caret: (0, 0),
+                host_key: crate::actions::surface::HostKey::None,
             })
             .expect("the hypothetical facts activate the overlay");
         explain_report(lhs, chain, &path, Some(&overlay), &index, &reg, NEVER)
@@ -664,15 +672,10 @@ mod tests {
 editor.nav  (no bindings)
 editor.insert  (barrier — takes no bindings)
 editor.completion  (overlay: while the script editor is in an insert-like mode, seal: Open)
-  panelmap editor.completion <C-@> godotvim.completion.trigger    [godotvim.completion]
   panelmap editor.completion <C-n> godotvim.completion.next    [godotvim.completion]
   panelmap editor.completion <C-p> godotvim.completion.prev    [godotvim.completion]
   panelmap editor.completion <C-y> godotvim.completion.confirm require_selection=0    [godotvim.completion]
   panelmap editor.completion <C-e> godotvim.completion.dismiss    [godotvim.completion]
-  panelmap editor.completion <Tab> godotvim.completion.confirm    [godotvim.completion]
-  panelmap editor.completion <CR> godotvim.completion.confirm    [godotvim.completion]
-  panelmap editor.completion <Up> godotvim.completion.navigate    [godotvim.completion]
-  panelmap editor.completion <Down> godotvim.completion.navigate    [godotvim.completion]
 prompt  (no bindings)
 searchbox  (parent: panel, seal: Sealed)
   panelmap <shift> searchbox <CR> godotvim.search.accept    [godotvim.searchbox]
@@ -703,7 +706,7 @@ panel  (parent: -, seal: Open)
   panelmap <physical> <void> <norepeat> panel <C-j> godotvim.focus.down    [godotvim.panel]
   panelmap <physical> <void> <norepeat> panel <C-k> godotvim.focus.up    [godotvim.panel]
   panelmap <physical> <void> <norepeat> panel <C-l> godotvim.focus.right    [godotvim.panel]
---- 31 binding(s) ---
+--- 26 binding(s) ---
 ";
         assert_eq!(report, expected);
     }
@@ -1021,7 +1024,7 @@ panel  (parent: -, seal: Open)
         // The question this whole section exists to answer: "why is my <CR>
         // dead / what will it do over the popup?" could never be answered
         // live, because typing the command puts focus on the command line.
-        let report = explain_counterfactual("<CR>", &fs_chain());
+        let report = explain_counterfactual("<C-y>", &fs_chain());
         assert!(report.contains("editor.completion"), "{report}");
         assert!(report.contains("caps: Caps(POPUP)"), "{report}");
         assert!(
@@ -1033,6 +1036,9 @@ panel  (parent: -, seal: Open)
             "{report}"
         );
         assert!(report.contains("elastic"), "{report}");
+        // Enter has no row: the report says who decides it.
+        let report = explain_counterfactual("<CR>", &fs_chain());
+        assert!(report.contains("ui_text_completion_accept"), "{report}");
     }
 
     #[test]
@@ -1050,7 +1056,32 @@ panel  (parent: -, seal: Open)
 
     #[test]
     fn the_counterfactual_reports_a_handoff_rule_honestly() {
-        let report = explain_counterfactual("<Up>", &fs_chain());
+        let reg = registry();
+        let mut index = builtin_index(&reg);
+        let mut diagnostics = Vec::new();
+        crate::actions::bind::apply_text(
+            &mut index,
+            &reg,
+            "panelmap editor.completion <C-j> godotvim.completion.navigate",
+            &vim_core::keymap::MappingOwner::User,
+            "test",
+            crate::actions::bind::Provenance::User,
+            &mut diagnostics,
+        );
+        assert!(diagnostics.is_empty(), "{diagnostics:?}");
+        let chain = fs_chain();
+        let path = providers::forest().classify(&chain).expect("total probe");
+        let overlay = index
+            .forest()
+            .overlay(&crate::actions::surface::OverlayFacts {
+                at_attached_editor: true,
+                mode: Some(vim_core::primitives::Mode::Insert),
+                selected_index: 0,
+                caret: (0, 0),
+                host_key: crate::actions::surface::HostKey::None,
+            })
+            .expect("active");
+        let report = explain_report("<C-j>", &chain, &path, Some(&overlay), &index, &reg, NEVER);
         assert!(report.contains("the vim engine is skipped"), "{report}");
         assert!(report.contains("(handoff)"), "{report}");
     }

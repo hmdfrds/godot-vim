@@ -668,12 +668,16 @@ impl GodotVimCore {
         let plan = {
             let index = &self.bindings;
             let registry = &self.actions;
-            let facts = crate::actions::surface::OverlayFacts {
+            let mut facts = crate::actions::surface::OverlayFacts {
                 at_attached_editor: true,
                 mode: self.controller.as_ref().map(VimController::mode),
                 selected_index: ed.get_code_completion_selected_index(),
                 caret: (ed.get_caret_line(), ed.get_caret_column()),
+                host_key: crate::actions::surface::HostKey::None,
             };
+            if facts.insert_like() {
+                facts.host_key = host_completion_key(&key_event, facts.popup());
+            }
             // Candidates only; the facts cross on BOTH arms, because the
             // provenance machine advances on every keystroke, typed
             // characters included.
@@ -1023,6 +1027,19 @@ fn detect_selection_shape(editor: &Gd<CodeEdit>) -> vim_core::primitives::Select
     } else {
         SelectionShape::Char
     }
+}
+
+/// Godot's verdict on this key event, read from the live InputMap with
+/// CodeEdit's exact matching. The raw event keeps KP_Enter apart from Enter,
+/// which `parse_godot_key` folds together.
+fn host_completion_key(
+    key_event: &Gd<InputEventKey>,
+    popup: bool,
+) -> crate::actions::surface::HostKey {
+    crate::actions::surface::HostKey::classify(
+        |action| key_event.is_action_ex(action).exact_match(true).done(),
+        popup,
+    )
 }
 
 #[cfg(test)]

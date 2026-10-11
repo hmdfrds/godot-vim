@@ -8,6 +8,7 @@
 //!   +- clear transient messages
 //!   +- vimdebug step-mode intercept
 //!   +- completion overlay dispatch (pre-engine)
+//!   +- Godot's own completion keys, for a key no overlay row claimed
 //!   +- passthrough check
 //!   +- pre-processing: refresh_from_editor, set config
 //!   +- session.process_key(key) -> ProcessResult
@@ -83,6 +84,23 @@ pub(super) fn process_cycle_impl(
             session.host_mut().ensure_undo_balanced(mode);
             return outcome;
         }
+    }
+
+    // Godot's own popup keys, for a key no row claimed.
+    let disposition = completion::dispatch_host_key(
+        session,
+        editor,
+        &mut ctx.transient.completion,
+        plan.facts.host_key,
+    );
+    if let Some(outcome) = super::pipeline_outcome::outcome_for(disposition) {
+        log::debug!(
+            "process_cycle: godot completion key={key} -> {}",
+            outcome.log_label()
+        );
+        let mode = session.engine().mode();
+        session.host_mut().ensure_undo_balanced(mode);
+        return outcome;
     }
 
     if should_passthrough_key(session.engine(), &ctx.passthrough_keys, key) {

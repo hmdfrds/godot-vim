@@ -249,9 +249,10 @@ pub(crate) trait CompletionOps {
     fn select(&mut self, index: i32);
     /// The user pressed a key `CodeEdit` moves the selection on by itself.
     fn navigated(&mut self);
-    /// Accept the selected candidate and reconcile the text delta with the
-    /// engine, so dot-repeat and macro recording capture the completed text.
-    fn confirm(&mut self);
+    /// Accept the selected candidate (`replace` also overwrites the rest of
+    /// the word, code_edit.cpp:2611-2639) and reconcile the text delta with
+    /// the engine, so dot-repeat and macro recording capture it.
+    fn confirm(&mut self, replace: bool);
     fn cancel(&mut self);
     /// Whether the current selection was chosen by the user rather than
     /// preselected by Godot.

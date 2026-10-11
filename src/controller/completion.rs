@@ -6,8 +6,10 @@
 //! trigger, navigate, and confirm, all without engine changes:
 //! [`dispatch_overlay`] runs whatever the `editor.completion` overlay
 //! resolved for this keystroke, folded by the SAME `resolve::dispose` every
-//! other surface uses. Keeping the popup in step with engine edits is
-//! `effects::completion`, at the end of every engine pass.
+//! other surface uses, and [`dispatch_host_key`] does what Godot's own
+//! shortcut actions do for a key no row claimed. Keeping the popup in step
+//! with engine edits is `effects::completion`, at the end of every engine
+//! pass.
 //!
 //! # One pipeline, and still on this transport
 //!
@@ -33,6 +35,7 @@ use vim_core::execution::VimSession;
 use crate::actions::action::{ActionCtx, CompletionOps};
 use crate::actions::outcome::Outcome;
 use crate::actions::resolve::{self, CandidateTarget, Disposition};
+use crate::actions::surface::HostKey;
 use crate::bridge;
 use crate::bridge::code_edit_ext::CodeEditExt;
 use crate::bridge::codec::usize_to_i32;
@@ -145,8 +148,8 @@ impl CompletionOps for CompletionPort<'_> {
         *self.provenance = self.provenance.chosen();
     }
 
-    fn confirm(&mut self) {
-        confirm_and_reconcile_completion(self.session, self.editor);
+    fn confirm(&mut self, replace: bool) {
+        confirm_and_reconcile_completion(self.session, self.editor, replace);
     }
 
     fn cancel(&mut self) {
@@ -156,6 +159,51 @@ impl CompletionOps for CompletionPort<'_> {
     fn selection_is_explicit(&self) -> bool {
         self.provenance.explicit
     }
+}
+
+/// Godot's own popup keys, for a key no `panelmap` row claimed: what
+/// `CodeEdit::gui_input` does for each action (code_edit.cpp:768-845),
+/// through the same public calls, except navigation, which is handed to
+/// `CodeEdit` so it moves its own highlight. `Ignore` lets the engine have
+/// the key.
+pub(crate) fn host_key_disposition(ops: &mut dyn CompletionOps, key: HostKey) -> Disposition {
+    match key {
+        HostKey::None => Disposition::Ignore,
+        // What the script editor's Completion Query item does
+        // (script_text_editor.cpp:1700). Never gated on
+        // `is_code_completion_enabled()`: Godot's editors never set it (#25).
+        HostKey::Query => {
+            ops.request(true);
+            Disposition::Consume
+        }
+        _ if !ops.popup_visible() => Disposition::Ignore,
+        HostKey::Navigate => Disposition::Handoff,
+        HostKey::Close => {
+            ops.cancel();
+            Disposition::Ignore
+        }
+        HostKey::Accept | HostKey::Replace => {
+            ops.confirm(key == HostKey::Replace);
+            Disposition::Consume
+        }
+    }
+}
+
+pub(crate) fn dispatch_host_key(
+    session: &mut VimSession<GodotHost>,
+    editor: &mut Gd<CodeEdit>,
+    provenance: &mut Provenance,
+    key: HostKey,
+) -> Disposition {
+    if key == HostKey::None {
+        return Disposition::Ignore;
+    }
+    let mut port = CompletionPort {
+        session,
+        editor,
+        provenance,
+    };
+    host_key_disposition(&mut port, key)
 }
 
 /// Pre-engine dispatch: run the overlay's plan through the one consumption
@@ -206,6 +254,7 @@ pub(crate) fn dispatch_overlay(
 fn confirm_and_reconcile_completion(
     session: &mut VimSession<GodotHost>,
     editor: &mut Gd<CodeEdit>,
+    replace: bool,
 ) {
     let before_text = editor.get_text().to_string();
     let single_caret = editor.get_caret_count() == 1;
@@ -217,7 +266,7 @@ fn confirm_and_reconcile_completion(
 
     // CodeEdit replaces `code_completion_base` (the typed prefix) with the
     // selected item's `insert_text`. This is the only mutation.
-    editor.confirm_code_completion_ex().replace(false).done();
+    editor.confirm_code_completion_ex().replace(replace).done();
 
     // Fix 4B: Invalidate cache IMMEDIATELY after confirm so that
     // host.text() reflects post-completion state for undo node sync.
@@ -271,6 +320,7 @@ mod tests {
             mode: Some(vim_core::primitives::Mode::Insert),
             selected_index,
             caret,
+            host_key: HostKey::None,
         }
     }
 
@@ -346,6 +396,85 @@ mod tests {
         ];
         for (what, prev, f, want) in rows {
             assert_eq!(advance(*prev, f), *want, "{what}");
+        }
+    }
+
+    /// A popup with no Godot in it, logging every command.
+    #[derive(Default)]
+    struct Popup {
+        open: bool,
+        log: Vec<&'static str>,
+    }
+
+    impl CompletionOps for Popup {
+        fn popup_visible(&self) -> bool {
+            self.open
+        }
+        fn option_count(&self) -> i32 {
+            3
+        }
+        fn selected_index(&self) -> i32 {
+            if self.open {
+                0
+            } else {
+                -1
+            }
+        }
+        fn request(&mut self, force: bool) {
+            self.log
+                .push(if force { "request(force)" } else { "request" });
+            self.open = true;
+        }
+        fn select(&mut self, _index: i32) {
+            self.log.push("select");
+        }
+        fn navigated(&mut self) {
+            self.log.push("navigated");
+        }
+        fn confirm(&mut self, replace: bool) {
+            self.log.push(if replace { "replace" } else { "accept" });
+            self.open = false;
+        }
+        fn cancel(&mut self) {
+            self.log.push("cancel");
+            self.open = false;
+        }
+        fn selection_is_explicit(&self) -> bool {
+            false
+        }
+    }
+
+    #[test]
+    fn host_keys_do_what_codeedit_does_and_nothing_else() {
+        use Disposition::{Consume, Handoff, Ignore};
+        // (key, popup open, disposition, commands)
+        let rows: &[(HostKey, bool, Disposition, &[&str])] = &[
+            (HostKey::None, true, Ignore, &[]),
+            // Whether the row was chosen does not matter: Godot preselects
+            // row 0 and accepts it (code_edit.cpp:2582, 822-823).
+            (HostKey::Accept, true, Consume, &["accept"]),
+            (HostKey::Replace, true, Consume, &["replace"]),
+            (HostKey::Navigate, true, Handoff, &[]),
+            (HostKey::Close, true, Ignore, &["cancel"]),
+            (HostKey::Query, true, Consume, &["request(force)"]),
+            // #25: Ctrl+Space opens the popup, and never reaches i_CTRL-@.
+            (HostKey::Query, false, Consume, &["request(force)"]),
+            (HostKey::Accept, false, Ignore, &[]),
+            (HostKey::Replace, false, Ignore, &[]),
+            (HostKey::Navigate, false, Ignore, &[]),
+            (HostKey::Close, false, Ignore, &[]),
+        ];
+        for (key, open, want, log) in rows {
+            let mut popup = Popup {
+                open: *open,
+                ..Popup::default()
+            };
+            assert_eq!(
+                host_key_disposition(&mut popup, *key),
+                *want,
+                "{key:?} open={open}"
+            );
+            assert_eq!(popup.log, *log, "{key:?} open={open}");
         }
     }
 
