@@ -121,6 +121,16 @@ None. The breakpoint, fold and signal-connection gutters are always Godot's.
 
 The **Line Numbers** setting keeps its options and your stored choice.
 
+**Godot's Find bar keeps Enter and Escape.** GodotVim took any text field
+beside a list or tree for a dock filter box, so in the script editor's Find
+and Replace bar Enter and Escape moved focus away instead of finding the
+next match or closing the bar. The docs page's Find bar and the FileSystem
+path field lost Enter the same way. Fields whose Enter Godot handles are now
+left to Godot like any other Godot text field, so Escape closes the Find bar
+and returns to the script, and `Ctrl-h/j/k/l` there do what Godot does
+instead of moving focus. Filter boxes such as the Scene and Filter Scripts
+boxes work as before.
+
 ## From v1.8.0
 
 **Textwidth now defaults to `0`, as in Vim.** With the old default of 80,

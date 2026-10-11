@@ -1780,6 +1780,14 @@ mod tests {
             };
             assert_ne!(ids(&bare_line), ids(&filter_box));
 
+            // `enter_submits`: the focused LineEdit's own connections, made
+            // when Godot builds it, so the focus InstanceId covers it too.
+            let find_bar = FocusChain {
+                enter_submits: true,
+                ..filter_box.clone()
+            };
+            assert_ne!(ids(&filter_box), ids(&find_bar));
+
             // `is_plugin_prompt` — keyed by the prompt LineEdit's InstanceId,
             // which is what `FocusChain::sample` compares the focus owner to.
             let prompt = FocusChain {

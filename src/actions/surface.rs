@@ -172,12 +172,15 @@ pub(crate) struct FocusChain {
     /// unbounded (`src/navigation/filesystem_explorer.rs`). Grants
     /// [`Caps::FILEOPS`] through the `dock.filesystem` surface.
     pub(crate) in_filesystem_dock: bool,
-    /// Discriminant for the `searchbox` probe ONLY, reproducing the
-    /// filter-box test the classifier this plane replaced ran. There is
-    /// deliberately no `sibling_search_box` field: the depth-20 DFS that finds
-    /// one stays inside `handle_slash`, run once per `/` press exactly as
-    /// today, rather than once per focus change.
+    /// Half of [`FocusChain::is_filter_box`], the filter-box test the
+    /// classifier this plane replaced ran. There is deliberately no
+    /// `sibling_search_box` field: the depth-20 DFS that finds one stays
+    /// inside `handle_slash`, run once per `/` press exactly as today, rather
+    /// than once per focus change.
     pub(crate) sibling_nav_control: Option<InstanceId>,
+    /// The focused `LineEdit` has a `text_submitted` handler, so Enter already
+    /// does something there. Recorded for `LineEdit`s only.
+    pub(crate) enter_submits: bool,
     /// Instance equality against the `FileSystemExplorer` prompt `LineEdit`.
     /// Probed before `searchbox` **and** before `foreign`; see the ordering
     /// argument on `providers::PROVIDERS`.
@@ -198,6 +201,13 @@ impl FocusChain {
     /// Position of the nearest node answering `class`, focus owner included.
     pub(crate) fn index_of_ancestor(&self, class: &str) -> Option<usize> {
         self.nodes.iter().position(|n| n.is(class))
+    }
+
+    /// A dock filter box: a `LineEdit` beside a list or tree whose Enter
+    /// Godot leaves free. The Find bar sits beside one too, but Enter there is
+    /// Find next.
+    pub(crate) fn is_filter_box(&self) -> bool {
+        self.focus_is("LineEdit") && self.sibling_nav_control.is_some() && !self.enter_submits
     }
 
     /// Whether the focus owner is the `CodeEdit` this plugin drives.
@@ -268,16 +278,21 @@ impl FocusChain {
         // Only a LineEdit can be a filter box, and the sibling search is the
         // expensive part of sampling (a depth-8 climb over a depth-20 DFS), so
         // it stays gated exactly as `classify_focus` gates it.
-        let sibling_nav_control = if focus_owner.is_class("LineEdit") {
-            crate::navigation::find_sibling_nav_control(&focus_owner).map(|c| c.instance_id())
-        } else {
-            None
-        };
+        let (sibling_nav_control, enter_submits) =
+            match focus_owner.clone().try_cast::<godot::classes::LineEdit>() {
+                Ok(line_edit) => (
+                    crate::navigation::find_sibling_nav_control(&focus_owner)
+                        .map(|c| c.instance_id()),
+                    crate::navigation::enter_submits(&line_edit),
+                ),
+                Err(_) => (None, false),
+            };
 
         Self {
             nodes,
             in_filesystem_dock: crate::navigation::is_in_filesystem_dock(&focus_owner),
             sibling_nav_control,
+            enter_submits,
             is_plugin_prompt: prompt.is_some_and(|p| p == focus_owner.instance_id()),
             ..base
         }

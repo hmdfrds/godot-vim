@@ -228,11 +228,12 @@ pub(crate) fn explain_report(
     }
     let _ = writeln!(
         out,
-        "facts: attached_editor={:?} mode={:?} in_filesystem_dock={} sibling_nav={} prompt={}",
+        "facts: attached_editor={:?} mode={:?} in_filesystem_dock={} sibling_nav={} enter_submits={} prompt={}",
         chain.attached_editor,
         chain.editor_mode,
         chain.in_filesystem_dock,
         chain.sibling_nav_control.is_some(),
+        chain.enter_submits,
         chain.is_plugin_prompt
     );
 

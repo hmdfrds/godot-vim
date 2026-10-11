@@ -26,6 +26,6 @@ pub(crate) mod filesystem_explorer;
 pub(crate) mod window;
 
 pub(crate) use cycle::handle_window_nav_action;
-pub(crate) use dock_search::find_sibling_nav_control;
+pub(crate) use dock_search::{enter_submits, find_sibling_nav_control};
 pub(crate) use filesystem_explorer::{is_in_filesystem_dock, FileSystemExplorer};
 pub(crate) use window::handle_window_nav;

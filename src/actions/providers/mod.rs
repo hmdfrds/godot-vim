@@ -27,12 +27,12 @@
 //!    Settings `LineEdit` would resolve to `unknown` → `panel` instead of to a
 //!    `Barrier`, and Ctrl+hjkl would be consumed mid-word — a direct violation
 //!    of the old dispatcher's refusal to touch a foreign text input.
-//! 3. **`foreign` must not be first.** Its predicate claims "a `LineEdit` with
-//!    no sibling nav control", and whether the plugin's own FileSystem prompt
-//!    has one is an editor-runtime fact nobody can settle from source. Ahead
-//!    of `prompt` it could take the prompt, and `<Esc>` would meet a `Barrier`
-//!    instead of dismissing it. `prompt`, `searchbox`, `filesystem`, `dock`
-//!    and `editor` all get first refusal for the same reason.
+//! 3. **`foreign` must not be first.** Its predicate claims "a `LineEdit` that
+//!    is not a filter box", and whether the plugin's own FileSystem prompt is
+//!    one is an editor-runtime fact nobody can settle from source. Ahead of
+//!    `prompt` it would take the prompt as built, and `<Esc>` would meet a
+//!    `Barrier` instead of dismissing it. `prompt`, `searchbox`, `filesystem`,
+//!    `dock` and `editor` all get first refusal for the same reason.
 //! 4. **A descendant precedes its ancestor** — `filesystem` and `debugger`
 //!    both before `dock` — or the child never matches and its bindings are
 //!    silently dead.
@@ -456,9 +456,83 @@ mod tests {
                 seal: Seal::Barrier,
                 anchor: Anchor::Node(0),
             },
+            // ── Godot's own fields beside a list, whose Enter is Godot's ──
+            Case {
+                what: "the script editor's Find bar: Enter is Find next",
+                chain: FocusChain {
+                    nodes: vec![
+                        line_edit(300),
+                        plain("VBoxContainer", 301),
+                        plain("FindReplaceBar", 302),
+                        plain("VBoxContainer", 303),
+                        plain("ScriptEditor", 304),
+                    ],
+                    sibling_nav_control: Some(id(305)),
+                    enter_submits: true,
+                    ..Default::default()
+                },
+                ids: FOREIGN,
+                caps: Caps::TEXTENTRY,
+                seal: Seal::Barrier,
+                anchor: Anchor::Node(0),
+            },
+            Case {
+                what: "the docs page's Find bar",
+                chain: FocusChain {
+                    nodes: vec![
+                        line_edit(306),
+                        plain("FindBar", 307),
+                        plain("EditorHelp", 308),
+                    ],
+                    sibling_nav_control: Some(id(309)),
+                    enter_submits: true,
+                    ..Default::default()
+                },
+                ids: FOREIGN,
+                caps: Caps::TEXTENTRY,
+                seal: Seal::Barrier,
+                anchor: Anchor::Node(0),
+            },
+            Case {
+                what: "the FileSystem path field: Enter navigates",
+                chain: FocusChain {
+                    sibling_nav_control: Some(id(311)),
+                    enter_submits: true,
+                    ..fs_chain(line_edit(310))
+                },
+                ids: FOREIGN,
+                caps: Caps::TEXTENTRY,
+                seal: Seal::Barrier,
+                anchor: Anchor::Node(0),
+            },
+            Case {
+                what: "the debugger's Evaluator: Enter evaluates",
+                chain: FocusChain {
+                    sibling_nav_control: Some(id(313)),
+                    enter_submits: true,
+                    ..debugger_chain(line_edit(312))
+                },
+                ids: FOREIGN,
+                caps: Caps::TEXTENTRY,
+                seal: Seal::Barrier,
+                anchor: Anchor::Node(0),
+            },
             // ── The plugin's own prompt ───────────────────────────────
             Case {
-                what: "FS create prompt, with a sibling nav control (today's shape)",
+                what: "FS create prompt as built: sibling nav control and Enter handler",
+                chain: FocusChain {
+                    sibling_nav_control: Some(id(141)),
+                    enter_submits: true,
+                    is_plugin_prompt: true,
+                    ..fs_chain(line_edit(140))
+                },
+                ids: PROMPT,
+                caps: Caps::TEXTENTRY,
+                seal: Seal::Sealed,
+                anchor: Anchor::Node(0),
+            },
+            Case {
+                what: "FS create prompt, with a sibling nav control",
                 chain: FocusChain {
                     sibling_nav_control: Some(id(141)),
                     is_plugin_prompt: true,
@@ -1084,13 +1158,10 @@ mod tests {
 
     #[test]
     fn the_new_classifier_agrees_with_classify_focus() {
-        // The divergence count the design requires is zero, with exactly one
-        // structural exception, asserted rather than waived: a plugin prompt
-        // that has no sibling nav control. Today's classifier answers
-        // `Foreign` for it — a Barrier — because it can only see a `LineEdit`
-        // with no sibling. That is the very failure `prompt` exists to make
-        // impossible, so disagreeing there is the point of the surface, not a
-        // transcription slip.
+        // Two divergences from `classify_focus_equivalent` are intended: it
+        // makes a plugin prompt with no sibling nav control `Foreign` (the
+        // failure `prompt` prevents), and calls Godot's Find bar, whose Enter
+        // Godot handles, a filter box.
         let forest = forest();
         for case in golden() {
             let path = forest.classify(&case.chain).expect("total");
@@ -1099,8 +1170,12 @@ mod tests {
             if new == old {
                 continue;
             }
+            let prompt_without_sibling =
+                case.chain.is_plugin_prompt && new == Legacy::SearchBox && old == Legacy::Foreign;
+            let enter_is_godots =
+                case.chain.enter_submits && new == Legacy::Foreign && old == Legacy::SearchBox;
             assert!(
-                case.chain.is_plugin_prompt && new == Legacy::SearchBox && old == Legacy::Foreign,
+                prompt_without_sibling || enter_is_godots,
                 "'{}' diverges: surface plane says {new:?}, classify_focus says {old:?}",
                 case.what
             );
@@ -1115,10 +1190,10 @@ mod tests {
     /// Both entries are the same fact: the FileSystem prompt is a `LineEdit`
     /// this plugin builds and parents into Godot's own dock
     /// (`filesystem_explorer.rs`), so the two generic `LineEdit`
-    /// predicates cannot be made to miss it. Whether
-    /// `find_sibling_nav_control` reaches the dock's tree from the prompt is
-    /// an editor-runtime fact — today it does, so `searchbox` would claim it;
-    /// re-parent the prompt one level and `foreign` would. Teaching either
+    /// predicates cannot be made to miss it. Which one would claim it hangs on
+    /// editor-runtime facts: as built the prompt has a sibling nav control
+    /// and a `text_submitted` handler, so `foreign` would; without the handler
+    /// `searchbox` would. Teaching either
     /// predicate about `is_plugin_prompt` would put the decision in three
     /// places that must agree; giving `prompt` first refusal keeps it in one,
     /// where the `ordering` tests below can falsify it.

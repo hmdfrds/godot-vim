@@ -97,6 +97,13 @@ pub(crate) fn find_sibling_nav_control(node: &Gd<Control>) -> Option<Gd<Control>
     None
 }
 
+/// Whether Godot gives Enter a job in this `LineEdit`: Find next in the Find
+/// bar, navigate in the FileSystem path field, evaluate in the debugger's
+/// Evaluator. A filter box filters as you type and connects no handler.
+pub(crate) fn enter_submits(line_edit: &Gd<LineEdit>) -> bool {
+    line_edit.has_connections("text_submitted")
+}
+
 /// Select the best search/filter LineEdit among all visible candidates.
 ///
 /// Scoring heuristic (lower = better): placeholder text containing
