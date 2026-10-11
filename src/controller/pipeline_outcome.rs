@@ -71,25 +71,33 @@ mod tests {
         }
     }
 
-    /// `process_cycle_impl` still wires the overlay to the pipeline.
-    ///
-    /// Source-level, in the shape `plugin/signals.rs` already uses, because
-    /// `process_cycle_impl` takes `&mut Gd<CodeEdit>` and cannot be called
-    /// under `cargo test`. Every unit below it is tested on its own, which is
-    /// exactly the gap: `advance` has a six-row table and `outcome_for` has a
-    /// truth table, and deleting the CALL to either left the whole suite
-    /// green under mutation. These three lines are the wiring no other test
-    /// can see.
+    /// The calls that wire the separately tested units into
+    /// `process_cycle_impl`, which takes `&mut Gd<CodeEdit>` and cannot run
+    /// under `cargo test`. Source-level, as in `plugin/signals.rs`.
     #[test]
     fn the_overlay_is_still_wired_into_the_keystroke_pipeline() {
         let src = include_str!("process.rs");
         let production = src.split_once("\n#[cfg(test)]").map_or(src, |(h, _)| h);
         for (needle, why) in [
             (
-                "completion::advance(ctx.transient.completion, &plan.facts)",
-                "the provenance machine must advance on every keystroke, or an \
-                 inherited selection survives the typing that should clear it and \
-                 <CR> confirms a candidate the user never chose",
+                "completion::continues_pending_mapping(session.engine(), key)",
+                "a popup key that continues a pending mapping must reach the \
+                 mapping, or `inoremap j<CR>` stops firing while the popup is open",
+            ),
+            (
+                "resolve_mapping_timeout_impl(session, ctx, editor);\n            let mode",
+                "a pending mapping prefix must flush before a popup key acts, or \
+                 `inoremap jk` + `Obj` + Enter accepts for \"Ob\" and then appends the j",
+            ),
+            (
+                "push(crate::bridge::godot_host::PendingUiAction::DisarmCompletion)",
+                "a key a Vim popup row took must stop the delay, or Ctrl+E closes \
+                 the popup and the delay opens it again",
+            ),
+            (
+                "completion::dispatch_host_key(",
+                "a key no row claimed must reach Godot's own popup actions, or \
+                 Enter and Tab stop accepting",
             ),
             (
                 "pipeline_outcome::outcome_for(disposition)",

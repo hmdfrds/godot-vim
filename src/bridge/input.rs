@@ -2076,11 +2076,11 @@ mod tests {
         assert_eq!(result, Some(KeyEvent::new(Key::Char('@'), Modifiers::CTRL)));
     }
 
-    /// Drift guard: the completion trigger in `controller::completion` checks
-    /// for Ctrl+@ (Key::Char('@') with CTRL). This test verifies that the
-    /// bridge's Ctrl+Space translation produces exactly that KeyEvent.
-    /// If someone changes resolve_ctrl_key's Step 1, this test will break
-    /// and signal that completion.rs must be updated to match.
+    /// Drift guard: Ctrl+Space reaches vim-core as Ctrl+@ (Key::Char('@')
+    /// with CTRL), Vim's i_CTRL-@, once the user takes it out of Godot's
+    /// Completion Query, and a `panelmap editor.completion <C-@>` row is
+    /// spelled that way (REFERENCE.md). If someone changes resolve_ctrl_key's
+    /// Step 1, this test breaks and both must follow.
     #[test]
     fn ctrl_space_bridge_output_matches_completion_trigger() {
         let event = translate_key(
@@ -2093,14 +2093,12 @@ mod tests {
             false,
         )
         .unwrap();
-        // This is the exact key the `editor.completion` surface binds
-        // `godotvim.completion.trigger` to. If this assertion fails, the
-        // `<C-@>` line in `actions::providers::completion::DEFAULTS` is a
-        // silently dead binding — it would still load, and never fire.
+        // If this assertion fails, a user's `<C-@>` row is a silently dead
+        // binding: it would still load, and never fire.
         assert!(
             event.modifiers().contains(Modifiers::CTRL) && event.key() == Key::Char('@'),
-            "Bridge Ctrl+Space output changed! Was {:?} — update the <C-@> default \
-             in actions::providers::completion to the new post-translation form",
+            "Bridge Ctrl+Space output changed! Was {:?}: update the <C-@> spelling \
+             documented for editor.completion rows",
             event,
         );
     }

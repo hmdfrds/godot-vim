@@ -5,6 +5,60 @@ fresh install.
 
 ## From v1.8.2
 
+**The completion popup follows Godot again.** Six notes:
+
+1. **Enter and Tab accept the highlighted row**, as they do with the plugin
+   off. v1.8 accepted only a row you had moved onto. Which keys accept is now
+   whatever **Editor Settings > Shortcuts** says for Completion Accept
+   (`ui_text_completion_accept`) and Completion Replace
+   (`ui_text_completion_replace`), read on every key press. On Godot 4.6.2
+   and later plain Enter and Tab accept and their Shift forms replace; on 4.4
+   to 4.6.1 it is the other way round, and GodotVim follows either. Keypad
+   Enter, Shift+Enter, Shift+Tab, Page Up and Page Down now do what Godot does
+   with the popup open, and so does any key you add there.
+
+2. **The popup opens after Code Complete Delay** (Editor Settings > Text
+   Editor > Completion), not on the first letter you type, and Esc inside the
+   delay opens nothing. With Code Complete Enabled off it still never opens
+   while you type; `Ctrl-Space`, `Ctrl-N` and `Ctrl-P` still open it at once.
+   Backspace no longer opens it, as in Godot, where only typing starts the
+   delay.
+
+3. **Delete the lines v1.8 asked you to add.** `require_selection=` is
+   ignored now, and a `<CR>` or `<Tab>` row on `editor.completion` still wins
+   over your Shortcuts, so on Godot 4.4 to 4.6.1 it would accept where Godot
+   replaces:
+
+   ```vim
+   panelmap editor.completion <CR> godotvim.completion.confirm require_selection=0
+   panelmap editor.completion <Tab> godotvim.completion.confirm require_selection=0
+   ```
+
+4. **To keep Enter a newline and accept with Tab only** (what keeping just
+   the `<Tab>` line above gave you), delete that line too and, in Editor
+   Settings > Shortcuts, remove Enter and keypad Enter from Completion Accept
+   (on Godot 4.4 to 4.6.1, from Completion Replace). It is Godot's own
+   setting, so it also holds with the plugin off.
+   `panelunmap editor.completion <Tab>` no longer frees Tab while the popup is
+   open; the Shortcuts do. Enter and Tab act on an open popup first, and
+   Ctrl+Space always does, so an Insert mapping of one of them does not fire
+   then; to let it fire, remove the key from Completion Accept, Completion
+   Replace or Completion Query.
+
+5. **Ctrl+Space is Godot's Completion Query** in Insert, Replace and Virtual
+   Replace. `panelunmap editor.completion <C-@>` no longer brings back Vim's
+   `i_CTRL-@`, which pastes your previous insert and leaves Insert: the row it
+   removed is gone, and the line does nothing. Remove Ctrl+Space from
+   Completion Query in Shortcuts instead, and the key reaches Vim.
+
+6. **A mapping like `inoremap jk <Esc>` no longer corrupts an accept.** A popup
+   key typed while the `j` waits for its `k` inserts the `j` first and then
+   acts on the popup, as Vim does. v1.8 accepted first and appended the `j`
+   after the completed word.
+
+The shipped `editor.completion` rows are now only Vim's: `Ctrl-N`, `Ctrl-P`,
+`Ctrl-Y` and `Ctrl-E`, so `:panelmap` lists 26 bindings instead of 31.
+
 **`:w` no longer writes a shader into your script.** GodotVim runs in the
 Shader Editor too, but `:w` saved the text of the editor you typed it in into
 the script editor's current script. With a `.gdshader` focused, `:w` replaced
@@ -92,22 +146,17 @@ The completion popup keys now resolve through the same pipeline as every
 other panel binding, and three long-standing defects went with the old
 transport. Four notes:
 
-1. **Tab and Enter no longer accept a candidate you did not choose.** Godot
-   preselects the first row the moment a popup opens; pressing Enter to break
-   a line used to accept it. They now confirm only a selection you explicitly
-   moved onto (`Ctrl-N`/`Ctrl-P`, arrows, a click); otherwise the popup
-   closes and the key does its ordinary job. Restore the old behaviour with:
-
-   ```vim
-   panelmap editor.completion <CR> godotvim.completion.confirm require_selection=0
-   panelmap editor.completion <Tab> godotvim.completion.confirm require_selection=0
-   ```
+1. **Tab and Enter accepted only a candidate you chose.** v1.9.0 reverted
+   this: they accept the highlighted row again, as in Godot, and follow your
+   Editor Settings > Shortcuts. See [From v1.8.2](#from-v182), which also
+   says which v1.8 lines to delete.
 
 2. **Ctrl-Space, Ctrl-N and Ctrl-P now open the popup.** They never did: the
    old gate read a `CodeEdit` flag Godot's script editor never sets, so
    Ctrl-Space fell through to Vim's `i_CTRL-@`, which pastes your previous
-   insert and exits Insert mode. If you relied on that, restore it with
-   `panelunmap editor.completion <C-@>`.
+   insert and exits Insert mode. If you relied on that, remove Ctrl+Space
+   from Completion Query in Editor Settings > Shortcuts (since v1.9.0; v1.8
+   used `panelunmap editor.completion <C-@>`).
 
 3. **`<C-y>` and `<C-e>` are claimed while a popup is visible**: explicit
    accept and close-keeping-text, Vim's own popup keys. With no popup up they

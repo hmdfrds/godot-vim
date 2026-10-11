@@ -52,3 +52,20 @@ pub(super) fn handle_set_block_insert(
         cursor_return_offset.get()
     );
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testing::MockTextEdit;
+
+    #[test]
+    fn entering_normal_cancels_an_open_popup() {
+        let mut ed = MockTextEdit::new("");
+        ed.popup_open = true;
+        handle_set_mode(&mut ed, Mode::Insert);
+        assert!(ed.popup_open);
+        handle_set_mode(&mut ed, Mode::Normal);
+        assert!(!ed.popup_open);
+        assert_eq!(ed.completion_log, ["cancel"]);
+    }
+}

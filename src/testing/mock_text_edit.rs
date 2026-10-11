@@ -703,6 +703,10 @@ impl IdeCapable for MockTextEdit {
     fn request_code_completion(&mut self, force: bool) {
         self.completion_log.push(format!("request(force={force})"));
     }
+
+    fn arm_code_completion(&mut self) {
+        self.completion_log.push("arm".into());
+    }
 }
 impl NavigationCapable for MockTextEdit {}
 

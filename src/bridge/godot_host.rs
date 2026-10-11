@@ -61,6 +61,13 @@ pub(crate) enum PendingUiAction {
     PanelCommand(compact_str::CompactString),
     PerfReport,
     PerfReset,
+    /// Start Code Complete Delay for the caret on `line`; the timer is a
+    /// node on `GodotVimCore`.
+    ArmCompletion {
+        line: i32,
+    },
+    /// Stop Code Complete Delay: one of Vim's popup keys took the key.
+    DisarmCompletion,
     ShowTooltip {
         symbol: String,
         line: i32,

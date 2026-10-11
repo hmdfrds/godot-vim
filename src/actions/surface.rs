@@ -331,11 +331,59 @@ pub(crate) struct OverlayFacts {
     /// is up (`controller/completion.rs`); that is the only visibility answer
     /// it offers.
     pub(crate) selected_index: i32,
-    /// `(get_caret_line(), get_caret_column())`. Read by no overlay
-    /// predicate: it is the provenance machine's episode key, carried here
-    /// because the facts cross the plugin/controller seam on every keystroke
-    /// and the machine advances on all of them, typed characters included.
-    pub(crate) caret: (i32, i32),
+    /// What Godot's own InputMap makes of this key event. Read by no overlay
+    /// predicate: `controller::completion::dispatch_host_key` acts on it when
+    /// no `panelmap` row claimed the key.
+    pub(crate) host_key: HostKey,
+}
+
+/// Godot's own completion actions, as `CodeEdit::gui_input` tests them
+/// (code_edit.cpp:768-845, exact match).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum HostKey {
+    #[default]
+    None,
+    /// `ui_text_completion_query`, popup open or not.
+    Query,
+    /// `ui_up`, `ui_down`, `ui_page_up` or `ui_page_down` with the popup open.
+    Navigate,
+    /// `ui_text_caret_line_end` with the popup open: Godot cancels, then the
+    /// key does its usual job.
+    Close,
+    /// `ui_text_completion_replace` with the popup open.
+    Replace,
+    /// `ui_text_completion_accept` with the popup open.
+    Accept,
+}
+
+impl HostKey {
+    /// `is_action` says whether the event matches one of Godot's actions; it
+    /// must read the InputMap live, since a Shortcuts edit rewrites it
+    /// without a signal. Godot 4.4 to 4.6.1 put plain Enter and Tab in
+    /// replace and their Shift forms in accept; 4.6.2 swapped them. Both
+    /// come out of the InputMap, so neither is spelled here.
+    pub(crate) fn classify(is_action: impl Fn(&str) -> bool, popup: bool) -> Self {
+        if is_action("ui_text_completion_query") {
+            return Self::Query;
+        }
+        if !popup {
+            return Self::None;
+        }
+        if ["ui_up", "ui_down", "ui_page_up", "ui_page_down"]
+            .into_iter()
+            .any(&is_action)
+        {
+            Self::Navigate
+        } else if is_action("ui_text_caret_line_end") {
+            Self::Close
+        } else if is_action("ui_text_completion_replace") {
+            Self::Replace
+        } else if is_action("ui_text_completion_accept") {
+            Self::Accept
+        } else {
+            Self::None
+        }
+    }
 }
 
 impl Default for OverlayFacts {
@@ -347,7 +395,7 @@ impl Default for OverlayFacts {
             at_attached_editor: false,
             mode: None,
             selected_index: -1,
-            caret: (0, 0),
+            host_key: HostKey::None,
         }
     }
 }
@@ -951,18 +999,18 @@ mod tests {
             at_attached_editor: true,
             mode: Some(vim_core::primitives::Mode::Insert),
             selected_index: 0,
-            caret: (2, 5),
+            host_key: HostKey::Accept,
         };
         let OverlayFacts {
             at_attached_editor,
             mode,
             selected_index,
-            caret,
+            host_key,
         } = facts;
         assert!(at_attached_editor);
         assert!(mode.is_some());
         assert_eq!(selected_index, 0);
-        assert_eq!(caret, (2, 5));
+        assert_eq!(host_key, HostKey::Accept);
 
         let forest = crate::actions::providers::forest();
         let overlay = forest
@@ -990,23 +1038,180 @@ mod tests {
             }),
             Caps::empty()
         );
-        // `caret` moves NEITHER predicate: it is the provenance machine's
-        // episode key, consumed by `controller::completion::advance`.
-        let moved = OverlayFacts {
-            caret: (9, 9),
+        // `host_key` moves NEITHER predicate: it is consumed by
+        // `controller::completion::dispatch_host_key`.
+        let unclaimed = OverlayFacts {
+            host_key: HostKey::None,
             ..facts
         };
-        assert!((overlay.active)(&moved));
-        assert_eq!((overlay.grants)(&moved), Caps::POPUP);
-        let prev = crate::controller::completion::advance(
-            crate::controller::completion::Provenance::default(),
-            &facts,
-        );
-        assert_ne!(
-            crate::controller::completion::advance(prev, &moved),
-            crate::controller::completion::advance(prev, &facts),
-            "a moved caret must move the provenance machine"
-        );
+        assert!((overlay.active)(&unclaimed));
+        assert_eq!((overlay.grants)(&unclaimed), Caps::POPUP);
+    }
+
+    /// The InputMap as each Godot release ships it (input_map.cpp), plus the
+    /// Shortcuts edits users make.
+    fn godot_actions(
+        accept: &'static [&'static str],
+        replace: &'static [&'static str],
+        query: &'static [&'static str],
+    ) -> impl Fn(&str, &str) -> bool {
+        move |action: &str, key: &str| {
+            let keys: &[&str] = match action {
+                "ui_text_completion_accept" => accept,
+                "ui_text_completion_replace" => replace,
+                "ui_text_completion_query" => query,
+                "ui_up" => &["Up"],
+                "ui_down" => &["Down"],
+                "ui_page_up" => &["PageUp"],
+                "ui_page_down" => &["PageDown"],
+                "ui_text_caret_line_end" => &["End"],
+                _ => &[],
+            };
+            keys.contains(&key)
+        }
+    }
+
+    #[test]
+    fn godot_decides_the_popup_keys_from_its_own_inputmap() {
+        use HostKey::{Accept, Close, Navigate, Query, Replace};
+        const PLAIN: &[&str] = &["Tab", "Enter", "KP_Enter"];
+        const SHIFTED: &[&str] = &["S-Tab", "S-Enter", "S-KP_Enter"];
+        const CTRL_SPACE: &[&str] = &["C-Space"];
+        // (what, InputMap, key, popup open, expected)
+        type Map = Box<dyn Fn(&str, &str) -> bool>;
+        let v4_6_2: Map = Box::new(godot_actions(PLAIN, SHIFTED, CTRL_SPACE));
+        let v4_4: Map = Box::new(godot_actions(SHIFTED, PLAIN, CTRL_SPACE));
+        let tab_only: Map = Box::new(godot_actions(&["Tab"], SHIFTED, CTRL_SPACE));
+        let v4_4_no_enter: Map = Box::new(godot_actions(SHIFTED, &["Tab"], CTRL_SPACE));
+        let space_added: Map = Box::new(godot_actions(
+            &["Tab", "Enter", "KP_Enter", "Space"],
+            SHIFTED,
+            CTRL_SPACE,
+        ));
+        let query_moved: Map = Box::new(godot_actions(PLAIN, SHIFTED, &["A-Space"]));
+        let both: Map = Box::new(godot_actions(&["Down", "Enter"], &["Enter"], CTRL_SPACE));
+        let rows: &[(&str, &Map, &str, bool, HostKey)] = &[
+            ("4.6.2+: Enter accepts", &v4_6_2, "Enter", true, Accept),
+            (
+                "4.6.2+: keypad Enter accepts",
+                &v4_6_2,
+                "KP_Enter",
+                true,
+                Accept,
+            ),
+            ("4.6.2+: Tab accepts", &v4_6_2, "Tab", true, Accept),
+            (
+                "4.6.2+: Shift+Enter replaces",
+                &v4_6_2,
+                "S-Enter",
+                true,
+                Replace,
+            ),
+            (
+                "4.6.2+: Shift+Tab replaces",
+                &v4_6_2,
+                "S-Tab",
+                true,
+                Replace,
+            ),
+            ("4.4-4.6.1: Enter replaces", &v4_4, "Enter", true, Replace),
+            (
+                "4.4-4.6.1: Shift+Enter accepts",
+                &v4_4,
+                "S-Enter",
+                true,
+                Accept,
+            ),
+            (
+                "no popup: Enter is the engine's",
+                &v4_6_2,
+                "Enter",
+                false,
+                HostKey::None,
+            ),
+            ("arrows move the highlight", &v4_6_2, "Down", true, Navigate),
+            (
+                "PageUp moves the highlight",
+                &v4_6_2,
+                "PageUp",
+                true,
+                Navigate,
+            ),
+            (
+                "no popup: Down is the engine's",
+                &v4_6_2,
+                "Down",
+                false,
+                HostKey::None,
+            ),
+            ("End closes, then moves", &v4_6_2, "End", true, Close),
+            ("#25: Ctrl+Space queries", &v4_6_2, "C-Space", false, Query),
+            (
+                "Ctrl+Space queries an open popup",
+                &v4_6_2,
+                "C-Space",
+                true,
+                Query,
+            ),
+            (
+                "Ctrl+Space removed from Shortcuts is the engine's",
+                &query_moved,
+                "C-Space",
+                false,
+                HostKey::None,
+            ),
+            (
+                "Alt+Space added to query",
+                &query_moved,
+                "A-Space",
+                false,
+                Query,
+            ),
+            (
+                "#79: Enter removed from accept is the engine's",
+                &tab_only,
+                "Enter",
+                true,
+                HostKey::None,
+            ),
+            ("#79: Tab kept in accept", &tab_only, "Tab", true, Accept),
+            (
+                "#18 on 4.6.1: Enter removed from replace is the engine's",
+                &v4_4_no_enter,
+                "Enter",
+                true,
+                HostKey::None,
+            ),
+            ("Space added to accept", &space_added, "Space", true, Accept),
+            // CodeEdit tests the arrows before replace, and replace before
+            // accept.
+            (
+                "a key in accept and ui_down moves",
+                &both,
+                "Down",
+                true,
+                Navigate,
+            ),
+            (
+                "a key in accept and replace replaces",
+                &both,
+                "Enter",
+                true,
+                Replace,
+            ),
+            (
+                "a letter is the engine's",
+                &v4_6_2,
+                "a",
+                true,
+                HostKey::None,
+            ),
+            ("Esc is the engine's", &v4_6_2, "Esc", true, HostKey::None),
+        ];
+        for (what, map, key, popup, want) in rows {
+            let got = HostKey::classify(|action| map(action, key), *popup);
+            assert_eq!(got, *want, "{what}");
+        }
     }
 
     #[test]

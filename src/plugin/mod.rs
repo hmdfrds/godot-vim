@@ -13,6 +13,7 @@
 
 mod attach;
 mod caret_reconcile;
+mod completion_delay;
 mod discovery;
 mod floating;
 mod input;
@@ -81,6 +82,10 @@ pub struct GodotVimCore {
     /// The shell plane's own timeout timer — see `init_panel_timer` for why
     /// this is not `mapping_timer`.
     panel_timer: Option<Gd<Timer>>,
+    /// Code Complete Delay for popups opened by typing, and the editor and
+    /// caret line it was armed for. See `completion_delay`.
+    completion_timer: Option<Gd<Timer>>,
+    completion_arm: Option<crate::effects::completion::DelayArm>,
     /// The shell plane's pending prefix buffer.
     ///
     /// Empty unless the user bound a multi-key `panelmap`: the shipped keyset
@@ -153,6 +158,8 @@ impl INode for GodotVimCore {
             ui: crate::ui::UiCoordinator::new(),
             mapping_timer: None,
             panel_timer: None,
+            completion_timer: None,
+            completion_arm: None,
             pending: crate::actions::sequence::Pending::default(),
             search_suppression: None,
             settings: None,
@@ -205,6 +212,7 @@ impl INode for GodotVimCore {
                 self.init_settings();
                 self.init_mapping_timer();
                 self.init_panel_timer();
+                self.init_completion_timer();
                 self.init_fs_explorer_callables();
                 self.wired = false;
                 self.apply_enabled_state();
@@ -236,6 +244,11 @@ impl INode for GodotVimCore {
         panic_guard("exit_tree:sequence", || self.clear_pending_sequence(), ());
         panic_guard("exit_tree:timer", || self.teardown_mapping_timer(), ());
         panic_guard("exit_tree:panel_timer", || self.teardown_panel_timer(), ());
+        panic_guard(
+            "exit_tree:completion_timer",
+            || self.teardown_completion_timer(),
+            (),
+        );
         panic_guard(
             "exit_tree:dialog",
             || {
@@ -782,6 +795,19 @@ impl GodotVimCore {
         }
     }
 
+    #[func]
+    fn on_completion_timeout(&mut self) {
+        if !self.enabled || self.controller.is_none() {
+            self.completion_arm = None;
+            return;
+        }
+        panic_guard(
+            "on_completion_timeout",
+            || self.on_completion_timeout_impl(),
+            (),
+        );
+    }
+
     /// The shell plane's timeout. Deliberately **not** guarded on
     /// `self.controller.is_some()`: the headline capability of the sequence
     /// phase is that a dock prefix resolves with no script open, and a
@@ -1155,9 +1181,10 @@ impl GodotVimCore {
     /// Execute a pending UI action that requires plugin-level access (scene tree,
     /// settings snapshot) which the controller cannot reach directly.
     ///
-    /// `OpenMappingDialog`, `SourceConfigFile`, and `ShowTooltip` reach the
-    /// plugin layer; the controller handles all other variants inline before
-    /// storing. The catch-all arm is defense-in-depth.
+    /// `OpenMappingDialog`, `SourceConfigFile`, `ShowTooltip` and the
+    /// completion delay reach the plugin layer; the controller handles all
+    /// other variants inline before storing. The catch-all arm is
+    /// defense-in-depth.
     pub(super) fn handle_pending_ui_action(
         &mut self,
         action: crate::bridge::godot_host::PendingUiAction,
@@ -1185,6 +1212,12 @@ impl GodotVimCore {
                     dialog.bind_mut().open_with_config(&resolved.path);
                     log::debug!("pending_ui_action: opened MappingDialog");
                 }
+            }
+            PendingUiAction::ArmCompletion { line } => {
+                self.arm_completion_delay(line);
+            }
+            PendingUiAction::DisarmCompletion => {
+                self.disarm_completion_delay();
             }
             PendingUiAction::SourceConfigFile => {
                 if !self.source_config_from_disk("pending_ui_action") {
@@ -1642,7 +1675,7 @@ impl GodotVimCore {
             at_attached_editor: true,
             mode: Some(vim_core::primitives::Mode::Insert),
             selected_index: 0,
-            caret: (0, 0),
+            host_key: crate::actions::surface::HostKey::None,
         };
         let overlay = self.bindings.forest().overlay(&hypothetical);
         let controller = self.controller.as_ref();

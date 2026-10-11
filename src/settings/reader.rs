@@ -168,6 +168,26 @@ fn sanitize_lerp_speed(v: f64) -> f64 {
     defaults::CURSOR_LERP_SPEED
 }
 
+/// Read on every arm through `get_setting`, as Godot's `EDITOR_GET` does, so a
+/// project override applies at once. Quiet on a bad value, since it runs per
+/// typed character.
+pub(crate) fn code_complete_delay(settings: &EditorSettings) -> f64 {
+    if !settings.has_setting(keys::CODE_COMPLETE_DELAY) {
+        return defaults::CODE_COMPLETE_DELAY;
+    }
+    let value = settings.get_setting(keys::CODE_COMPLETE_DELAY);
+    delay_seconds(value.try_to::<f64>().ok(), value.try_to::<i64>().ok())
+}
+
+/// The setting as the float or int it holds. A Timer refuses a wait time of
+/// zero, and the Editor Settings slider stops at 0.01.
+fn delay_seconds(float: Option<f64>, int: Option<i64>) -> f64 {
+    match float.or_else(|| int.map(|i| i as f64)) {
+        Some(delay) if delay.is_finite() => delay.max(0.01),
+        _ => defaults::CODE_COMPLETE_DELAY,
+    }
+}
+
 fn read_bool(settings: &EditorSettings, key: &str, default: bool) -> bool {
     read_setting(settings, key, "bool", default)
 }
@@ -381,6 +401,26 @@ mod tests {
         assert_eq!(sanitize_lerp_speed(0.5), defaults::CURSOR_LERP_SPEED);
         // k < 0 makes the lerp weight negative and the cursor diverge.
         assert_eq!(sanitize_lerp_speed(-5.0), defaults::CURSOR_LERP_SPEED);
+    }
+
+    #[test]
+    fn code_complete_delay_is_seconds_with_a_floor() {
+        let fallback = defaults::CODE_COMPLETE_DELAY;
+        // (what, as a float, as an int, seconds)
+        let rows: &[(&str, Option<f64>, Option<i64>, f64)] = &[
+            ("a float", Some(0.5), None, 0.5),
+            ("an int", None, Some(2), 2.0),
+            ("the slider floor", Some(0.01), None, 0.01),
+            ("zero is clamped", Some(0.0), None, 0.01),
+            ("an int zero is clamped", None, Some(0), 0.01),
+            ("negative is clamped", Some(-1.0), None, 0.01),
+            ("NaN", Some(f64::NAN), None, fallback),
+            ("infinity", Some(f64::INFINITY), None, fallback),
+            ("neither a float nor an int", None, None, fallback),
+        ];
+        for (what, float, int, want) in rows {
+            assert_eq!(delay_seconds(*float, *int), *want, "{what}");
+        }
     }
 
     #[test]

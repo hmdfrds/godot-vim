@@ -453,8 +453,8 @@ pub(crate) fn dispose(
 /// plane (`controller/mod.rs`).
 ///
 /// A flat struct and not an enum: `candidates.is_empty()` IS the settled
-/// case, and `facts` must cross on every keystroke including typed
-/// characters, because the provenance machine advances on all of them.
+/// case, and `facts` cross on every keystroke, because a key no row claims
+/// can still be one of Godot's own popup keys.
 pub(crate) struct OverlayPlan {
     pub(crate) facts: super::surface::OverlayFacts,
     pub(crate) candidates: Vec<Candidate>,

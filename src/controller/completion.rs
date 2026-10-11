@@ -6,8 +6,10 @@
 //! trigger, navigate, and confirm, all without engine changes:
 //! [`dispatch_overlay`] runs whatever the `editor.completion` overlay
 //! resolved for this keystroke, folded by the SAME `resolve::dispose` every
-//! other surface uses. Keeping the popup in step with engine edits is
-//! `effects::completion`, at the end of every engine pass.
+//! other surface uses, and [`dispatch_host_key`] does what Godot's own
+//! shortcut actions do for a key no row claimed. Keeping the popup in step
+//! with engine edits is `effects::completion`, at the end of every engine
+//! pass.
 //!
 //! # One pipeline, and still on this transport
 //!
@@ -28,74 +30,17 @@
 
 use godot::classes::CodeEdit;
 use godot::prelude::*;
-use vim_core::execution::VimSession;
+use vim_core::execution::{VimEngine, VimSession};
+use vim_core::keymap::{KeyEvent, MappingMode, TrieLookup};
 
 use crate::actions::action::{ActionCtx, CompletionOps};
 use crate::actions::outcome::Outcome;
 use crate::actions::resolve::{self, CandidateTarget, Disposition};
+use crate::actions::surface::HostKey;
 use crate::bridge;
 use crate::bridge::code_edit_ext::CodeEditExt;
 use crate::bridge::codec::usize_to_i32;
 use crate::bridge::godot_host::GodotHost;
-
-/// Whether the current completion selection was chosen by the user.
-///
-/// Rules, each citing Godot: no popup resets; a moved caret resets, because
-/// typing moves the caret and steering does not, which makes the caret the
-/// episode key; an index EDGE to a NON-ZERO value adopts, because Godot's
-/// only automatic writes are resets to 0 (`code_edit.cpp:3873, 4097`) while
-/// every non-zero write is human-originated; `last_index == None` leaves
-/// `explicit` standing, which is what lets the port's own write survive the
-/// keystroke that opened the popup.
-///
-/// A navigation key is a choice even when the index cannot move (one row, or
-/// a wrap to row 0), so the port marks it through [`Provenance::chosen`].
-///
-/// One documented residual, failing toward a newline rather than an unwanted
-/// insert: clicking an already-selected row.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub(crate) struct Provenance {
-    last_index: Option<i32>,
-    last_caret: (i32, i32),
-    pub(crate) explicit: bool,
-}
-
-impl Provenance {
-    /// A user-initiated port write or navigation key.
-    pub(crate) fn chosen(self) -> Self {
-        Self {
-            explicit: true,
-            ..self
-        }
-    }
-}
-
-/// Pure. The Godot reads happen once in `handle_gui_input_impl`; this is the
-/// rule, and it is a `fn` over plain data so it is table-tested headlessly.
-pub(crate) fn advance(
-    prev: Provenance,
-    facts: &crate::actions::surface::OverlayFacts,
-) -> Provenance {
-    if !facts.popup() {
-        return Provenance::default();
-    }
-    if prev.last_index.is_some() && facts.caret != prev.last_caret {
-        return Provenance {
-            last_index: Some(facts.selected_index),
-            last_caret: facts.caret,
-            explicit: false,
-        };
-    }
-    let adopted = matches!(
-        prev.last_index,
-        Some(previous) if previous != facts.selected_index && facts.selected_index != 0
-    );
-    Provenance {
-        last_index: Some(facts.selected_index),
-        last_caret: facts.caret,
-        explicit: prev.explicit || adopted,
-    }
-}
 
 /// The one real [`CompletionOps`], holding the two things no test can build.
 ///
@@ -105,15 +50,9 @@ pub(crate) fn advance(
 /// `Some(false)` / `None` trichotomy has a headless characterization suite at
 /// all — `Gd<CodeEdit>` and `VimSession<GodotHost>` cannot be constructed under
 /// `cargo test` in a `cdylib`.
-///
-/// INVARIANT the provenance write-through depends on: `effects::completion`
-/// cancels and re-requests on the raw editor and never touches this port, so
-/// a port `request`, `select` or `navigated` is reachable only from a
-/// user-initiated verb, and marking the selection explicit there is sound.
 struct CompletionPort<'a> {
     session: &'a mut VimSession<GodotHost>,
     editor: &'a mut Gd<CodeEdit>,
-    provenance: &'a mut Provenance,
 }
 
 impl CompletionOps for CompletionPort<'_> {
@@ -130,32 +69,76 @@ impl CompletionOps for CompletionPort<'_> {
     }
 
     fn request(&mut self, force: bool) {
-        // User-initiated by the port invariant above, so the selection Godot
-        // preselects on this request was asked for by name.
-        *self.provenance = self.provenance.chosen();
         self.editor.request_code_completion_ex().force(force).done();
     }
 
     fn select(&mut self, index: i32) {
-        *self.provenance = self.provenance.chosen();
         self.editor.set_code_completion_selected_index(index);
     }
 
-    fn navigated(&mut self) {
-        *self.provenance = self.provenance.chosen();
-    }
-
-    fn confirm(&mut self) {
-        confirm_and_reconcile_completion(self.session, self.editor);
+    fn confirm(&mut self, replace: bool) {
+        confirm_and_reconcile_completion(self.session, self.editor, replace);
     }
 
     fn cancel(&mut self) {
         self.editor.cancel_code_completion();
     }
+}
 
-    fn selection_is_explicit(&self) -> bool {
-        self.provenance.explicit
+/// Godot's own popup keys, for a key no `panelmap` row claimed: what
+/// `CodeEdit::gui_input` does for each action (code_edit.cpp:768-845),
+/// through the same public calls, except navigation, which is handed to
+/// `CodeEdit` so it moves its own highlight. `Ignore` lets the engine have
+/// the key.
+pub(crate) fn host_key_disposition(ops: &mut dyn CompletionOps, key: HostKey) -> Disposition {
+    match key {
+        HostKey::None => Disposition::Ignore,
+        // What the script editor's Completion Query item does
+        // (script_text_editor.cpp:1700). Never gated on
+        // `is_code_completion_enabled()`: Godot's editors never set it (#25).
+        HostKey::Query => {
+            ops.request(true);
+            Disposition::Consume
+        }
+        _ if !ops.popup_visible() => Disposition::Ignore,
+        HostKey::Navigate => Disposition::Handoff,
+        HostKey::Close => {
+            ops.cancel();
+            Disposition::Ignore
+        }
+        HostKey::Accept | HostKey::Replace => {
+            ops.confirm(key == HostKey::Replace);
+            Disposition::Consume
+        }
     }
+}
+
+/// Whether `key` extends or completes the pending mapping prefix, so the
+/// mapping owns it rather than the popup (`inoremap j<CR>` after `j`). A key
+/// that breaks the prefix is the popup's once the prefix is flushed.
+/// vim-core v0.8.0 shows the pending keys only as notation, so they are read
+/// back from it.
+pub(crate) fn continues_pending_mapping(engine: &VimEngine, key: KeyEvent) -> bool {
+    let Some(mode) = MappingMode::from_mode(engine.mode()) else {
+        return false;
+    };
+    let mut keys = vim_core::execution::parse_keys_from_string(&engine.pending_mapping_display());
+    if keys.is_empty() {
+        return false;
+    }
+    keys.push(key);
+    !matches!(engine.keymap().lookup(mode, &keys), TrieLookup::NoMatch)
+}
+
+pub(crate) fn dispatch_host_key(
+    session: &mut VimSession<GodotHost>,
+    editor: &mut Gd<CodeEdit>,
+    key: HostKey,
+) -> Disposition {
+    if key == HostKey::None {
+        return Disposition::Ignore;
+    }
+    host_key_disposition(&mut CompletionPort { session, editor }, key)
 }
 
 /// Pre-engine dispatch: run the overlay's plan through the one consumption
@@ -169,14 +152,9 @@ impl CompletionOps for CompletionPort<'_> {
 pub(crate) fn dispatch_overlay(
     session: &mut VimSession<GodotHost>,
     editor: &mut Gd<CodeEdit>,
-    provenance: &mut Provenance,
     plan: &crate::actions::resolve::OverlayPlan,
 ) -> Disposition {
-    let mut port = CompletionPort {
-        session,
-        editor,
-        provenance,
-    };
+    let mut port = CompletionPort { session, editor };
     resolve::dispose(&plan.candidates, plan.is_echo, |candidate| {
         let CandidateTarget::Action(_, spec) = &candidate.target else {
             // Unreachable from config: `<Shortcut>` is refused at
@@ -199,19 +177,26 @@ pub(crate) fn dispatch_overlay(
 /// Confirm the selected completion and reconcile the text delta with the
 /// engine so dot-repeat and macro recording capture the completed text.
 ///
-/// Strategy: snapshot text before/after Godot's confirm, compute a minimal
-/// contiguous diff (common-prefix / common-suffix), and feed it to the
-/// engine as an `ExternalEdit`. The engine records the net-new text
-/// internally for dot-repeat.
+/// One caret: the edit is cut at the caret it started from
+/// (`reconcile::reconcile_completion`), because a replace, or a merge over
+/// matching text, also deletes text after it. Several carets keep the
+/// whole-text diff.
 fn confirm_and_reconcile_completion(
     session: &mut VimSession<GodotHost>,
     editor: &mut Gd<CodeEdit>,
+    replace: bool,
 ) {
     let before_text = editor.get_text().to_string();
+    let single_caret = editor.get_caret_count() == 1;
+    let caret_before = bridge::codec::LineIndex::new(&before_text).line_col_to_byte(
+        &before_text,
+        editor.get_caret_line(),
+        editor.get_caret_column(),
+    );
 
     // CodeEdit replaces `code_completion_base` (the typed prefix) with the
     // selected item's `insert_text`. This is the only mutation.
-    editor.confirm_code_completion_ex().replace(false).done();
+    editor.confirm_code_completion_ex().replace(replace).done();
 
     // Fix 4B: Invalidate cache IMMEDIATELY after confirm so that
     // host.text() reflects post-completion state for undo node sync.
@@ -225,13 +210,23 @@ fn confirm_and_reconcile_completion(
         editor.get_caret_column(),
     );
 
-    super::reconcile::reconcile_external_text_change(
-        session.engine_mut(),
-        &before_text,
-        &after_text,
-        after_byte,
-        vim_core::execution::ExternalEditKind::Completion,
-    );
+    if single_caret {
+        super::reconcile::reconcile_completion(
+            session.engine_mut(),
+            &before_text,
+            &after_text,
+            caret_before,
+            after_byte,
+        );
+    } else {
+        super::reconcile::reconcile_external_text_change(
+            session.engine_mut(),
+            &before_text,
+            &after_text,
+            after_byte,
+            vim_core::execution::ExternalEditKind::Completion,
+        );
+    }
 
     // Fix 4A: Sync undo nodes so pressing `u` past a completion doesn't
     // silently skip it. The engine created an undo node during
@@ -247,104 +242,139 @@ fn confirm_and_reconcile_completion(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::actions::surface::OverlayFacts;
 
-    fn facts(selected_index: i32, caret: (i32, i32)) -> OverlayFacts {
-        OverlayFacts {
-            at_attached_editor: true,
-            mode: Some(vim_core::primitives::Mode::Insert),
-            selected_index,
-            caret,
+    /// A popup with no Godot in it, logging every command.
+    #[derive(Default)]
+    struct Popup {
+        open: bool,
+        log: Vec<&'static str>,
+    }
+
+    impl CompletionOps for Popup {
+        fn popup_visible(&self) -> bool {
+            self.open
+        }
+        fn option_count(&self) -> i32 {
+            3
+        }
+        fn selected_index(&self) -> i32 {
+            if self.open {
+                0
+            } else {
+                -1
+            }
+        }
+        fn request(&mut self, force: bool) {
+            self.log
+                .push(if force { "request(force)" } else { "request" });
+            self.open = true;
+        }
+        fn select(&mut self, _index: i32) {
+            self.log.push("select");
+        }
+        fn confirm(&mut self, replace: bool) {
+            self.log.push(if replace { "replace" } else { "accept" });
+            self.open = false;
+        }
+        fn cancel(&mut self) {
+            self.log.push("cancel");
+            self.open = false;
         }
     }
 
-    fn prov(last_index: Option<i32>, last_caret: (i32, i32), explicit: bool) -> Provenance {
-        Provenance {
-            last_index,
-            last_caret,
-            explicit,
-        }
-    }
-
-    #[test]
-    fn advance_is_a_total_table() {
-        // One row per rule, each citing the fact it turns on.
-        let rows: &[(&str, Provenance, OverlayFacts, Provenance)] = &[
-            (
-                "popup absent resets everything",
-                prov(Some(3), (1, 4), true),
-                facts(-1, (1, 4)),
-                Provenance::default(),
-            ),
-            (
-                "a moved caret resets: typing moves the caret, steering does not",
-                prov(Some(3), (1, 4), true),
-                facts(3, (1, 5)),
-                prov(Some(3), (1, 5), false),
-            ),
-            (
-                "an index edge to a non-zero value adopts: Godot's only \
-                 automatic writes are resets to 0",
-                prov(Some(0), (1, 4), false),
-                facts(2, (1, 4)),
-                prov(Some(2), (1, 4), true),
-            ),
-            (
-                "an index edge to zero does not adopt: that is the machine's \
-                 own reset",
-                prov(Some(3), (1, 4), false),
-                facts(0, (1, 4)),
-                prov(Some(0), (1, 4), false),
-            ),
-            (
-                "last_index None leaves explicit standing, so the port's own \
-                 write survives the keystroke that opened the popup",
-                prov(None, (1, 4), true),
-                facts(0, (1, 4)),
-                prov(Some(0), (1, 4), true),
-            ),
-            (
-                "a repeated identical index preserves",
-                prov(Some(2), (1, 4), true),
-                facts(2, (1, 4)),
-                prov(Some(2), (1, 4), true),
-            ),
-            (
-                "a navigation key on a one-row list is a choice",
-                prov(Some(0), (1, 4), false).chosen(),
-                facts(0, (1, 4)),
-                prov(Some(0), (1, 4), true),
-            ),
-            (
-                "a navigation key that wraps to row 0 is a choice",
-                prov(Some(2), (1, 4), false).chosen(),
-                facts(0, (1, 4)),
-                prov(Some(0), (1, 4), true),
-            ),
-            (
-                "typing after a navigation key resets it",
-                prov(Some(0), (1, 4), false).chosen(),
-                facts(0, (1, 5)),
-                prov(Some(0), (1, 5), false),
-            ),
-        ];
-        for (what, prev, f, want) in rows {
-            assert_eq!(advance(*prev, f), *want, "{what}");
-        }
-    }
-
-    #[test]
-    fn the_regression_this_rule_exists_for() {
-        // `cancel_code_completion` leaves the index and the option list
-        // intact (code_edit.cpp:2711-2719), so a reopened popup can carry a
-        // stale non-zero index the user never touched. Preservation is a
-        // NON-WRITE: no edge, same caret, and explicit must stay false so
-        // Enter gives a newline rather than an insert nobody asked for.
-        let prev = prov(Some(3), (1, 4), false);
-        let next = advance(prev, &facts(3, (1, 4)));
-        assert!(
-            !next.explicit,
-            "a preserved stale selection is not a choice"
+    /// An Insert session with `lhs` mapped to `<Esc>` and `typed` sent.
+    fn pending(lhs: &str, typed: &str) -> vim_core::execution::HostSession {
+        use vim_core::execution::{parse_keys_from_string, HostSession};
+        use vim_core::keymap::{Key, MappingFlags, MappingKind};
+        let mut s = HostSession::new("x\n");
+        s.set_shadow_text("x\n");
+        s.engine_mut().map(
+            MappingMode::Insert,
+            &parse_keys_from_string(lhs),
+            vec![KeyEvent::new(
+                Key::Escape,
+                vim_core::keymap::Modifiers::NONE,
+            )],
+            MappingKind::NonRecursive,
+            MappingFlags::default(),
         );
+        for key in parse_keys_from_string(&format!("i{typed}")) {
+            s.process_key_host(key);
+        }
+        s
+    }
+
+    #[test]
+    fn a_popup_key_belongs_to_a_mapping_only_if_it_continues_it() {
+        use vim_core::execution::parse_keys_from_string;
+        let key = |k: &str| parse_keys_from_string(k)[0];
+        // (what, mapping, typed, key, continues)
+        let rows = [
+            ("inoremap jk: Enter breaks it", "jk", "j", "<CR>", false),
+            ("inoremap jk: Down breaks it", "jk", "j", "<Down>", false),
+            ("inoremap jk: k completes it", "jk", "j", "k", true),
+            (
+                "inoremap j<CR>: Enter completes it",
+                "j<CR>",
+                "j",
+                "<CR>",
+                true,
+            ),
+            (
+                "inoremap ;<Tab>x: Tab extends it",
+                ";<Tab>x",
+                ";",
+                "<Tab>",
+                true,
+            ),
+            ("nothing pending", "jk", "", "<CR>", false),
+        ];
+        for (what, lhs, typed, k, want) in rows {
+            let s = pending(lhs, typed);
+            assert_eq!(
+                s.engine().has_pending_mapping(),
+                !typed.is_empty(),
+                "{what}: pending state"
+            );
+            assert_eq!(
+                continues_pending_mapping(s.engine(), key(k)),
+                want,
+                "{what}"
+            );
+        }
+    }
+
+    #[test]
+    fn host_keys_do_what_codeedit_does_and_nothing_else() {
+        use Disposition::{Consume, Handoff, Ignore};
+        // (key, popup open, disposition, commands)
+        let rows: &[(HostKey, bool, Disposition, &[&str])] = &[
+            (HostKey::None, true, Ignore, &[]),
+            // Whether the row was chosen does not matter: Godot preselects
+            // row 0 and accepts it (code_edit.cpp:2582, 822-823).
+            (HostKey::Accept, true, Consume, &["accept"]),
+            (HostKey::Replace, true, Consume, &["replace"]),
+            (HostKey::Navigate, true, Handoff, &[]),
+            (HostKey::Close, true, Ignore, &["cancel"]),
+            (HostKey::Query, true, Consume, &["request(force)"]),
+            // #25: Ctrl+Space opens the popup, and never reaches i_CTRL-@.
+            (HostKey::Query, false, Consume, &["request(force)"]),
+            (HostKey::Accept, false, Ignore, &[]),
+            (HostKey::Replace, false, Ignore, &[]),
+            (HostKey::Navigate, false, Ignore, &[]),
+            (HostKey::Close, false, Ignore, &[]),
+        ];
+        for (key, open, want, log) in rows {
+            let mut popup = Popup {
+                open: *open,
+                ..Popup::default()
+            };
+            assert_eq!(
+                host_key_disposition(&mut popup, *key),
+                *want,
+                "{key:?} open={open}"
+            );
+            assert_eq!(popup.log, *log, "{key:?} open={open}");
+        }
     }
 }

@@ -7,7 +7,9 @@
 //! gui_input -> process_cycle
 //!   +- clear transient messages
 //!   +- vimdebug step-mode intercept
+//!   +- a pending mapping prefix: the mapping's key, or flushed first
 //!   +- completion overlay dispatch (pre-engine)
+//!   +- Godot's own completion keys, for a key no overlay row claimed
 //!   +- passthrough check
 //!   +- pre-processing: refresh_from_editor, set config
 //!   +- session.process_key(key) -> ProcessResult
@@ -22,6 +24,7 @@ use godot::prelude::*;
 use vim_core::execution::host_api::{DeferredAction, WindowNavAction};
 use vim_core::keymap::KeyEvent;
 
+use crate::actions::surface::HostKey;
 use crate::bridge::port::TextEditorPort;
 
 use super::completion;
@@ -48,12 +51,21 @@ pub(super) fn process_cycle_impl(
         return PipelineOutcome::VimdebugStep;
     }
 
-    // Advances on EVERY keystroke that reaches the editor, typed characters
-    // included, with no early return above it (the vimdebug step intercept
-    // holds no popup: entering step mode leaves Insert). That is what makes
-    // the caret-move reset work: typing re-derives the popup on the raw
-    // editor (`effects::completion`), and must clear an inherited selection.
-    ctx.transient.completion = completion::advance(ctx.transient.completion, &plan.facts);
+    // A popup key while an Insert mapping prefix is pending: a key that
+    // continues the mapping is the mapping's; any other key first flushes
+    // the prefix, as its timeout would, so it acts on the popup the flushed
+    // text left (`inoremap jk <Esc>`, then `Obj` and Enter accepts for
+    // "Obj", never for "Ob" with the `j` appended after).
+    let mut popup_key = !plan.candidates.is_empty() || plan.facts.host_key != HostKey::None;
+    if popup_key && session.engine().has_pending_mapping() {
+        if completion::continues_pending_mapping(session.engine(), key) {
+            popup_key = false;
+        } else {
+            resolve_mapping_timeout_impl(session, ctx, editor);
+            let mode = session.engine().mode();
+            popup_key = mode.is_insert() || mode.is_replace();
+        }
+    }
 
     // The overlay fold, at the source line try_handle_completion occupied.
     // The return point does not move, which preserves four obligations:
@@ -61,11 +73,10 @@ pub(super) fn process_cycle_impl(
     // CompletionConsumed.may_have_moved_cursor() stays true (Fix 4C); the
     // early return still precedes import_godot_carets_into_engine and
     // finish_engine_pass, so the multi-cursor gap neither widens nor moves;
-    // and the block still precedes should_passthrough_key, so mapping
-    // precedence is byte-for-byte today's.
-    if !plan.candidates.is_empty() {
-        let disposition =
-            completion::dispatch_overlay(session, editor, &mut ctx.transient.completion, &plan);
+    // and the block still precedes should_passthrough_key, so a user
+    // mapping of a popup key waits until the popup is closed.
+    if popup_key && !plan.candidates.is_empty() {
+        let disposition = completion::dispatch_overlay(session, editor, &plan);
         // `None` falls through to `should_passthrough_key` below, exactly as
         // `try_handle_completion`'s `None` did. The mapping itself lives in
         // `pipeline_outcome` because this function is Gd-bound: inline, the
@@ -79,10 +90,32 @@ pub(super) fn process_cycle_impl(
             );
             // Note: invalidate_cache() for consumed completions is called
             // inside confirm_and_reconcile_completion (Fix 4B).
+            // Vim's keys stop the delay Godot's keys leave running: a popup
+            // closed with Ctrl+E or accepted with Ctrl+Y stays closed.
+            ctx.transient
+                .pending_ui_actions
+                .push(crate::bridge::godot_host::PendingUiAction::DisarmCompletion);
             let mode = session.engine().mode();
             session.host_mut().ensure_undo_balanced(mode);
             return outcome;
         }
+    }
+
+    // Godot's own popup keys, for a key no row claimed.
+    let host_key = if popup_key {
+        plan.facts.host_key
+    } else {
+        HostKey::None
+    };
+    let disposition = completion::dispatch_host_key(session, editor, host_key);
+    if let Some(outcome) = super::pipeline_outcome::outcome_for(disposition) {
+        log::debug!(
+            "process_cycle: godot completion key={key} -> {}",
+            outcome.log_label()
+        );
+        let mode = session.engine().mode();
+        session.host_mut().ensure_undo_balanced(mode);
+        return outcome;
     }
 
     if should_passthrough_key(session.engine(), &ctx.passthrough_keys, key) {
@@ -244,6 +277,9 @@ fn handle_host_pending_ui_action(
         PendingUiAction::OpenMappingDialog
         | PendingUiAction::SourceConfigFile
         | PendingUiAction::ShowTooltip { .. }
+        // The delay timer is a node on `GodotVimCore`.
+        | PendingUiAction::ArmCompletion { .. }
+        | PendingUiAction::DisarmCompletion
         // Must be forwarded, not handled here: running an ActionSpec needs
         // `&mut GodotVimCore`, which this scope does not have.
         | PendingUiAction::RunRegistryAction { .. }

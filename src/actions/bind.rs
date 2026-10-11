@@ -891,22 +891,9 @@ mod tests {
             false,
             &[],
         ),
-        // The autocomplete popup (P9). Every one is elastic and none carries
-        // `<physical>`: the verdict on the `gui_input` transport IS the
-        // action's outcome, and `<CR>` consuming with no popup up would stop
-        // Enter inserting a newline. `<C-@>` and not `<C-Space>` — the bridge
-        // folds Ctrl+Space into `Char('@') + CTRL` before anything sees it, so
-        // the other spelling would load cleanly and never fire.
-        (
-            "editor.completion",
-            "<C-@>",
-            "godotvim.completion.trigger",
-            false,
-            Consumption::Elastic,
-            Repeat::Allow,
-            false,
-            &[],
-        ),
+        // The autocomplete popup (P9): what Vim adds to Godot's own popup
+        // keys. Every one is elastic and none carries `<physical>`: the
+        // verdict on the `gui_input` transport IS the action's outcome.
         (
             "editor.completion",
             "<C-n>",
@@ -927,10 +914,9 @@ mod tests {
             false,
             &[],
         ),
-        // Vim's real popup keys (insert.txt:1399-1410). `<C-y>` carries
-        // `require_selection=0` because pressing it IS choosing; both are
-        // POPUP-gated, so with none up they reach vim-core's CopyCharAbove /
-        // CopyCharBelow untouched.
+        // Vim's real popup keys (insert.txt:1399-1410), POPUP-gated, so with
+        // none up they reach vim-core's CopyCharAbove / CopyCharBelow
+        // untouched.
         (
             "editor.completion",
             "<C-y>",
@@ -939,7 +925,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
-            &[("require_selection", 0)],
+            &[],
         ),
         (
             "editor.completion",
@@ -947,49 +933,6 @@ mod tests {
             "godotvim.completion.dismiss",
             false,
             Consumption::Elastic,
-            Repeat::Allow,
-            false,
-            &[],
-        ),
-        (
-            "editor.completion",
-            "<Tab>",
-            "godotvim.completion.confirm",
-            false,
-            Consumption::Elastic,
-            Repeat::Allow,
-            false,
-            &[],
-        ),
-        (
-            "editor.completion",
-            "<CR>",
-            "godotvim.completion.confirm",
-            false,
-            Consumption::Elastic,
-            Repeat::Allow,
-            false,
-            &[],
-        ),
-        // `navigate` declares `default_consume: Handoff`, folded into the
-        // rule at registration: acceptance skips the engine without
-        // consuming, so CodeEdit's own popup handling moves the selection.
-        (
-            "editor.completion",
-            "<Up>",
-            "godotvim.completion.navigate",
-            false,
-            Consumption::Handoff,
-            Repeat::Allow,
-            false,
-            &[],
-        ),
-        (
-            "editor.completion",
-            "<Down>",
-            "godotvim.completion.navigate",
-            false,
-            Consumption::Handoff,
             Repeat::Allow,
             false,
             &[],
@@ -1092,7 +1035,7 @@ mod tests {
             true,
             &[],
         ),
-        // nvim-tree-flavoured file operations. `R` refreshes while `r`
+        // File operations. `R` refreshes while `r`
         // renames: Shift is a discriminant here, carried by the character
         // itself because `bridge::input` folds it in.
         (
@@ -1829,7 +1772,7 @@ mod tests {
                 at_attached_editor: true,
                 mode: Some(vim_core::primitives::Mode::Insert),
                 selected_index: 0,
-                caret: (0, 0),
+                host_key: crate::actions::surface::HostKey::None,
             })
             .expect("popup-open facts activate the overlay");
         let reg = registry();
@@ -1868,12 +1811,12 @@ mod tests {
 
     #[test]
     fn every_shipped_completion_default_still_loads() {
-        // Nine rules, six distinct verbs, and an exact per-verb capability
-        // expectation: the trigger family requires nothing so the popup can
-        // be OPENED with none up, while confirm/dismiss/navigate require the
-        // popup they act on.
+        // Four rules, what Vim adds; Godot's own keys are not rows. An exact
+        // per-verb capability expectation: the trigger family requires
+        // nothing so the popup can be OPENED with none up, while
+        // confirm/dismiss/navigate require the popup they act on.
         let index = builtin_index(&registry());
-        assert_eq!(index.rules_on("editor.completion").count(), 9);
+        assert_eq!(index.rules_on("editor.completion").count(), 4);
         let reg = registry();
         for rule in index.rules_on("editor.completion") {
             let RuleTarget::Action(id) = rule.target else {

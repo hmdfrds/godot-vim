@@ -193,7 +193,7 @@ fn handle_tree_nav(mut tree: Gd<Tree>, direction: NavDirection) -> bool {
     }
 }
 
-/// Mirrors NERDTree/netrw behavior: `l` expands or descends into first child,
+/// Mirrors netrw: `l` expands or descends into first child,
 /// `h` collapses or ascends to parent.
 fn handle_tree_hierarchy(mut tree: Gd<Tree>, action: HierarchyAction) -> bool {
     let Some(mut selected) = tree.get_selected() else {

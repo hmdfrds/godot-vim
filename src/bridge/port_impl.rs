@@ -384,6 +384,12 @@ impl IdeCapable for CodeEditPort<'_> {
     fn request_code_completion(&mut self, force: bool) {
         self.0.request_code_completion_ex().force(force).done();
     }
+
+    fn arm_code_completion(&mut self) {
+        let line = self.0.get_caret_line();
+        self.1
+            .push(super::godot_host::PendingUiAction::ArmCompletion { line });
+    }
 }
 
 impl NavigationCapable for CodeEditPort<'_> {

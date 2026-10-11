@@ -107,6 +107,9 @@ pub(crate) const CONFIG_FILE_PATH: &str = "";
 /// setting is missing or has an unexpected type. Godot defaults this to `true`.
 pub(crate) const CODE_COMPLETE_ENABLED: bool = true;
 
+/// Godot's default `text_editor/completion/code_complete_delay`.
+pub(crate) const CODE_COMPLETE_DELAY: f64 = 0.3;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Input
 // ─────────────────────────────────────────────────────────────────────────────

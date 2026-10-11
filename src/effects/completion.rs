@@ -1,7 +1,8 @@
 //! Keeps Godot's completion popup derived from the live text after an engine
-//! edit. CodeEdit re-filters only inside its own key handler
-//! (`_filter_code_completion_candidates_impl`, code_edit.cpp), which never
-//! runs for text the engine types.
+//! edit, and opens it after Code Complete Delay. CodeEdit re-filters only
+//! inside its own key handler (`_filter_code_completion_candidates_impl`,
+//! code_edit.cpp), and CodeTextEditor's timer starts only for its own typing,
+//! so neither runs for text the engine types.
 
 use crate::bridge::port::IdeCapable;
 
@@ -78,17 +79,15 @@ pub(crate) enum Follow {
     },
 }
 
-/// A typed character keeps the popup when Godot's completion word continues
-/// across it: anything inside a string (code_edit.cpp:3920), and `/` in a path
-/// popup (code_edit.cpp:3933). `prev` is the character now before the caret.
-pub(crate) fn follow(
-    edit: Edit,
-    prev: Option<char>,
-    auto_complete: bool,
-    editor: &impl IdeCapable,
-) -> Follow {
-    let open = editor.completion_popup_open();
-    let may_open = open || auto_complete;
+/// Keeps an open popup in step with the text; a closed one is opened only by
+/// Code Complete Delay (`follow_engine_edit`). A typed character keeps the
+/// popup when Godot's completion word continues across it: anything inside a
+/// string (code_edit.cpp:3920), and `/` in a path popup (code_edit.cpp:3933).
+/// `prev` is the character now before the caret.
+pub(crate) fn follow(edit: Edit, prev: Option<char>, editor: &impl IdeCapable) -> Follow {
+    if !editor.completion_popup_open() {
+        return Follow::Keep;
+    }
     match edit {
         Edit::None => Follow::Keep,
         Edit::Inserted => {
@@ -97,23 +96,15 @@ pub(crate) fn follow(
                     || c == '_'
                     || editor.is_completion_prefix(c)
                     || editor.caret_in_string()
-                    || (open && after_path_slash(Some(c), editor))
+                    || after_path_slash(Some(c), editor)
             });
             if continues {
-                if may_open {
-                    requery(open, prev, editor)
-                } else {
-                    Follow::Keep
-                }
-            } else if open {
-                Follow::Close
+                requery(prev, editor)
             } else {
-                Follow::Keep
+                Follow::Close
             }
         }
-        Edit::Erased if may_open => requery(open, prev, editor),
-        Edit::Other if open => requery(open, prev, editor),
-        Edit::Erased | Edit::Other => Follow::Keep,
+        Edit::Erased | Edit::Other => requery(prev, editor),
     }
 }
 
@@ -123,15 +114,15 @@ fn after_path_slash(prev: Option<char>, editor: &impl IdeCapable) -> bool {
 
 /// An unforced request emits nothing after a symbol outside a string
 /// (code_edit.cpp:2505-2510), so only `/` in a path popup needs the force.
-fn requery(open: bool, prev: Option<char>, editor: &impl IdeCapable) -> Follow {
+fn requery(prev: Option<char>, editor: &impl IdeCapable) -> Follow {
     Follow::Requery {
-        force: open && after_path_slash(prev, editor) && !editor.caret_in_string(),
+        force: after_path_slash(prev, editor) && !editor.caret_in_string(),
     }
 }
 
-/// Runs once at the end of every engine pass, whatever started it (a typed
-/// key, a mapping-timeout flush). Goes to the raw editor, never
-/// `CompletionPort`, whose writes mark the selection explicit.
+/// Runs at the end of every engine pass (a typed key, a mapping-timeout
+/// flush). Every insertion restarts Code Complete Delay, popup open or not,
+/// as Godot restarts its timer on every insert (code_editor.cpp:1010-1014).
 pub(crate) fn follow_engine_edit(
     editor: &mut impl IdeCapable,
     edit: Edit,
@@ -142,13 +133,40 @@ pub(crate) fn follow_engine_edit(
     if !insert_like || edit == Edit::None {
         return;
     }
-    match follow(edit, after.prev(), auto_complete, editor) {
+    match follow(edit, after.prev(), editor) {
         Follow::Keep => {}
         Follow::Close => editor.cancel_code_completion(),
         Follow::Requery { force } => {
             editor.cancel_code_completion();
             editor.request_code_completion(force);
         }
+    }
+    if edit == Edit::Inserted && auto_complete {
+        editor.arm_code_completion();
+    }
+}
+
+/// The caret line Code Complete Delay was armed for, in one editor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct DelayArm {
+    pub(crate) editor: i64,
+    pub(crate) line: i32,
+}
+
+/// What the attached editor looks like when the delay is checked.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct DelayFacts {
+    pub(crate) editor: Option<i64>,
+    pub(crate) line: i32,
+    pub(crate) insert_like: bool,
+}
+
+impl DelayArm {
+    /// Godot stops its timer only when the caret leaves the line
+    /// (code_editor.cpp:988-991). Leaving Insert stops it too, so Esc inside
+    /// the delay never shows a popup. An open popup does not stop it.
+    pub(crate) fn still_wanted(self, now: DelayFacts) -> bool {
+        now.insert_like && now.editor == Some(self.editor) && now.line == self.line
     }
 }
 
@@ -292,71 +310,27 @@ mod tests {
         use Popup::{Closed, Paths, Words};
         const SOFT: Follow = Requery { force: false };
         const FORCE: Follow = Requery { force: true };
-        // (edit, char now before the caret, popup, in a string, auto-complete on, expected)
-        let rows: &[(&str, Edit, char, Popup, bool, bool, Follow)] = &[
-            ("no edit", Edit::None, 'n', Words, false, true, Keep),
+        // (edit, char now before the caret, popup, in a string, expected)
+        let rows: &[(&str, Edit, char, Popup, bool, Follow)] = &[
+            ("no edit", Edit::None, 'n', Words, false, Keep),
+            ("a word char narrows", Inserted, 'n', Words, false, SOFT),
+            ("a prefix char narrows", Inserted, '$', Words, false, SOFT),
             (
-                "a word char narrows",
-                Inserted,
-                'n',
-                Words,
-                false,
-                true,
-                SOFT,
-            ),
-            (
-                "a word char opens",
+                "a word char opens nothing: the delay does",
                 Inserted,
                 'n',
                 Closed,
-                false,
-                true,
-                SOFT,
-            ),
-            (
-                "a prefix char opens",
-                Inserted,
-                '$',
-                Closed,
-                false,
-                true,
-                SOFT,
-            ),
-            (
-                "auto-complete off opens nothing",
-                Inserted,
-                'n',
-                Closed,
-                false,
                 false,
                 Keep,
             ),
-            (
-                "a Ctrl+Space popup narrows with auto-complete off",
-                Inserted,
-                'n',
-                Words,
-                false,
-                false,
-                SOFT,
-            ),
-            (
-                "a non-word char closes",
-                Inserted,
-                ';',
-                Words,
-                false,
-                true,
-                Close,
-            ),
-            ("a space closes", Inserted, ' ', Words, false, true, Close),
+            ("a non-word char closes", Inserted, ';', Words, false, Close),
+            ("a space closes", Inserted, ' ', Words, false, Close),
             (
                 "a slash keeps a node path popup",
                 Inserted,
                 '/',
                 Paths,
                 false,
-                true,
                 FORCE,
             ),
             (
@@ -365,26 +339,7 @@ mod tests {
                 '/',
                 Words,
                 false,
-                true,
                 Close,
-            ),
-            (
-                "a slash opens nothing",
-                Inserted,
-                '/',
-                Closed,
-                false,
-                true,
-                Keep,
-            ),
-            (
-                "a non-word char with no popup",
-                Inserted,
-                ';',
-                Closed,
-                false,
-                true,
-                Keep,
             ),
             (
                 "any char continues a string popup",
@@ -392,7 +347,6 @@ mod tests {
                 '-',
                 Paths,
                 true,
-                false,
                 SOFT,
             ),
             (
@@ -401,53 +355,38 @@ mod tests {
                 '/',
                 Paths,
                 true,
-                true,
                 SOFT,
             ),
             (
-                "any char in a string opens",
+                "a char in a string opens nothing: the delay does",
                 Inserted,
                 ':',
                 Closed,
                 true,
-                true,
-                SOFT,
+                Keep,
             ),
+            ("backspace widens", Erased, 'A', Paths, false, SOFT),
             (
-                "a char in a string opens nothing with auto-complete off",
-                Inserted,
-                ':',
+                "backspace opens nothing, as in Godot",
+                Erased,
+                'A',
                 Closed,
-                true,
                 false,
                 Keep,
             ),
-            ("backspace widens", Erased, 'A', Paths, false, false, SOFT),
-            ("backspace opens", Erased, 'A', Closed, false, true, SOFT),
             (
                 "backspace onto a slash keeps a node path popup",
                 Erased,
                 '/',
                 Paths,
                 false,
-                false,
                 FORCE,
-            ),
-            (
-                "backspace with everything off",
-                Erased,
-                'A',
-                Closed,
-                false,
-                false,
-                Keep,
             ),
             (
                 "<C-w> or a caret move re-derive",
                 Other,
                 'A',
                 Words,
-                false,
                 false,
                 SOFT,
             ),
@@ -457,14 +396,114 @@ mod tests {
                 '/',
                 Paths,
                 false,
-                false,
                 FORCE,
             ),
-            ("<C-w> opens nothing", Other, 'A', Closed, false, true, Keep),
+            ("<C-w> opens nothing", Other, 'A', Closed, false, Keep),
         ];
-        for (what, edit, prev, popup, in_string, auto, want) in rows {
+        for (what, edit, prev, popup, in_string, want) in rows {
             let ed = editor(*popup, *in_string);
-            assert_eq!(follow(*edit, Some(*prev), *auto, &ed), *want, "{what}");
+            assert_eq!(follow(*edit, Some(*prev), &ed), *want, "{what}");
+        }
+    }
+
+    #[test]
+    fn an_insertion_arms_the_delay_unless_code_complete_is_off() {
+        // (what, edit, popup, line head, Code Complete Enabled, calls)
+        type Row<'a> = (&'a str, Edit, Popup, &'a str, bool, &'a [&'a str]);
+        let rows: &[Row] = &[
+            (
+                "typing with no popup",
+                Edit::Inserted,
+                Popup::Closed,
+                "pr",
+                true,
+                &["arm"],
+            ),
+            (
+                "a symbol arms too, as Godot restarts its timer on it",
+                Edit::Inserted,
+                Popup::Closed,
+                "a;",
+                true,
+                &["arm"],
+            ),
+            (
+                "#18: Code Complete Enabled off never opens a popup",
+                Edit::Inserted,
+                Popup::Closed,
+                "pr",
+                false,
+                &[],
+            ),
+            (
+                "narrowing an open popup arms too, as Godot does",
+                Edit::Inserted,
+                Popup::Words,
+                "pr",
+                true,
+                &["cancel", "request(force=false)", "arm"],
+            ),
+            (
+                // Shaders share these prefixes (code_editor.cpp:2099).
+                "#19: a semicolon closes the popup, then arms",
+                Edit::Inserted,
+                Popup::Words,
+                "a;",
+                true,
+                &["cancel", "arm"],
+            ),
+            (
+                "backspace with no popup",
+                Edit::Erased,
+                Popup::Closed,
+                "p",
+                true,
+                &[],
+            ),
+            ("a newline", Edit::Other, Popup::Closed, "", true, &[]),
+        ];
+        for (what, edit, popup, head, auto, want) in rows {
+            let mut ed = editor(*popup, false);
+            follow_engine_edit(&mut ed, *edit, &at(head, head.len()), true, *auto);
+            assert_eq!(ed.completion_log, *want, "{what}");
+        }
+    }
+
+    #[test]
+    fn the_delay_dies_with_its_line_its_editor_and_insert_mode() {
+        let arm = DelayArm { editor: 7, line: 4 };
+        let here = DelayFacts {
+            editor: Some(7),
+            line: 4,
+            insert_like: true,
+        };
+        assert!(arm.still_wanted(here));
+        let rows = [
+            (
+                "#15: Esc inside the delay",
+                DelayFacts {
+                    insert_like: false,
+                    ..here
+                },
+            ),
+            ("the caret left the line", DelayFacts { line: 5, ..here }),
+            (
+                "another editor",
+                DelayFacts {
+                    editor: Some(8),
+                    ..here
+                },
+            ),
+            (
+                "detached",
+                DelayFacts {
+                    editor: None,
+                    ..here
+                },
+            ),
+        ];
+        for (what, now) in rows {
+            assert!(!arm.still_wanted(now), "{what}");
         }
     }
 
