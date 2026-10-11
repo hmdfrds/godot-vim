@@ -12,6 +12,7 @@ use godot::classes::{
 use godot::global::Key;
 use godot::prelude::*;
 use vim_core::keymap::KeyEvent;
+use vim_core::primitives::SelectionShape;
 
 use crate::actions::action::{ActionCtx, Params};
 use crate::actions::outcome::Outcome;
@@ -982,44 +983,29 @@ fn set_allow_search(control: &Gd<Control>, allow: bool) -> Option<bool> {
 }
 
 /// Translate Godot's selection extents into Vim anchor/head and forward to the
-/// controller. Determines drag direction from caret position. Shared by Cases 1
-/// (enter Visual) and 4 (extend Visual) in `on_caret_changed_impl`.
+/// controller. Shared by Cases 1 (enter Visual) and 4 (extend Visual) in
+/// `on_caret_changed_impl`.
 fn apply_mouse_selection(
     controller: &mut VimController,
     ed: &mut Gd<CodeEdit>,
     reconciler: &mut super::caret_reconcile::CaretReconciler,
     ui: &mut UiCoordinator,
 ) {
-    let shape = detect_selection_shape(ed);
-
-    let from_line = ed.get_selection_from_line();
-    let from_col = ed.get_selection_from_column();
-    let to_line = ed.get_selection_to_line();
-    let to_col = ed.get_selection_to_column();
-
-    // Godot puts the caret at the drag endpoint -- if caret is at the start
-    // of the selection, the user dragged backward.
-    let caret_line = ed.get_caret_line();
-    let caret_col = ed.get_caret_column();
-    let caret_at_start = caret_line == from_line && caret_col == from_col;
-
-    let (anchor_line, anchor_col, head_line, head_col) = if caret_at_start {
-        (to_line, to_col, from_line, from_col)
-    } else {
-        (from_line, from_col, to_line, to_col)
-    };
-
-    log::debug!(
-        "apply_mouse_selection: shape={:?} anchor=({},{}) head=({},{})",
+    let from = (ed.get_selection_from_line(), ed.get_selection_from_column());
+    let to = (ed.get_selection_to_line(), ed.get_selection_to_column());
+    // Godot leaves the caret at the drag endpoint, so a caret on `from`
+    // means the user dragged backward.
+    let backward = (ed.get_caret_line(), ed.get_caret_column()) == from;
+    let VisualExtents {
         shape,
-        anchor_line,
-        anchor_col,
-        head_line,
-        head_col
-    );
+        anchor,
+        head,
+    } = visual_extents(from, to, backward);
+
+    log::debug!("apply_mouse_selection: shape={shape:?} anchor={anchor:?} head={head:?}");
 
     let did_change =
-        controller.process_mouse_selection(ed, anchor_line, anchor_col, head_line, head_col, shape);
+        controller.process_mouse_selection(ed, anchor.0, anchor.1, head.0, head.1, shape);
 
     if did_change {
         let editor_id = ed.instance_id();
@@ -1040,21 +1026,28 @@ fn apply_mouse_selection(
     }
 }
 
-/// Heuristic: Godot's triple-click produces a selection from col 0 to col 0
-/// of the next line. Detecting this pattern lets us enter Visual Line mode
-/// instead of Visual Char mode for triple-click selections.
-fn detect_selection_shape(editor: &Gd<CodeEdit>) -> vim_core::primitives::SelectionShape {
-    use vim_core::primitives::SelectionShape;
+/// The shape and `(line, column)` ends Visual mode gets for a Godot selection.
+#[derive(Debug, PartialEq, Eq)]
+struct VisualExtents {
+    shape: SelectionShape,
+    anchor: (i32, i32),
+    head: (i32, i32),
+}
 
-    let from_col = editor.get_selection_from_column();
-    let to_line = editor.get_selection_to_line();
-    let to_col = editor.get_selection_to_column();
-    let from_line = editor.get_selection_from_line();
-
-    if from_col == 0 && to_col == 0 && to_line > from_line {
-        SelectionShape::Line
+/// A selection from column 0 to column 0 of a later line is whole lines
+/// (triple-click, a click on a line number). Godot's end is exclusive, so
+/// the last line Vim selects is the one above `to`.
+fn visual_extents(from: (i32, i32), to: (i32, i32), backward: bool) -> VisualExtents {
+    let (shape, end) = if from.1 == 0 && to.1 == 0 && to.0 > from.0 {
+        (SelectionShape::Line, (to.0 - 1, 0))
     } else {
-        SelectionShape::Char
+        (SelectionShape::Char, to)
+    };
+    let (anchor, head) = if backward { (end, from) } else { (from, end) };
+    VisualExtents {
+        shape,
+        anchor,
+        head,
     }
 }
 
@@ -1357,6 +1350,56 @@ mod tests {
             plan_effects(&Plan::Run(vec![a_candidate()], key)).0,
             Disposition::Ignore,
             "the candidate list must not change the plan's own verdict"
+        );
+    }
+
+    // ── (c) A Godot selection as Visual extents ──────────────────────
+
+    fn extents(shape: SelectionShape, anchor: (i32, i32), head: (i32, i32)) -> VisualExtents {
+        VisualExtents {
+            shape,
+            anchor,
+            head,
+        }
+    }
+
+    #[test]
+    fn a_line_number_click_selects_only_that_line() {
+        // Godot selects 5:0 to 6:0 for a click on line 5's number or a
+        // triple-click on it. Taking 6 as the head put line 6 in V-LINE too,
+        // so `d` deleted two lines.
+        assert_eq!(
+            visual_extents((5, 0), (6, 0), false),
+            extents(SelectionShape::Line, (5, 0), (5, 0))
+        );
+    }
+
+    #[test]
+    fn whole_lines_end_above_the_exclusive_end_in_either_direction() {
+        assert_eq!(
+            visual_extents((3, 0), (7, 0), false),
+            extents(SelectionShape::Line, (3, 0), (6, 0))
+        );
+        assert_eq!(
+            visual_extents((3, 0), (7, 0), true),
+            extents(SelectionShape::Line, (6, 0), (3, 0))
+        );
+    }
+
+    #[test]
+    fn a_character_selection_keeps_its_ends() {
+        assert_eq!(
+            visual_extents((2, 3), (4, 5), false),
+            extents(SelectionShape::Char, (2, 3), (4, 5))
+        );
+        assert_eq!(
+            visual_extents((2, 3), (4, 5), true),
+            extents(SelectionShape::Char, (4, 5), (2, 3))
+        );
+        // Ending at column 0 is not enough: the first line is partial.
+        assert_eq!(
+            visual_extents((2, 3), (4, 0), false),
+            extents(SelectionShape::Char, (2, 3), (4, 0))
         );
     }
 }

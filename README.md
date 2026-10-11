@@ -177,8 +177,9 @@ different. Blink and line highlighting come from Godot's own settings under
 
 The status bar is a floating overlay at the bottom right: mode, command line,
 messages, a recording indicator, the pending command (`d2` while it waits for a
-motion) and pending mapping keys. The line-number gutter has four modes and
-defaults to Hybrid. Yanked text flashes for 150 ms by default.
+motion) and pending mapping keys. The line-number column has four modes and
+defaults to Hybrid; only the numbers change, so Godot's breakpoint and fold
+gutters stay as they are. Yanked text flashes for 150 ms by default.
 
 [Cursor](docs/REFERENCE.md#custom-cursor) ·
 [Status bar](docs/REFERENCE.md#status-bar) ·

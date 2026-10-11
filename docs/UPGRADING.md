@@ -97,6 +97,30 @@ comment. The Sandbox still does not analyse register execution (`@a`,
 only through one of those is not caught. Put a mapping you want kept in
 `user://.godot-vimrc`.
 
+**The line-number column keeps Godot's own gutters.** GodotVim used to hide
+Godot's line-number and fold gutters and draw copies of both. Now it changes
+only the numbers: it replaces them in Relative and Hybrid and hides them in
+None. The breakpoint, fold and signal-connection gutters are always Godot's.
+
+- **Absolute** is Godot's own line numbers, untouched.
+- The fold arrows are Godot's, so turning off **Code Folding** under
+  **Text Editor > Appearance > Lines** hides them, as it does without
+  GodotVim.
+- **Show Line Numbers** under **Text Editor > Appearance > Gutters** turns
+  the column on and off at once, whatever the Line Numbers mode. It used to
+  take effect only after switching scripts.
+- The column has Godot's width, zero padding (**Line Numbers Zero Padded**),
+  minimum digit count, and the script editor's colour for type-safe lines.
+- In Relative and Hybrid a closed fold counts as one line, as it does for
+  `j` and `k`. A number past a closed fold is smaller than before, and
+  typing it before `j` or `k` now lands on that line.
+- Clicking a line number selects that line, as in Godot, and enters Visual
+  Line mode on it. The numbers used to ignore clicks.
+- A triple-click enters Visual Line mode on that one line. It used to take
+  the line below too, so `d` deleted two lines.
+
+The **Line Numbers** setting keeps its options and your stored choice.
+
 ## From v1.8.0
 
 **Textwidth now defaults to `0`, as in Vim.** With the old default of 80,

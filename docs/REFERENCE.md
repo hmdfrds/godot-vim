@@ -1018,12 +1018,23 @@ Those colors are all settings; the table lives with the rest of them under
 
 ## Line Numbers
 
-Four gutter modes selectable via EditorSettings:
+The **Line Numbers** setting picks how the number column counts. Only the
+numbers change: the breakpoint, fold and signal-connection gutters are
+Godot's in every mode.
 
-- **Hybrid** (default), Current line shows absolute number, others show relative distance
-- **Relative**: All lines show distance from cursor
-- **Absolute**: Standard line numbers
-- **None**: No line numbers (fold icons still shown)
+- **Hybrid** (default): the current line shows its line number, the others their distance from it
+- **Relative**: every line shows its distance from the cursor line, which shows `0`
+- **Absolute**: Godot's own line numbers, untouched
+- **None**: no line numbers
+
+In Relative and Hybrid a closed fold counts as one line, as it does for `j`
+and `k`, so the number beside a line is the count that reaches it. The rest
+follows Godot: **Text Editor > Appearance > Gutters > Show Line Numbers**
+decides whether the column is there, and its width, zero padding, minimum
+digit count and per-line colours are Godot's. Clicking a number selects
+that line, as in Godot, and enters Visual Line mode on it, or charwise
+Visual on the last line of a file with no trailing newline or after a drag
+upward.
 
 ---
 

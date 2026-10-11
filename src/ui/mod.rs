@@ -5,7 +5,7 @@
 //!
 //! - [`status_bar`]: Floating mode/message/command-line display.
 //! - [`cursor_shape`]: Animated cursor overlay with GLSL difference-blend shader.
-//! - [`line_numbers`]: Relative/hybrid gutter with fold icons.
+//! - [`line_numbers`]: Relative/hybrid numbers beside Godot's own gutters.
 //! - [`search_hl`]: Search match highlighting via CodeEdit's built-in API.
 //! - [`inccommand`]: Live `:s` substitute preview overlay.
 //! - [`highlight_yank`]: Yank fade animation.
