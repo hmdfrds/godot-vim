@@ -124,6 +124,34 @@ pub(crate) fn read_all(settings: &EditorSettings) -> SettingsSnapshot {
 // Per-type reading helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Which of a key's values to read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Source {
+    /// What Godot's own editor uses: `get_setting` returns a project's
+    /// `editor_overrides/` entry first (editor_settings.cpp, `get_setting`).
+    Effective,
+    /// The user's stored value: `Object::get` reaches `EditorSettings::_get`,
+    /// which no project override changes.
+    Stored,
+}
+
+impl Source {
+    fn for_key(key: &str) -> Self {
+        if keys::USER_ONLY.contains(&key) {
+            Self::Stored
+        } else {
+            Self::Effective
+        }
+    }
+}
+
+fn fetch(settings: &EditorSettings, key: &str) -> Variant {
+    match Source::for_key(key) {
+        Source::Effective => settings.get_setting(key),
+        Source::Stored => settings.get(key),
+    }
+}
+
 /// Generic typed read with fallback. The `type_name` parameter is only used
 /// in the warning log message — Godot's `Variant` doesn't expose its type
 /// name in a way that's useful for diagnostics.
@@ -136,7 +164,7 @@ fn read_setting<T: FromGodot>(
     if !settings.has_setting(key) {
         return default;
     }
-    let variant = settings.get_setting(key);
+    let variant = fetch(settings, key);
     match variant.try_to::<T>() {
         Ok(v) => v,
         Err(_) => {
@@ -232,7 +260,7 @@ fn read_enum_string(
     if !settings.has_setting(key) {
         return default.to_owned();
     }
-    let variant = settings.get_setting(key);
+    let variant = fetch(settings, key);
 
     // Godot's ENUM dropdowns silently convert STRING values to INT ordinals
     // after the user touches the dropdown. We must check the variant's actual
@@ -384,6 +412,31 @@ fn read_project_vimrc(settings: &EditorSettings) -> ProjectVimrc {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_security_keys_and_the_config_path_ignore_project_overrides() {
+        for key in [
+            keys::PROJECT_VIMRC,
+            keys::SHELL_EXECUTION,
+            keys::FILE_ACCESS_SCOPE,
+            keys::CONFIG_FILE_PATH,
+        ] {
+            assert_eq!(Source::for_key(key), Source::Stored, "{key}");
+        }
+    }
+
+    #[test]
+    fn every_other_setting_honours_project_overrides() {
+        for key in [
+            keys::LOG_LEVEL,
+            keys::ENABLED,
+            keys::TEXTWIDTH,
+            keys::PASSTHROUGH_KEYS,
+            keys::CODE_COMPLETE_ENABLED,
+        ] {
+            assert_eq!(Source::for_key(key), Source::Effective, "{key}");
+        }
+    }
 
     #[test]
     fn lerp_speed_in_range_passes_through() {

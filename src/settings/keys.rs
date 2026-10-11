@@ -88,6 +88,17 @@ pub(crate) const SHELL_EXECUTION: &str = "plugins/GodotVim/security/shell_execut
 pub(crate) const FILE_ACCESS_SCOPE: &str = "plugins/GodotVim/security/file_access_scope";
 pub(crate) const PROJECT_VIMRC: &str = "plugins/GodotVim/security/project_vimrc";
 
+/// Keys only the user's own Editor Settings decide. A project's
+/// `editor_overrides/` entry for one is ignored, so a committed project.godot
+/// cannot loosen the vimrc policy, enable `:!`, widen file access or name a
+/// vimrc that is trusted at every tier.
+pub(crate) const USER_ONLY: [&str; 4] = [
+    PROJECT_VIMRC,
+    SHELL_EXECUTION,
+    FILE_ACCESS_SCOPE,
+    CONFIG_FILE_PATH,
+];
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Status bar colors
 // ─────────────────────────────────────────────────────────────────────────────
