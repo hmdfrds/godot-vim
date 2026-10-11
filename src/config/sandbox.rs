@@ -463,19 +463,17 @@ fn is_map_or_noremap_abbrev(name: &str) -> bool {
 
 /// Scan a mapping line for dangerous patterns: case-sensitive function names
 /// (Vim functions are case-sensitive) anywhere in the line, and
-/// abbreviation-aware, case-insensitive ex-commands wherever the right-hand
-/// side can start one.
+/// abbreviation-aware, case-insensitive ex-commands the right-hand side runs.
 ///
 /// A blacklist, so not complete: register execution (`@a`, `:@a`), the `!`
-/// operator and expression mappings are not modelled.
+/// filter operator, `<expr>` mappings and keys fed through `:normal` /
+/// `:global` are not analysed (see the module docs).
 fn contains_shell_pattern(line: &str) -> bool {
     if FUNCTION_PATTERNS.iter().any(|pat| line.contains(pat)) {
         return true;
     }
     let (cmd, rhs) = split_mapping(line);
-    command_lines(rhs, starts_in_command_line(cmd))
-        .iter()
-        .any(|text| starts_dangerous_command(text))
+    simulate_command_line(rhs, starts_in_command_line(cmd))
 }
 
 /// The map command and its right-hand side, split as the engine's
@@ -511,42 +509,150 @@ fn starts_in_command_line(cmd: &str) -> bool {
     cmd.ends_with('!') || cmd.starts_with(['c', 'C'])
 }
 
-/// The command-line text a right-hand side types, cut wherever a command
-/// can start: at `:`, at a `|` typed in the command line, and at any key
-/// that edits the command line (`<Home>`, `<Left>`, `<Tab>`, `<C-R>`...),
-/// since what is typed after it can end up at the front.
+/// Whether the right-hand side, run as keys, reaches a dangerous command.
 ///
-/// Keys are read as the engine reads a mapping, `<...>` groups through
-/// [`KeyEvent::from_vim_notation`], so `<Bar>`, `<Space>` and `<S-Space>`
-/// are typed characters like `|` and ` `.
-fn command_lines(rhs: &str, mut in_command_line: bool) -> Vec<String> {
+/// Models the two ways a key sequence builds a command the engine executes:
+/// a `:` command line (with its editing keys and cursor) and a `<Cmd>…<CR>`
+/// sequence. Keys whose effect on the final text is not modelled (Tab,
+/// `<C-R>`, history recall, word motions, …) strip the mapping, because the
+/// text cannot be known. Keys are read as the engine reads a mapping, so
+/// `<Bar>`, `<Space>` and `<S-Space>` are the characters `|` and ` `.
+fn simulate_command_line(rhs: &str, starts_in_command_line: bool) -> bool {
     use vim_core::keymap::{Key, Modifiers};
-    let mut lines = Vec::new();
-    let mut text = String::new();
+    let mut ex: Option<(String, usize)> = starts_in_command_line.then(|| (String::new(), 0));
+    let mut cmd: Option<String> = None;
+
     for key in mapping_keys(rhs) {
-        let typed = match key.key() {
-            Key::Char(c) if (key.modifiers() - Modifiers::SHIFT).is_empty() => Some(c),
-            _ => None,
-        };
-        match typed {
-            Some(':') => {
-                if in_command_line {
-                    lines.push(std::mem::take(&mut text));
+        // `<Cmd>` starts (and restarts) a `<Cmd>…<CR>` sequence from any mode,
+        // ahead of the current command line (vim-core engine.rs).
+        if key.key() == Key::Cmd {
+            cmd = Some(String::new());
+            continue;
+        }
+        if let Some(buf) = cmd.as_mut() {
+            match key.key() {
+                Key::Enter => {
+                    if line_runs_dangerous(buf) {
+                        return true;
+                    }
+                    cmd = None;
                 }
-                in_command_line = true;
+                Key::Escape => cmd = None,
+                // Only characters reach the `<Cmd>` buffer; the engine drops
+                // everything else, so modifiers on a character fall away too.
+                Key::Char(c) => buf.push(c),
+                _ => {}
             }
-            _ if !in_command_line => {}
-            Some('|') | None => {
-                lines.push(std::mem::take(&mut text));
-                in_command_line = !matches!(key.key(), Key::Enter | Key::Escape);
+            continue;
+        }
+        match ex.as_mut() {
+            None => {
+                if matches!(key.key(), Key::Char(':'))
+                    && (key.modifiers() - Modifiers::SHIFT).is_empty()
+                {
+                    ex = Some((String::new(), 0));
+                }
             }
-            Some(c) => text.push(c),
+            Some((buf, cursor)) => match apply_cmdline_key(buf, cursor, key) {
+                CmdStep::Continue => {}
+                CmdStep::Commit => {
+                    if line_runs_dangerous(buf) {
+                        return true;
+                    }
+                    ex = None;
+                }
+                CmdStep::Cancel => ex = None,
+                CmdStep::Unmodelled => return true,
+            },
         }
     }
-    if in_command_line {
-        lines.push(text);
+    // A command line left open still strips: the branch strips bare and open
+    // `:source` too, and a `<Cmd>` left open runs on the next key.
+    cmd.as_deref().is_some_and(line_runs_dangerous)
+        || ex.is_some_and(|(buf, _)| line_runs_dangerous(&buf))
+}
+
+/// One committed command line, split on `|` into its commands. Splitting is an
+/// over-approximation (a `|` inside a pattern or string makes extra pieces),
+/// which can only strip more, never less.
+fn line_runs_dangerous(line: &str) -> bool {
+    line.split('|').any(starts_dangerous_command)
+}
+
+/// How a key acts on a `:` command line.
+enum CmdStep {
+    /// Edit applied; keep collecting.
+    Continue,
+    /// Enter: run the line.
+    Commit,
+    /// Esc / `<C-c>`: discard the line.
+    Cancel,
+    /// A key whose effect on the final text is not modelled: strip, since the
+    /// text cannot be known.
+    Unmodelled,
+}
+
+/// Apply one key to a `:` command line (`buf` plus a byte `cursor`), mirroring
+/// vim-core's command-line handler and edit state (`mode/command_line.rs`,
+/// `state/command_line.rs`). Only the editing keys that have a definite effect
+/// on the text are modelled; any other key returns [`CmdStep::Unmodelled`].
+fn apply_cmdline_key(
+    buf: &mut String,
+    cursor: &mut usize,
+    key: vim_core::keymap::KeyEvent,
+) -> CmdStep {
+    use vim_core::keymap::{Key, Modifiers};
+    match key.key() {
+        Key::Enter => return CmdStep::Commit,
+        Key::Escape => return CmdStep::Cancel,
+        Key::Backspace => return backspace(buf, cursor),
+        Key::Delete if *cursor < buf.len() => {
+            buf.remove(*cursor);
+        }
+        Key::Delete => {}
+        Key::Left if key.modifiers().is_empty() => {
+            if *cursor > 0 {
+                *cursor = buf[..*cursor].char_indices().last().map_or(0, |(i, _)| i);
+            }
+        }
+        Key::Right if key.modifiers().is_empty() => {
+            if *cursor < buf.len() {
+                *cursor += buf[*cursor..].chars().next().map_or(0, char::len_utf8);
+            }
+        }
+        Key::Home if key.modifiers().is_empty() => *cursor = 0,
+        Key::End if key.modifiers().is_empty() => *cursor = buf.len(),
+        Key::Char(c) if (key.modifiers() - Modifiers::SHIFT).is_empty() => {
+            buf.insert(*cursor, c);
+            *cursor += c.len_utf8();
+        }
+        Key::Char(c) if key.modifiers() == Modifiers::CTRL => match c {
+            'h' => return backspace(buf, cursor),
+            'u' => {
+                buf.replace_range(..*cursor, "");
+                *cursor = 0;
+            }
+            'k' => buf.truncate(*cursor),
+            'c' | '[' => return CmdStep::Cancel,
+            _ => return CmdStep::Unmodelled,
+        },
+        _ => return CmdStep::Unmodelled,
     }
-    lines
+    CmdStep::Continue
+}
+
+/// Delete the character before the cursor. An empty command line cancels
+/// instead, as in Vim.
+fn backspace(buf: &mut String, cursor: &mut usize) -> CmdStep {
+    if buf.is_empty() {
+        return CmdStep::Cancel;
+    }
+    if *cursor > 0 {
+        let prev = buf[..*cursor].char_indices().last().map_or(0, |(i, _)| i);
+        buf.remove(prev);
+        *cursor = prev;
+    }
+    CmdStep::Continue
 }
 
 /// Mirrors vim-core's `key_notation::parse_impl`, the parser of mapping
@@ -873,30 +979,35 @@ inoremap jk <Esc>
         assert!(output.contains("[sandbox] stripped"));
     }
 
+    // A `!`-suffix map and a cmap type their RHS into the command line, so a
+    // shell command in it (no leading `:`, which in an open command line is a
+    // literal colon, not a fresh prompt) is checked and stripped.
     #[test]
     fn strips_bang_suffix_map_command() {
-        let input = "nnoremap! <Leader>x :!rm -rf /<CR>\n";
+        let input = "nnoremap! <Leader>x !ls<CR>\n";
         let output = sandbox_config_text(input);
         assert!(output.contains("[sandbox] stripped"));
     }
 
     #[test]
     fn strips_abbreviated_bang_suffix() {
-        let input = "nn! <Leader>x :!rm -rf /<CR>\n";
+        let input = "nn! <Leader>x !ls<CR>\n";
         let output = sandbox_config_text(input);
         assert!(output.contains("[sandbox] stripped"));
     }
 
     #[test]
     fn strips_map_bang_suffix() {
-        let input = "map! <Leader>x :!rm -rf /<CR>\n";
+        let input = "map! <Leader>x !ls<CR>\n";
         let output = sandbox_config_text(input);
         assert!(output.contains("[sandbox] stripped"));
     }
 
+    /// A normal-mode map opens the command line with `:`, so its RHS runs the
+    /// shell even though a cmap's leading `:` would be a literal colon.
     #[test]
     fn strips_case_insensitive_map_command() {
-        let input = "NNOREMAP <Leader>x :!rm -rf /<CR>\n";
+        let input = "NNOREMAP <Leader>x :!ls<CR>\n";
         let output = sandbox_config_text(input);
         assert!(output.contains("[sandbox] stripped"));
     }
@@ -910,9 +1021,17 @@ inoremap jk <Esc>
 
     #[test]
     fn strips_cnoremap_shell_mapping() {
-        let input = "cnoremap <Leader>x :!rm -rf /<CR>\n";
+        let input = "cnoremap <Leader>x !ls<CR>\n";
         let output = sandbox_config_text(input);
         assert!(output.contains("[sandbox] stripped"));
+    }
+
+    /// In an already-open command line (a cmap) the RHS's leading `:` is a
+    /// literal colon, so `:!ls` is the inert text `:!ls`, not a shell command;
+    /// the engine does not run it, so the mapping is left in place.
+    #[test]
+    fn keeps_cmap_whose_leading_colon_is_literal() {
+        assert_all_kept(&["cnoremap <C-x> :!ls<CR>"]);
     }
 
     #[test]
@@ -1059,19 +1178,36 @@ inoremap jk <Esc>
         ]);
     }
 
-    /// Editing keys move what is typed after them to the front.
+    /// `<Cmd>…<CR>` runs its text as an ex line without a command line, so it
+    /// reaches `:source` and `:!` the same way a typed `:` does.
+    #[test]
+    fn strips_source_and_shell_reached_through_cmd() {
+        assert_all_stripped(&[
+            "nnoremap x <Cmd>source user://a.vim<CR>",
+            "nnoremap x <cmd>silent so user://a.vim<CR>",
+            "nnoremap x <Cmd>so<Space>user://a.vim<CR>",
+            "nnoremap x <Cmd>noh<Bar>so user://a.vim<CR>",
+            "nnoremap x <Cmd>!ls<CR>",
+        ]);
+    }
+
+    /// Editing keys move the cursor and delete, so a command word can be
+    /// assembled from pieces. The command line is modelled as a buffer and a
+    /// cursor, not cut at the editing keys.
     #[test]
     fn strips_source_assembled_by_editing_the_command_line() {
         assert_all_stripped(&[
             "nnoremap x :urce user://a.vim<Home>so<CR>",
-            "nnoremap x :so<Left>urce user://a.vim<CR>",
+            "nnoremap x :o user://a.vim<Home>s<CR>",
+            "nnoremap x :soX<BS> user://a.vim<CR>",
+            "nnoremap x :sox<C-h> user://a.vim<CR>",
         ]);
     }
 
     #[test]
     fn strips_shell_behind_a_modifier_a_bar_or_any_range() {
         assert_all_stripped(&[
-            "nnoremap x :silent !rm -rf ~<CR>",
+            "nnoremap x :silent !ls<CR>",
             "nnoremap x :noh<Bar>!ls<CR>",
             "nnoremap x :r\t!ls<CR>",
             "nnoremap x :'a,'b!sort<CR>",
@@ -1091,6 +1227,21 @@ inoremap jk <Esc>
             "nnoremap x <C-w>so",
             "nnoremap x :w<CR><C-w>so",
             "nnoremap x :%s/a/so/g<Left><Left>",
+            "nnoremap x <Cmd>noh<CR>",
+            "nnoremap x <Cmd>w<CR>",
+        ]);
+    }
+
+    /// A command-line key whose effect on the final text is not modelled
+    /// (`<Tab>`, `<C-r>`, history recall, …) strips the mapping, since the
+    /// text that would run cannot be known.
+    #[test]
+    fn strips_command_line_with_an_unmodelled_key() {
+        assert_all_stripped(&[
+            "nnoremap x :echo<C-r>a<CR>",
+            "nnoremap x :echo<Up><CR>",
+            "nnoremap x :echo<C-f>",
+            "cnoremap <C-x> <C-r>a",
         ]);
     }
 
