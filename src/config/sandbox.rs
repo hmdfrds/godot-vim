@@ -111,7 +111,8 @@ pub(crate) struct PolicyText {
 ///
 /// Only known-safe constructs pass through (comments, blanks, safe `:set`
 /// and `:setlocal`, `:filetype`, `:let mapleader`, non-recursive mappings
-/// with clean RHS). Everything else
+/// with clean RHS), and a line of several `|` commands only when each one
+/// is. Everything else
 /// -- including raw ex-commands like `:source` or `:!` -- is replaced with
 /// a diagnostic comment. This prevents a malicious `res://.godot-vimrc`
 /// from executing arbitrary commands.
@@ -120,7 +121,17 @@ fn sandbox(text: &str) -> PolicyText {
     let mut stripped = 0;
     for line in text.lines() {
         let trimmed = line.trim();
-        if is_safe_non_mapping_line(trimmed) {
+        if let Some(command) = unsafe_bar_command(trimmed) {
+            log::warn!(
+                "sandbox: stripped line with an unsafe | command ({}) from project vimrc: {}",
+                command,
+                trimmed
+            );
+            output.push_str("\" [sandbox] stripped: ");
+            stripped += 1;
+            output.push_str(trimmed);
+            output.push('\n');
+        } else if is_safe_non_mapping_line(trimmed) {
             output.push_str(line);
             output.push('\n');
         } else if is_mapping_line(trimmed) {
@@ -181,6 +192,41 @@ fn sandbox(text: &str) -> PolicyText {
         text: output,
         stripped,
     }
+}
+
+/// The first command of a line holding several that would be stripped on a
+/// line of its own. vim-core splits a config line at every `|` not preceded
+/// by a backslash and runs each command, so every one must pass, not only
+/// the first. Splitting inside a pattern or a string only strips more.
+fn unsafe_bar_command(trimmed: &str) -> Option<&str> {
+    if trimmed.starts_with('"') {
+        return None;
+    }
+    let mut commands = Vec::new();
+    let mut start = 0;
+    for (at, _) in trimmed.match_indices('|') {
+        if !trimmed[..at].ends_with('\\') {
+            commands.push(&trimmed[start..at]);
+            start = at + 1;
+        }
+    }
+    if commands.is_empty() {
+        return None;
+    }
+    commands.push(&trimmed[start..]);
+    commands
+        .into_iter()
+        .map(str::trim)
+        .find(|command| !is_safe_command(command))
+}
+
+/// Whether `trimmed`, as a line of its own, passes the sandbox unchanged.
+fn is_safe_command(trimmed: &str) -> bool {
+    if is_mapping_line(trimmed) {
+        return !is_recursive_map_line(trimmed) && !contains_shell_pattern(trimmed);
+    }
+    is_safe_non_mapping_line(trimmed)
+        || (crate::config::panelmap::is_panel_line(trimmed) && panel_line_is_safe(trimmed))
 }
 
 /// Options that can execute shell commands or exfiltrate data.
@@ -1671,6 +1717,55 @@ imap jj <Esc>
         }
     }
 
+    // ── Several commands on one line ─────────────────────────────────
+
+    #[test]
+    fn strips_a_line_whose_later_bar_command_is_unsafe() {
+        // vim-core runs every `|` command of a config line; these passed
+        // because the line starts with a safe command.
+        for line in [
+            "set so=5 | nnoremap x :!id<CR>",
+            "set so=5 | nmap x :action foo<CR>",
+            "let mapleader=\",\" | nnoremap x :!id<CR>",
+            "nnoremap x y | !id",
+            "set so=5 \" comment | !id",
+            "set so=5 | set sw=4 | so x.vim",
+        ] {
+            let output = sandbox_config_text(&format!("{line}\n"));
+            assert_eq!(output, format!("\" [sandbox] stripped: {line}\n"));
+        }
+    }
+
+    #[test]
+    fn preserves_a_line_whose_bar_commands_are_all_safe() {
+        for line in [
+            "set so=5 | set sw=4",
+            "let mapleader=\",\" | set so=5",
+            "filetype plugin on | set et",
+            "nnoremap x :echo 1 \\| echo 2<CR>",
+            "\" a comment | !id",
+        ] {
+            let output = sandbox_config_text(&format!("{line}\n"));
+            assert_eq!(output, format!("{line}\n"));
+        }
+    }
+
+    #[test]
+    fn a_stripped_bar_line_defines_nothing_in_the_engine() {
+        // Once vim-core runs a config line as a command line, the commands
+        // after a `|` run too.
+        for line in [
+            "set so=5 | nnoremap x :!id<CR>",
+            "set so=5 | nmap x :action foo<CR>",
+            "let mapleader=\",\" | nnoremap x :!id<CR>",
+        ] {
+            let mut engine = vim_core::execution::VimEngine::new();
+            let _ = engine.source_config_text(&sandbox_config_text(&format!("{line}\n")));
+            let x = vim_core::keymap::KeyEvent::char('x');
+            assert!(!engine.could_start_mapping(x), "{line}");
+        }
+    }
+
     // ── The blocklist's delimiter split ──────────────────────────────
 
     #[test]
@@ -1828,9 +1923,9 @@ imap jj <Esc>
     fn the_policy_counts_the_lines_it_disables() {
         use crate::settings::ProjectVimrc;
         let text = "nnoremap j gj\nnmap Q iBAD<Esc>\nnnoremap K :!ls<CR>\nset tw=10\n\
-                    \" [sandbox] stripped: nmap Q x\n";
+                    set so=5 | !ls\n\" [sandbox] stripped: nmap Q x\n";
         let sandboxed = apply_vimrc_policy(text, true, ProjectVimrc::Sandbox).unwrap();
-        assert_eq!(sandboxed.stripped, 2, "{}", sandboxed.text);
+        assert_eq!(sandboxed.stripped, 3, "{}", sandboxed.text);
         for (is_project_level, policy) in [
             (true, ProjectVimrc::Trusted),
             (false, ProjectVimrc::Sandbox),
