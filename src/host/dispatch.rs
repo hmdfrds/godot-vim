@@ -456,10 +456,8 @@ pub(crate) fn execute(
             //
             // Execution hops to the plugin: an ActionSpec needs `&mut
             // GodotVimCore`, and this runs inside a `&mut controller` borrow.
-            // The hop costs zero frames but is ordered AFTER apply_ui_update
-            // and set_input_as_handled, so a registry action must not publish
-            // text through handle_show_message — it would surface one
-            // keystroke late.
+            // The hop costs zero frames and runs after apply_ui_update and
+            // set_input_as_handled; the plugin draws the UI again after it.
             if name.contains('.') && !name.contains('/') {
                 pending_ui_actions.push(
                     crate::bridge::godot_host::PendingUiAction::RunRegistryAction {

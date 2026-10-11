@@ -993,6 +993,7 @@ impl GodotVimCore {
             "on_config_saved",
             || {
                 self.source_config_from_disk("on_config_saved");
+                self.refresh_ui();
                 true
             },
             false,
