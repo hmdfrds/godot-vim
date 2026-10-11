@@ -140,6 +140,97 @@ pub(crate) fn reconcile_external_text_change(
     }
 }
 
+/// A one-caret completion accept, cut at the caret it started from:
+/// `before[caret..tail_end]` is text after the caret that Godot removed (a
+/// replace, or a merge over matching text, code_edit.cpp:2611-2656), and
+/// `before[start..caret]` became `after[start..inserted_end]`.
+#[derive(Debug, PartialEq, Eq)]
+struct CaretSplit {
+    start: usize,
+    caret: usize,
+    tail_end: usize,
+    inserted_end: usize,
+}
+
+fn split_at_caret(
+    before: &str,
+    after: &str,
+    caret_before: usize,
+    caret_after: usize,
+) -> Option<CaretSplit> {
+    if before == after {
+        return None;
+    }
+    let caret = snap_to_char_boundary_down(before, caret_before.min(before.len()));
+    let caret_after = snap_to_char_boundary_down(after, caret_after.min(after.len()));
+    let prefix = before
+        .bytes()
+        .zip(after.bytes())
+        .take_while(|(a, b)| a == b)
+        .count()
+        .min(caret)
+        .min(caret_after);
+    let start = snap_to_char_boundary_down(before, prefix);
+    let suffix = before
+        .bytes()
+        .rev()
+        .zip(after.bytes().rev())
+        .take_while(|(a, b)| a == b)
+        .count()
+        .min(before.len() - caret)
+        .min(after.len() - caret_after);
+    let tail_end = snap_to_char_boundary_up(before, before.len() - suffix);
+    let inserted_end = after.len() - (before.len() - tail_end);
+    Some(CaretSplit {
+        start,
+        caret,
+        tail_end,
+        inserted_end,
+    })
+}
+
+/// Reconcile a one-caret completion accept.
+///
+/// As one diff, vim-core files the part after its insert cursor outside the
+/// insert and records unmatched deleted text as backspaces before the caret
+/// (external_edit.rs:146, 292-330). So the tail goes first, as a merging edit
+/// `.` skips and a macro records as `<Del>` keys, then an ordinary accept.
+pub(crate) fn reconcile_completion(
+    engine: &mut VimEngine,
+    before: &str,
+    after: &str,
+    caret_before: usize,
+    caret_after: usize,
+) {
+    let Some(split) = split_at_caret(before, after, caret_before, caret_after) else {
+        return;
+    };
+    if split.tail_end > split.caret {
+        let tail = &before[split.caret..split.tail_end];
+        let edit = ExternalEdit::new(
+            Range::new(Offset::new(split.caret), Offset::new(split.tail_end)),
+            "",
+            Offset::new(split.caret),
+            ExternalEditKind::HostNotified,
+        );
+        let _response = engine.apply_external_edit(edit);
+        engine.append_to_recording(&"<Del>".repeat(tail.chars().count()));
+    }
+    let inserted = &after[split.start..split.inserted_end];
+    if split.start == split.caret && inserted.is_empty() {
+        return;
+    }
+    let edit = ExternalEdit::new(
+        Range::new(Offset::new(split.start), Offset::new(split.caret)),
+        inserted,
+        Offset::new(caret_after),
+        ExternalEditKind::Completion,
+    );
+    // Response discarded: CodeEdit already applied the text change.
+    let _response =
+        engine.apply_external_edit_with_recording(edit, &before[split.start..split.caret]);
+}
+
 /// A contiguous edit region within a larger diff, representing one site
 /// where text changed between before and after.
 #[derive(Debug, Clone)]
@@ -315,6 +406,196 @@ fn snap_to_char_boundary_up(s: &str, offset: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_completion_accept_is_cut_at_the_caret_it_started_from() {
+        // (what, before, after, caret before, caret after, tail, replaced, inserted)
+        type Row<'a> = (
+            &'a str,
+            &'a str,
+            &'a str,
+            usize,
+            usize,
+            &'a str,
+            &'a str,
+            &'a str,
+        );
+        let rows: &[Row] = &[
+            (
+                "plain",
+                "\tpri\n",
+                "\tprint_tree()\n",
+                4,
+                13,
+                "",
+                "",
+                "nt_tree()",
+            ),
+            (
+                "replace",
+                "\tprivalue\n",
+                "\tprint_tree()\n",
+                4,
+                13,
+                "value",
+                "",
+                "nt_tree()",
+            ),
+            (
+                "merge over matching text",
+                "\tprint_tree\n",
+                "\tprint_tree()\n",
+                4,
+                13,
+                "nt_tree",
+                "",
+                "nt_tree()",
+            ),
+            (
+                "fuzzy",
+                "\tprit\n",
+                "\tSprite2D\n",
+                5,
+                9,
+                "",
+                "prit",
+                "Sprite2D",
+            ),
+            (
+                "fuzzy replace",
+                "\tpritvalue\n",
+                "\tSprite2D\n",
+                5,
+                9,
+                "value",
+                "prit",
+                "Sprite2D",
+            ),
+            (
+                "caret inside the brace pair",
+                "\tpri\n",
+                "\tprint()\n",
+                4,
+                7,
+                "",
+                "",
+                "nt()",
+            ),
+            (
+                "replace ending like the tail",
+                "\tset_posvalue)\n",
+                "\tset_position)\n",
+                8,
+                13,
+                "value",
+                "",
+                "ition",
+            ),
+            (
+                "multibyte tail",
+                "\tpri\u{e9}te\n",
+                "\tprint\n",
+                4,
+                6,
+                "\u{e9}te",
+                "",
+                "nt",
+            ),
+        ];
+        for (what, before, after, cb, ca, tail, replaced, inserted) in rows {
+            let split = split_at_caret(before, after, *cb, *ca).expect(what);
+            assert_eq!(&before[split.caret..split.tail_end], *tail, "{what} tail");
+            assert_eq!(
+                &before[split.start..split.caret],
+                *replaced,
+                "{what} replaced"
+            );
+            assert_eq!(
+                &after[split.start..split.inserted_end],
+                *inserted,
+                "{what} inserted"
+            );
+            let rebuilt = format!(
+                "{}{}{}",
+                &before[..split.start],
+                &after[split.start..split.inserted_end],
+                &before[split.tail_end..]
+            );
+            assert_eq!(rebuilt, *after, "{what} rebuilds the result");
+        }
+        assert_eq!(split_at_caret("same", "same", 2, 2), None);
+    }
+
+    fn session_typed(start: &str, caret: usize, keys: &str) -> vim_core::execution::HostSession {
+        use vim_core::execution::{parse_keys_from_string, HostSession};
+        let mut s = HostSession::new(start);
+        s.set_shadow_text(start);
+        s.set_cursor_offset(caret);
+        for key in parse_keys_from_string(keys) {
+            s.process_key_host(key);
+        }
+        let t = s.text().to_owned();
+        s.set_shadow_text(&t);
+        s
+    }
+
+    fn feed(s: &mut vim_core::execution::HostSession, keys: &str) {
+        for key in vim_core::execution::parse_keys_from_string(keys) {
+            s.process_key_host(key);
+        }
+    }
+
+    /// What CodeEdit does on accept: rewrite the first line and move the caret.
+    fn accept(
+        s: &mut vim_core::execution::HostSession,
+        after_line: &str,
+        caret_before: usize,
+        caret_after: usize,
+    ) {
+        let before = s.text().to_owned();
+        let line_end = before.find('\n').unwrap_or(before.len());
+        let after = format!("{after_line}{}", &before[line_end..]);
+        s.set_text(&after);
+        s.set_cursor_offset(caret_after);
+        reconcile_completion(s.engine_mut(), &before, &after, caret_before, caret_after);
+    }
+
+    #[test]
+    fn a_replace_accept_survives_undo_dot_and_macro_replay() {
+        // `pri|value` + replace -> `print_tree()`.
+        let start = "x = value\nx = value\nx = value\n";
+        let mut s = session_typed(start, 4, "ipri");
+        accept(&mut s, "x = print_tree()", 7, 16);
+        feed(&mut s, "<Esc>");
+        assert_eq!(s.text(), "x = print_tree()\nx = value\nx = value\n");
+        feed(&mut s, "u");
+        assert_eq!(s.text(), start, "one u undoes the whole insert");
+
+        let mut s = session_typed(start, 4, "ipri");
+        accept(&mut s, "x = print_tree()", 7, 16);
+        feed(&mut s, "<Esc>j04l.");
+        // vim-core repeats the inserted text but no forward deletion, as for
+        // a typed <Del>.
+        assert_eq!(
+            s.text(),
+            "x = print_tree()\nx = print_tree()value\nx = value\n"
+        );
+
+        let mut s = session_typed(start, 4, "qaipri");
+        accept(&mut s, "x = print_tree()", 7, 16);
+        feed(&mut s, "<Esc>qj04l@a");
+        assert_eq!(s.text(), "x = print_tree()\nx = print_tree()\nx = value\n");
+    }
+
+    #[test]
+    fn a_merge_accept_is_repeated_whole() {
+        // `pri|nt_tree` + accept: Godot merges over the matching text.
+        let start = "x = nt_tree\nx = \n";
+        let mut s = session_typed(start, 4, "ipri");
+        accept(&mut s, "x = print_tree()", 7, 16);
+        feed(&mut s, "<Esc>jA<C-a><Esc>");
+        assert_eq!(s.text(), "x = print_tree()\nx = print_tree()\n");
+    }
 
     // ── Crash tests (engine integration) ────────────────────────────────
 

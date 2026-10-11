@@ -199,15 +199,21 @@ pub(crate) fn dispatch_overlay(
 /// Confirm the selected completion and reconcile the text delta with the
 /// engine so dot-repeat and macro recording capture the completed text.
 ///
-/// Strategy: snapshot text before/after Godot's confirm, compute a minimal
-/// contiguous diff (common-prefix / common-suffix), and feed it to the
-/// engine as an `ExternalEdit`. The engine records the net-new text
-/// internally for dot-repeat.
+/// One caret: the edit is cut at the caret it started from
+/// (`reconcile::reconcile_completion`), because a replace, or a merge over
+/// matching text, also deletes text after it. Several carets keep the
+/// whole-text diff.
 fn confirm_and_reconcile_completion(
     session: &mut VimSession<GodotHost>,
     editor: &mut Gd<CodeEdit>,
 ) {
     let before_text = editor.get_text().to_string();
+    let single_caret = editor.get_caret_count() == 1;
+    let caret_before = bridge::codec::LineIndex::new(&before_text).line_col_to_byte(
+        &before_text,
+        editor.get_caret_line(),
+        editor.get_caret_column(),
+    );
 
     // CodeEdit replaces `code_completion_base` (the typed prefix) with the
     // selected item's `insert_text`. This is the only mutation.
@@ -225,13 +231,23 @@ fn confirm_and_reconcile_completion(
         editor.get_caret_column(),
     );
 
-    super::reconcile::reconcile_external_text_change(
-        session.engine_mut(),
-        &before_text,
-        &after_text,
-        after_byte,
-        vim_core::execution::ExternalEditKind::Completion,
-    );
+    if single_caret {
+        super::reconcile::reconcile_completion(
+            session.engine_mut(),
+            &before_text,
+            &after_text,
+            caret_before,
+            after_byte,
+        );
+    } else {
+        super::reconcile::reconcile_external_text_change(
+            session.engine_mut(),
+            &before_text,
+            &after_text,
+            after_byte,
+            vim_core::execution::ExternalEditKind::Completion,
+        );
+    }
 
     // Fix 4A: Sync undo nodes so pressing `u` past a completion doesn't
     // silently skip it. The engine created an undo node during
