@@ -9,6 +9,9 @@
 //! so the depth-8 climb over a depth-20 DFS runs once per focus change instead
 //! of once per keystroke.
 //!
+//! A sibling alone is not enough: Godot's Find bars and the FileSystem path
+//! field have one but handle Enter themselves ([`FocusChain::is_filter_box`]).
+//!
 //! `Seal::Sealed`, for the same reason as `prompt`: bare keys must reach the
 //! control or the box cannot be typed in, while Ctrl+hjkl must still escape it.
 
@@ -25,10 +28,7 @@ pub(crate) static SEARCHBOX: SurfaceSpec = SurfaceSpec {
     // `LineEdit` and not merely "accepts text": a `TextEdit` with a sibling
     // Tree is a foreign multi-line editor, not a filter box. The classifier
     // this replaced reached its filter-box arm only for `LineEdit` too.
-    probe: |chain| {
-        (chain.focus_is("LineEdit") && chain.sibling_nav_control.is_some())
-            .then_some(Anchor::Node(0))
-    },
+    probe: |chain| chain.is_filter_box().then_some(Anchor::Node(0)),
     overlay: None,
     on_key: None,
     refuses_positional: false,
@@ -92,6 +92,22 @@ mod tests {
         // The Project Settings field. It falls through to `foreign`, where the
         // Barrier keeps Ctrl+hjkl out of the user's typing.
         assert_eq!((SEARCHBOX.probe)(&filter_box(None)), None);
+    }
+
+    #[test]
+    fn a_line_edit_whose_enter_submits_is_not_a_filter_box() {
+        // Godot's Find bar sits beside a nav control, but Enter is Find next.
+        let find_bar = FocusChain {
+            nodes: vec![
+                line_edit(60),
+                plain("VBoxContainer", 61),
+                plain("FindReplaceBar", 62),
+            ],
+            sibling_nav_control: Some(id(63)),
+            enter_submits: true,
+            ..Default::default()
+        };
+        assert_eq!((SEARCHBOX.probe)(&find_bar), None);
     }
 
     #[test]

@@ -10,14 +10,14 @@
 //! # Why it is probed third, ahead of `searchbox` and `foreign`
 //!
 //! Both of the later probes can claim a `LineEdit`, and which one would depend
-//! on a fact nobody can determine without running the editor: whether
-//! `find_sibling_nav_control` finds the FileSystem tree from the prompt. It
-//! does today — the prompt's `HBoxContainer` shares a parent with the dock's
-//! `FileSystemTree` — so `searchbox` would win, and `<Esc>` would be routed to
-//! "leave the filter box" instead of dismissing the prompt. Re-parent the
-//! prompt one level and the answer flips to `foreign`, a `Barrier`, where
-//! `<Esc>` reaches nothing at all. Giving `prompt` first refusal makes the
-//! question irrelevant instead of load-bearing.
+//! on facts nobody can determine without running the editor: whether
+//! `find_sibling_nav_control` finds the FileSystem tree from the prompt, and
+//! whether its `text_submitted` connection succeeded. As built, the prompt
+//! has both, so `foreign` would win, a `Barrier`, where `<Esc>` reaches
+//! nothing at all. Without the connection `searchbox` would, and `<Esc>` would
+//! be routed to "leave the filter box" instead of dismissing the prompt.
+//! Giving `prompt` first refusal makes the question irrelevant instead of
+//! load-bearing.
 //!
 //! `Seal::Sealed` is what keeps the prompt usable: bare keys fall through to
 //! the `LineEdit`'s own `gui_input`, so typing a filename types and `<CR>`

@@ -1,18 +1,16 @@
 //! `foreign` — somebody else's text input. A total hard stop.
 //!
 //! A `CodeEdit` we are not attached to, a plain `TextEdit`, or a `LineEdit`
-//! with no sibling navigable control: an addon's editor, a resource editor, a
-//! Project Settings field. `Seal::Barrier` makes "never intercept here"
-//! structural rather than conditional — dispatch returns `Ignore` before any
-//! lookup, no ancestor is consulted, and `panel`'s Ctrl+hjkl rules are
-//! unreachable. That is the structural form of the old dispatcher's flat
-//! refusal to touch a foreign text input, and it is the reason typing Ctrl+H
-//! in a Project Settings field still backspaces.
+//! that is not a dock filter box: an addon's editor, a resource editor, a
+//! Project Settings field, Godot's Find bar. `Seal::Barrier` makes "never
+//! intercept here" structural: dispatch returns `Ignore` before any lookup, no
+//! ancestor is consulted, and `panel`'s Ctrl+hjkl rules are unreachable, so
+//! Ctrl+H in a Project Settings field still backspaces.
 //!
 //! # Position in `PROVIDERS` is load-bearing in both directions
 //!
-//! **Not first.** The predicate below claims a `LineEdit` with no sibling nav
-//! control, and whether the plugin's own FileSystem prompt has one is not
+//! **Not first.** The predicate below claims any `LineEdit` that is not a
+//! filter box, and whether the plugin's own FileSystem prompt is one is not
 //! determinable without a running editor. Ahead of `prompt` it could take the
 //! prompt, and `<Esc>` would hit a `Barrier` instead of dismissing it.
 //!
@@ -47,7 +45,7 @@ pub(crate) static FOREIGN: SurfaceSpec = SurfaceSpec {
             return Some(Anchor::Node(0));
         }
         // A LineEdit that is nobody's filter box.
-        if node.is("LineEdit") && chain.sibling_nav_control.is_none() {
+        if node.is("LineEdit") && !chain.is_filter_box() {
             return Some(Anchor::Node(0));
         }
         None
@@ -119,6 +117,26 @@ mod tests {
             ..Default::default()
         };
         assert_eq!((FOREIGN.probe)(&settings), Some(Anchor::Node(0)));
+    }
+
+    #[test]
+    fn a_line_edit_whose_enter_submits_is_foreign_beside_a_nav_control() {
+        // Enter is Godot's there: Find next in both Find bars, navigate in the
+        // FileSystem path field, evaluate in the debugger's Evaluator.
+        for owner in [
+            "FindReplaceBar",
+            "FindBar",
+            "FileSystemDock",
+            "EditorExpressionEvaluator",
+        ] {
+            let chain = FocusChain {
+                nodes: vec![line_edit(17), plain(owner, 18)],
+                sibling_nav_control: Some(id(19)),
+                enter_submits: true,
+                ..Default::default()
+            };
+            assert_eq!((FOREIGN.probe)(&chain), Some(Anchor::Node(0)), "{owner}");
+        }
     }
 
     #[test]

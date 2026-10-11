@@ -825,12 +825,12 @@ A **surface** is a named place in the editor UI. Surfaces form a tree, and a key
 | `dock` | `panel` | Any focusable `Tree`, `ItemList` or `RichTextLabel`: Scene tree, Inspector, Output log, built-in docs. |
 | `dock.filesystem` | `dock` | The FileSystem dock's tree or file list. |
 | `dock.debugger` | `dock` | The Debugger panel's Stack Frames / Breakpoints trees. |
-| `searchbox` | `panel` | A dock's filter `LineEdit` (the box `/` jumps to). |
+| `searchbox` | `panel` | A dock's filter `LineEdit`: it sits beside a list, tree or log and Godot gives its Enter no job of its own. Usually the box `/` jumps to. |
 | `prompt` | `panel` | GodotVim's own FileSystem create/rename prompt. |
 | `editor.nav` | `panel` | The attached script editor in Normal, Visual or Operator-pending mode. |
 | `editor.insert` |, (root) | The attached script editor in any *other* mode, Insert, Replace, Select. **Takes no bindings.** |
 | `editor.completion` |, (root) | An **overlay**: the script editor in an insert-like mode, joined per keystroke rather than by focus. Grants the `POPUP` capability while the completion popup is visible. |
-| `foreign` |, (root) | Somebody else's text input, a Project Settings field, an addon's editor. **Takes no bindings.** |
+| `foreign` |, (root) | Somebody else's text input, a Project Settings field, an addon's editor, or a field beside a list whose Enter Godot handles: the Find and Replace bar, the docs page's Find bar, the FileSystem path field. **Takes no bindings.** |
 | `unknown` | `panel` | A focused control none of the above claimed, or no focus owner at all. |
 
 Because `dock.filesystem` is deeper than `dock`, `r` renames a file in the FileSystem dock and moves to the previous item everywhere else, same key, two rules, no conflict:

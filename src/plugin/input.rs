@@ -1180,6 +1180,7 @@ mod tests {
             editor_mode,
             in_filesystem_dock,
             sibling_nav_control,
+            enter_submits,
             is_plugin_prompt,
         } = FocusChain {
             nodes: vec![ChainNode::new(
@@ -1192,6 +1193,7 @@ mod tests {
             editor_mode: Some(Mode::Normal),
             in_filesystem_dock: true,
             sibling_nav_control: Some(id(4)),
+            enter_submits: true,
             is_plugin_prompt: false,
         };
 
@@ -1227,6 +1229,10 @@ mod tests {
         // `sibling_nav_control` ← `focus`. A depth-20 DFS from the focus
         // owner, gated on the owner being a `LineEdit`.
         assert_eq!(sibling_nav_control, Some(id(4)));
+
+        // `enter_submits` ← `focus`. The owner's own `text_submitted`
+        // connections, which Godot makes when it builds the control.
+        assert!(enter_submits);
 
         // `is_plugin_prompt` ← `focus` AND `prompt`: instance equality between
         // the two, so either moving re-samples.
