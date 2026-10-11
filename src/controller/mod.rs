@@ -1046,6 +1046,22 @@ impl VimController {
         }
     }
 
+    /// Put `message` in the status bar; while detached, in the log.
+    pub(crate) fn show_status(&mut self, message: crate::types::StatusMessage) {
+        use crate::types::StatusMessage;
+        let Some(state) = self.host_state_mut() else {
+            if let Some(text) = message.text() {
+                log::info!("{text}");
+            }
+            return;
+        };
+        match message {
+            StatusMessage::None => {}
+            StatusMessage::Info(text) => state.globals_mut().set_message(text),
+            StatusMessage::Error(text) => state.globals_mut().set_error(text),
+        }
+    }
+
     // ── Pending UI actions ───────────────────────────────────────────
 
     pub(crate) fn take_pending_ui_actions(&mut self) -> Vec<PendingUiAction> {

@@ -108,7 +108,20 @@ const COMMAND_PREFIXES: &[(&str, &str)] = &[
 /// a diagnostic comment. This prevents a malicious `res://.godot-vimrc`
 /// from executing arbitrary commands.
 pub(crate) fn sandbox_config_text(text: &str) -> String {
+    sandbox(text).text
+}
+
+/// A vimrc after the Project Vimrc policy.
+#[derive(Debug, Default)]
+pub(crate) struct PolicyText {
+    pub(crate) text: String,
+    /// Lines the Sandbox policy disabled.
+    pub(crate) stripped: usize,
+}
+
+fn sandbox(text: &str) -> PolicyText {
     let mut output = String::with_capacity(text.len());
+    let mut stripped = 0;
     for line in text.lines() {
         let trimmed = line.trim();
         if is_safe_non_mapping_line(trimmed) {
@@ -127,6 +140,7 @@ pub(crate) fn sandbox_config_text(text: &str) -> String {
                 output.push_str(
                     "\" [sandbox] stripped recursive map (use noremap in project vimrc): ",
                 );
+                stripped += 1;
                 output.push_str(trimmed);
                 output.push('\n');
             } else if contains_shell_pattern(trimmed) {
@@ -135,6 +149,7 @@ pub(crate) fn sandbox_config_text(text: &str) -> String {
                     trimmed
                 );
                 output.push_str("\" [sandbox] stripped: ");
+                stripped += 1;
                 output.push_str(trimmed);
                 output.push('\n');
             } else {
@@ -151,6 +166,7 @@ pub(crate) fn sandbox_config_text(text: &str) -> String {
                     trimmed
                 );
                 output.push_str("\" [sandbox] stripped: ");
+                stripped += 1;
                 output.push_str(trimmed);
                 output.push('\n');
             }
@@ -160,11 +176,15 @@ pub(crate) fn sandbox_config_text(text: &str) -> String {
                 trimmed
             );
             output.push_str("\" [sandbox] stripped: ");
+            stripped += 1;
             output.push_str(trimmed);
             output.push('\n');
         }
     }
-    output
+    PolicyText {
+        text: output,
+        stripped,
+    }
 }
 
 /// Options that can execute shell commands or exfiltrate data.
@@ -647,15 +667,19 @@ fn matches_ex_pattern(text: &str, min: &str, full: &str, tail: Tail) -> bool {
 }
 
 /// Apply the project vimrc security policy. Returns `None` to block loading
-/// entirely (Disabled), or `Some(text)` with sanitized content (Sandbox)
-/// or unchanged text (Trusted / user-level).
+/// entirely (Disabled), or the sanitized content (Sandbox) or unchanged text
+/// (Trusted / user-level).
 pub(crate) fn apply_vimrc_policy(
     text: &str,
     is_project_level: bool,
     policy: crate::settings::ProjectVimrc,
-) -> Option<String> {
+) -> Option<PolicyText> {
+    let unchanged = || PolicyText {
+        text: text.to_string(),
+        stripped: 0,
+    };
     if !is_project_level {
-        return Some(text.to_string());
+        return Some(unchanged());
     }
     match policy {
         crate::settings::ProjectVimrc::Disabled => {
@@ -664,9 +688,9 @@ pub(crate) fn apply_vimrc_policy(
         }
         crate::settings::ProjectVimrc::Sandbox => {
             log::info!("project vimrc loaded in sandbox mode");
-            Some(sandbox_config_text(text))
+            Some(sandbox(text))
         }
-        crate::settings::ProjectVimrc::Trusted => Some(text.to_string()),
+        crate::settings::ProjectVimrc::Trusted => Some(unchanged()),
     }
 }
 
@@ -1535,7 +1559,9 @@ imap jj <Esc>
     // ── panelmap trust tiers (P7) ────────────────────────────────────
 
     fn sandboxed(text: &str) -> String {
-        apply_vimrc_policy(text, true, crate::settings::ProjectVimrc::Sandbox).unwrap_or_default()
+        apply_vimrc_policy(text, true, crate::settings::ProjectVimrc::Sandbox)
+            .unwrap_or_default()
+            .text
     }
 
     /// Assert that `line` came through **live**, not commented out.
@@ -1646,6 +1672,25 @@ imap jj <Esc>
         assert_survives(&out, "panelunmap editor.completion <Tab>");
     }
 
+    /// A comment that already reads like a stripped line is not counted.
+    #[test]
+    fn the_policy_counts_the_lines_it_disables() {
+        use crate::settings::ProjectVimrc;
+        let text = "nnoremap j gj\nnmap Q iBAD<Esc>\nnnoremap K :!ls<CR>\nset tw=10\n\
+                    \" [sandbox] stripped: nmap Q x\n";
+        let sandboxed = apply_vimrc_policy(text, true, ProjectVimrc::Sandbox).unwrap();
+        assert_eq!(sandboxed.stripped, 2, "{}", sandboxed.text);
+        for (is_project_level, policy) in [
+            (true, ProjectVimrc::Trusted),
+            (false, ProjectVimrc::Sandbox),
+            (false, ProjectVimrc::Disabled),
+        ] {
+            let out = apply_vimrc_policy(text, is_project_level, policy).unwrap();
+            assert_eq!((out.text.as_str(), out.stripped), (text, 0));
+        }
+        assert!(apply_vimrc_policy(text, true, ProjectVimrc::Disabled).is_none());
+    }
+
     #[test]
     fn a_trusted_vimrc_keeps_editor_surface_bindings() {
         let out = apply_vimrc_policy(
@@ -1653,7 +1698,8 @@ imap jj <Esc>
             true,
             crate::settings::ProjectVimrc::Trusted,
         )
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .text;
         assert!(out.contains("editor.completion <Esc>"), "{out}");
         assert!(!out.contains("[sandbox] stripped"), "{out}");
     }
@@ -1665,7 +1711,8 @@ imap jj <Esc>
             true,
             crate::settings::ProjectVimrc::Trusted,
         )
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .text;
         assert!(out.contains("<Shortcut>"), "{out}");
     }
 
@@ -1677,7 +1724,8 @@ imap jj <Esc>
             false,
             crate::settings::ProjectVimrc::Sandbox,
         )
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .text;
         assert!(out.contains("<Shortcut>"), "{out}");
     }
 

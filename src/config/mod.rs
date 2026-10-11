@@ -22,5 +22,6 @@ pub(crate) mod parser;
 pub(crate) mod path;
 pub(crate) mod presets;
 pub(crate) mod sandbox;
+pub(crate) mod source;
 pub(crate) mod types;
 pub(crate) mod writer;
