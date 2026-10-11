@@ -81,6 +81,9 @@ grep 'host_request\|file::' output.log
 
 # A save refused outside the script editor's current script (E382)
 grep 'file::save refused' output.log
+
+# Completion popup: who took a key, and when the delay opened or stopped
+grep 'overlay claimed\|godot completion key\|completion_delay' output.log
 ```
 
 ### Trace level: pipeline internals
@@ -121,4 +124,7 @@ more than it sounds: several past defects reproduced only on Colemak, Dvorak
 or AZERTY, because a key's *position* and the character it produces differ
 there. If a keybinding misbehaves, `:panelmap {key}` prints exactly how that
 key resolved and is worth pasting too; for completion keys it prints a
-counterfactual section resolving the key as if the popup were open.
+counterfactual section resolving the key as if the popup were open. For a
+popup key, also say what Editor Settings > Shortcuts has under Completion
+Accept, Completion Replace and Completion Query, since those decide Enter,
+Tab and Ctrl+Space.
