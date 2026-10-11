@@ -214,6 +214,8 @@ pub(super) fn handle_write_quit(
             editor.close_tab();
             host_success(id)
         }
+        // No `:q!` hint: the editor's own Save can still keep this text.
+        Err(e @ HostError::NotCurrentScript) => host_failure(id, e.to_string()),
         Err(e) if force.is_force() => {
             // `:wq!` = force-write, NOT force-discard. Write failure is still an error.
             host_failure(id, format!("{} (use :q! to discard changes)", e))
@@ -905,6 +907,167 @@ mod tests {
         assert!(!matches!(editor.buffer_state, MockBufferState::Closed));
     }
 
+    // A shader (or any CodeEdit outside the script editor) while main.gd is
+    // the script editor's current script: writing it would put the shader
+    // text into main.gd.
+    fn shader_over_main() -> MockEditorHost {
+        MockEditorHost::other("shader_type canvas_item;\n", Some("res://main.gd"))
+    }
+
+    fn assert_refused_e382(result: &HostResult, editor: &MockEditorHost) {
+        assert_failure(result);
+        let msg = failure_msg(result);
+        assert!(msg.starts_with("E382: Cannot write"), "msg={msg}");
+        assert!(
+            msg.contains("not the script editor's current script"),
+            "msg={msg}"
+        );
+        assert!(!editor.save_called, "nothing may be saved");
+        assert_eq!(editor.buffer_state, MockBufferState::Unmodified);
+    }
+
+    #[test]
+    fn handle_write_file_outside_script_editor_refuses_e382() {
+        let mut editor = shader_over_main();
+        let result = handle_write_file(
+            test_id(),
+            &mut editor,
+            None,
+            ForceOverride::Normal,
+            FileAccessScope::ProjectOnly,
+        );
+        assert_refused_e382(&result, &editor);
+    }
+
+    #[test]
+    fn handle_write_file_force_outside_script_editor_refuses_e382() {
+        let mut editor = shader_over_main();
+        let result = handle_write_file(
+            test_id(),
+            &mut editor,
+            None,
+            ForceOverride::Force,
+            FileAccessScope::ProjectOnly,
+        );
+        assert_refused_e382(&result, &editor);
+    }
+
+    /// `:save` runs `handle_write_file` with no path and no scope limit.
+    #[test]
+    fn save_command_outside_script_editor_refuses_e382() {
+        let mut editor = shader_over_main();
+        let result = handle_write_file(
+            test_id(),
+            &mut editor,
+            None,
+            ForceOverride::Normal,
+            FileAccessScope::Unrestricted,
+        );
+        assert_refused_e382(&result, &editor);
+    }
+
+    #[test]
+    fn handle_write_file_godot_path_outside_script_editor_refuses_e382() {
+        let mut editor = shader_over_main();
+        let result = handle_write_file(
+            test_id(),
+            &mut editor,
+            Some("res://copy.gd"),
+            ForceOverride::Normal,
+            FileAccessScope::ProjectOnly,
+        );
+        assert_refused_e382(&result, &editor);
+    }
+
+    /// The guard names the real reason even when no script is open at all.
+    #[test]
+    fn handle_write_file_outside_script_editor_without_script_refuses_e382() {
+        let mut editor = MockEditorHost::other("shader_type canvas_item;\n", None);
+        let result = handle_write_file(
+            test_id(),
+            &mut editor,
+            None,
+            ForceOverride::Normal,
+            FileAccessScope::ProjectOnly,
+        );
+        assert_refused_e382(&result, &editor);
+    }
+
+    /// `:w {file}` outside the project writes this editor's own text to the
+    /// named file, so it never reaches a script and stays allowed.
+    #[test]
+    fn handle_write_file_external_path_outside_script_editor_writes_own_text() {
+        let path = std::env::temp_dir().join("godot_vim_editor_host_test_shader_external.txt");
+        std::fs::remove_file(&path).ok();
+        let mut editor = shader_over_main();
+        let result = handle_write_file(
+            test_id(),
+            &mut editor,
+            Some(path.to_str().unwrap()),
+            ForceOverride::Normal,
+            FileAccessScope::Unrestricted,
+        );
+        assert_success(&result);
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "shader_type canvas_item;\n"
+        );
+        std::fs::remove_file(&path).ok();
+    }
+
+    /// `:wq`, `:x`, `ZZ` and `:wqa` all reach `handle_write_quit`.
+    #[test]
+    fn handle_write_quit_outside_script_editor_refuses_and_keeps_tab() {
+        let mut editor = shader_over_main();
+        let result = handle_write_quit(test_id(), &mut editor, ForceOverride::Normal);
+        assert_refused_e382(&result, &editor);
+        assert!(!failure_msg(&result).contains("use :q!"));
+    }
+
+    /// `:q!` would throw the shader text away, so `:wq!` gives no such hint.
+    #[test]
+    fn handle_write_quit_force_outside_script_editor_refuses_without_hint() {
+        let mut editor = shader_over_main();
+        let result = handle_write_quit(test_id(), &mut editor, ForceOverride::Force);
+        assert_refused_e382(&result, &editor);
+        assert!(
+            !failure_msg(&result).contains("use :q!"),
+            "msg={}",
+            failure_msg(&result)
+        );
+    }
+
+    /// `:q` is not refused outside the script editor; whether main.gd has
+    /// unsaved changes does not matter, only the attached editor's state.
+    #[test]
+    fn handle_quit_outside_script_editor_clean_closes() {
+        let mut editor = shader_over_main();
+        let result = handle_quit(test_id(), &mut editor, ForceOverride::Normal);
+        assert_success(&result);
+        assert_eq!(editor.buffer_state, MockBufferState::Closed);
+        assert!(!editor.save_called);
+    }
+
+    #[test]
+    fn handle_quit_outside_script_editor_modified_returns_e37() {
+        let mut editor = shader_over_main();
+        editor.buffer_state = MockBufferState::Modified;
+        let result = handle_quit(test_id(), &mut editor, ForceOverride::Normal);
+        assert_failure(&result);
+        assert!(failure_msg(&result).starts_with("E37"));
+        assert_eq!(editor.buffer_state, MockBufferState::Modified);
+    }
+
+    #[test]
+    fn handle_quit_force_outside_script_editor_discards_and_closes() {
+        let mut editor = shader_over_main();
+        editor.buffer_state = MockBufferState::Modified;
+        let result = handle_quit(test_id(), &mut editor, ForceOverride::Force);
+        assert_success(&result);
+        assert!(editor.save_called, "marked clean so Godot closes silently");
+        assert_eq!(editor.buffer_state, MockBufferState::Closed);
+    }
+
     #[test]
     fn handle_edit_file_same_path_shows_file_info() {
         let mut editor = MockEditorHost::new("line1\nline2\nline3", Some("res://script.gd"));
@@ -1051,6 +1214,42 @@ mod tests {
         );
         assert_success(&result);
         assert_eq!(editor.opened_path.as_deref(), Some("res://new.gd"));
+    }
+
+    /// From a shader, main.gd is another file: `:e! res://main.gd` opens it
+    /// and never reloads main.gd's text into the shader.
+    #[test]
+    fn handle_edit_file_force_current_script_outside_script_editor_opens_it() {
+        let mut editor = shader_over_main();
+        editor
+            .files
+            .insert("res://main.gd".to_string(), "extends Node\n".to_string());
+        let result = handle_edit_file(
+            test_id(),
+            &mut editor,
+            "res://main.gd",
+            ForceOverride::Force,
+            FileAccessScope::ProjectOnly,
+        );
+        assert_success(&result);
+        assert_eq!(editor.text, "shader_type canvas_item;\n");
+        assert!(editor.script_source_updated.is_none());
+        assert!(!editor.save_called);
+        assert_eq!(editor.opened_path.as_deref(), Some("res://main.gd"));
+    }
+
+    #[test]
+    fn handle_edit_file_current_script_outside_script_editor_opens_it() {
+        let mut editor = shader_over_main();
+        let result = handle_edit_file(
+            test_id(),
+            &mut editor,
+            "res://main.gd",
+            ForceOverride::Normal,
+            FileAccessScope::ProjectOnly,
+        );
+        assert_success(&result);
+        assert_eq!(editor.opened_path.as_deref(), Some("res://main.gd"));
     }
 
     #[test]

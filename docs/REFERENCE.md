@@ -283,6 +283,16 @@ In addition to the [Godot-specific commands](#custom-commands), the following st
 | `:tabp` / `:tabprev` | Previous tab |
 | `:tabc` / `:tabclose` | Close tab |
 
+GodotVim also runs in the Shader Editor and in any other `CodeEdit`, but
+`:w`, `:wq`, `:x`, `ZZ`, `:wqa` and `:save` save only the script editor's
+current script. Typed anywhere else they stop with `E382: Cannot write` and
+change no file; save a shader with the Shader Editor's own Save. `:w {path}`
+with a filesystem path (not `res://` or `user://`) still writes that editor's
+text there. `:q` and `:e` look at the editor you typed them in: `:q` checks
+its own unsaved changes and closes its tab on Godot 4.6 and later, and
+`:e! {file}` typed in a shader opens that file instead of loading it into the
+shader.
+
 ### Configuration and Misc
 
 | Command | Description |

@@ -5,6 +5,8 @@
 //! This trait extracts exactly the Godot API surface those handlers need, enabling
 //! `MockEditorHost` for deterministic unit testing without a running Godot instance.
 
+use godot::obj::InstanceId;
+
 use super::error::HostError;
 
 /// Narrow abstraction over Godot editor operations used by file I/O handlers.
@@ -14,9 +16,12 @@ use super::error::HostError;
 pub(crate) trait EditorHost {
     fn get_text(&self) -> String;
 
-    /// Returns the current script's `res://` path, or `None` if no script is open.
+    /// The `res://` path of the script the attached CodeEdit edits: `None`
+    /// when no script is open or the CodeEdit is outside the script editor.
     fn current_script_path(&self) -> Option<String>;
 
+    /// Whether the attached CodeEdit has unsaved changes: its version against
+    /// its saved version, the check Godot makes for script and shader tabs.
     fn is_modified(&self) -> bool;
 
     /// Marks the buffer clean (version == saved_version). After this call,
@@ -33,6 +38,10 @@ pub(crate) trait EditorHost {
 
     /// Save pipeline: editor text -> Script resource -> ResourceSaver -> disk.
     /// Returns the actual save path, or a typed `HostError`.
+    ///
+    /// The one sink for `:w`, `:wq`, `:x`, `ZZ`, `:wqa` and `:save`: refuses
+    /// with `HostError::NotCurrentScript` unless the attached CodeEdit is the
+    /// editor of the script editor's current script, the script it writes.
     fn save_script(&mut self, explicit_path: Option<&str>) -> Result<String, HostError>;
 
     /// Open a script in the editor via ResourceLoader -> edit_script().
@@ -44,7 +53,14 @@ pub(crate) trait EditorHost {
 
     /// Update the in-memory Script resource without saving to disk. Used by
     /// `reload_from_disk` to keep the Script resource in sync after a reload.
+    /// Like `save_script`, it touches only the attached CodeEdit's script.
     fn update_script_source(&mut self, text: &str);
+}
+
+/// Whether the attached CodeEdit is `owner`, the base editor of the script
+/// editor's current tab; `None` means there is no current tab.
+fn is_attached_owner(owner: Option<InstanceId>, attached: InstanceId) -> bool {
+    owner == Some(attached)
 }
 
 mod godot_impl {
@@ -76,6 +92,17 @@ mod godot_impl {
         let editor_iface = EditorInterface::singleton();
         let script_editor = editor_iface.get_script_editor()?;
         script_editor.get_current_editor()
+    }
+
+    /// The script editor's current script, only when `editor` is its editor.
+    /// godot-vim attaches to any CodeEdit (#6, #20); the Shader Editor's or an
+    /// addon's text must never be written into the current script.
+    fn attached_script(editor: &Gd<CodeEdit>) -> Result<Gd<Script>, HostError> {
+        let owner = current_script_editor_base().and_then(|base| base.get_base_editor());
+        if !super::is_attached_owner(owner.map(|o| o.instance_id()), editor.instance_id()) {
+            return Err(HostError::NotCurrentScript);
+        }
+        current_script().ok_or(HostError::NoFileName)
     }
 
     /// Trigger ScriptEditor's native "File → Close" action.
@@ -157,20 +184,13 @@ mod godot_impl {
         }
 
         fn current_script_path(&self) -> Option<String> {
-            current_script().map(|s| s.get_path().to_string())
+            attached_script(self.0)
+                .ok()
+                .map(|s| s.get_path().to_string())
         }
 
         fn is_modified(&self) -> bool {
-            let Some(base) = current_script_editor_base() else {
-                return false;
-            };
-            let Some(editor) = base.get_base_editor() else {
-                return false;
-            };
-            let Ok(text_edit) = editor.try_cast::<godot::classes::TextEdit>() else {
-                return true;
-            };
-            text_edit.get_version() != text_edit.get_saved_version()
+            self.0.get_version() != self.0.get_saved_version()
         }
 
         fn tag_saved_version(&mut self) {
@@ -190,7 +210,8 @@ mod godot_impl {
         }
 
         fn save_script(&mut self, explicit_path: Option<&str>) -> Result<String, HostError> {
-            let mut script = current_script().ok_or(HostError::NoFileName)?;
+            let mut script =
+                attached_script(self.0).inspect_err(|e| log::debug!("file::save refused: {e}"))?;
 
             let text = self.0.get_text();
             script.set_source_code(&text);
@@ -263,7 +284,7 @@ mod godot_impl {
         }
 
         fn update_script_source(&mut self, text: &str) {
-            if let Some(mut script) = current_script() {
+            if let Ok(mut script) = attached_script(self.0) {
                 script.set_source_code(&GString::from(text));
             }
         }
@@ -294,10 +315,21 @@ pub(super) mod mock {
         Closed,
     }
 
+    /// Which CodeEdit the mock stands for.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub(in crate::host) enum MockAttached {
+        /// The script editor's current tab, editing `script_path`.
+        ScriptTab,
+        /// Any other CodeEdit (Shader Editor, addon). `script_path` is then
+        /// the script editor's current script, a different file.
+        Other,
+    }
+
     /// Test double for `EditorHost`. All fields are public for direct scenario setup.
     pub(in crate::host) struct MockEditorHost {
         pub text: String,
         pub script_path: Option<String>,
+        pub attached: MockAttached,
         pub buffer_state: MockBufferState,
         /// Audit trail: `true` if `tag_saved_version()` was ever called.
         /// Separate from `buffer_state` because a subsequent `close_tab()`
@@ -320,6 +352,7 @@ pub(super) mod mock {
             Self {
                 text: text.to_string(),
                 script_path: script_path.map(|s| s.to_string()),
+                attached: MockAttached::ScriptTab,
                 buffer_state: MockBufferState::Unmodified,
                 save_called: false,
                 save_result: None,
@@ -329,6 +362,19 @@ pub(super) mod mock {
                 script_source_updated: None,
             }
         }
+
+        /// A CodeEdit outside the script editor while `script_path` is the
+        /// script editor's current script.
+        pub fn other(text: &str, script_path: Option<&str>) -> Self {
+            Self {
+                attached: MockAttached::Other,
+                ..Self::new(text, script_path)
+            }
+        }
+
+        fn owns_script(&self) -> bool {
+            self.attached == MockAttached::ScriptTab
+        }
     }
 
     impl EditorHost for MockEditorHost {
@@ -337,7 +383,7 @@ pub(super) mod mock {
         }
 
         fn current_script_path(&self) -> Option<String> {
-            self.script_path.clone()
+            self.script_path.clone().filter(|_| self.owns_script())
         }
 
         fn is_modified(&self) -> bool {
@@ -365,12 +411,14 @@ pub(super) mod mock {
         }
 
         fn save_script(&mut self, explicit_path: Option<&str>) -> Result<String, HostError> {
+            if !self.owns_script() {
+                return Err(HostError::NotCurrentScript);
+            }
             if let Some(ref result) = self.save_result {
                 let r = result.clone();
-                if r.is_ok() {
+                if let Ok(saved_path) = &r {
                     // Mirror real behavior: only tag saved when saving to the
                     // script's own path (not when `:w other.gd`).
-                    let saved_path = r.as_ref().unwrap();
                     let is_same_path = self.script_path.as_deref() == Some(saved_path.as_str());
                     if is_same_path || explicit_path.is_none() {
                         self.buffer_state = MockBufferState::Saved;
@@ -420,7 +468,24 @@ pub(super) mod mock {
         }
 
         fn update_script_source(&mut self, text: &str) {
-            self.script_source_updated = Some(text.to_string());
+            if self.owns_script() {
+                self.script_source_updated = Some(text.to_string());
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_attached_owner;
+    use godot::obj::InstanceId;
+
+    #[test]
+    fn attached_owner_only_when_ids_match() {
+        let script_tab = InstanceId::from_i64(1);
+        let shader = InstanceId::from_i64(2);
+        assert!(is_attached_owner(Some(script_tab), script_tab));
+        assert!(!is_attached_owner(Some(script_tab), shader));
+        assert!(!is_attached_owner(None, script_tab));
     }
 }

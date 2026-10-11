@@ -24,6 +24,11 @@ pub(crate) enum HostError {
     /// E166: Can't open linked file for writing — symlink write blocked without `!`.
     SymlinkWrite { path: CompactString },
 
+    /// E382: Cannot write. The attached CodeEdit (Shader Editor, addon) is
+    /// not the script editor's current script, so saving would put its text
+    /// into that script. Vim's E382 refuses a buffer that is not a file.
+    NotCurrentScript,
+
     /// E484: Can't open file — file not found, access denied, too large, etc.
     CantOpenFile {
         path: CompactString,
@@ -49,6 +54,12 @@ impl fmt::Display for HostError {
             HostError::SymlinkWrite { path } => {
                 write!(f, "E166: Can't open linked file for writing: \"{}\"", path)
             }
+
+            HostError::NotCurrentScript => write!(
+                f,
+                "E382: Cannot write, this editor is not the script editor's current script; \
+                 use its own Save"
+            ),
 
             HostError::CantOpenFile { path, detail } => match detail {
                 Some(d) => write!(f, "E484: Can't open file \"{}\": {}", path, d),

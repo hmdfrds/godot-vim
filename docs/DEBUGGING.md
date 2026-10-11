@@ -78,6 +78,9 @@ grep -E 'Attached|Detached' output.log
 
 # Host requests (file I/O, shell commands)
 grep 'host_request\|file::' output.log
+
+# A save refused outside the script editor's current script (E382)
+grep 'file::save refused' output.log
 ```
 
 ### Trace level: pipeline internals
