@@ -1181,8 +1181,8 @@ impl GodotVimCore {
     /// Execute a pending UI action that requires plugin-level access (scene tree,
     /// settings snapshot) which the controller cannot reach directly.
     ///
-    /// `OpenMappingDialog`, `SourceConfigFile`, `ShowTooltip` and
-    /// `ArmCompletion` reach the plugin layer; the controller handles all
+    /// `OpenMappingDialog`, `SourceConfigFile`, `ShowTooltip` and the
+    /// completion delay reach the plugin layer; the controller handles all
     /// other variants inline before storing. The catch-all arm is
     /// defense-in-depth.
     pub(super) fn handle_pending_ui_action(
@@ -1215,6 +1215,9 @@ impl GodotVimCore {
             }
             PendingUiAction::ArmCompletion { line } => {
                 self.arm_completion_delay(line);
+            }
+            PendingUiAction::DisarmCompletion => {
+                self.disarm_completion_delay();
             }
             PendingUiAction::SourceConfigFile => {
                 if !self.source_config_from_disk("pending_ui_action") {

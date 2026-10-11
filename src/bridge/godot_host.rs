@@ -66,6 +66,8 @@ pub(crate) enum PendingUiAction {
     ArmCompletion {
         line: i32,
     },
+    /// Stop Code Complete Delay: one of Vim's popup keys took the key.
+    DisarmCompletion,
     ShowTooltip {
         symbol: String,
         line: i32,

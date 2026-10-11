@@ -90,6 +90,11 @@ pub(super) fn process_cycle_impl(
             );
             // Note: invalidate_cache() for consumed completions is called
             // inside confirm_and_reconcile_completion (Fix 4B).
+            // Vim's keys stop the delay Godot's keys leave running: a popup
+            // closed with Ctrl+E or accepted with Ctrl+Y stays closed.
+            ctx.transient
+                .pending_ui_actions
+                .push(crate::bridge::godot_host::PendingUiAction::DisarmCompletion);
             let mode = session.engine().mode();
             session.host_mut().ensure_undo_balanced(mode);
             return outcome;
@@ -274,6 +279,7 @@ fn handle_host_pending_ui_action(
         | PendingUiAction::ShowTooltip { .. }
         // The delay timer is a node on `GodotVimCore`.
         | PendingUiAction::ArmCompletion { .. }
+        | PendingUiAction::DisarmCompletion
         // Must be forwarded, not handled here: running an ActionSpec needs
         // `&mut GodotVimCore`, which this scope does not have.
         | PendingUiAction::RunRegistryAction { .. }

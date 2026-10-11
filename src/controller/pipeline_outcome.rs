@@ -90,6 +90,11 @@ mod tests {
                  `inoremap jk` + `Obj` + Enter accepts for \"Ob\" and then appends the j",
             ),
             (
+                "push(crate::bridge::godot_host::PendingUiAction::DisarmCompletion)",
+                "a key a Vim popup row took must stop the delay, or Ctrl+E closes \
+                 the popup and the delay opens it again",
+            ),
+            (
                 "completion::dispatch_host_key(",
                 "a key no row claimed must reach Godot's own popup actions, or \
                  Enter and Tab stop accepting",

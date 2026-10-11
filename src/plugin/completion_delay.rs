@@ -3,15 +3,15 @@
 //! Godot opens the popup from its own timer, which starts only for a typing
 //! operation (code_editor.cpp:1010-1014) and so never fires for text the
 //! engine writes. This is that timer: armed by `effects::completion` on every
-//! insertion that leaves the popup closed, under the rules in
-//! [`DelayArm::still_wanted`].
+//! insertion, under the rules in [`DelayArm::still_wanted`], and stopped by
+//! Vim's own popup keys (`controller::process`), since Ctrl+E closing the
+//! popup must not see it come back.
 
 use godot::classes::{EditorInterface, Timer};
 use godot::prelude::*;
 
 use super::signals::{connect_immediate, SIG_TIMEOUT};
 use super::GodotVimCore;
-use crate::bridge::code_edit_ext::CodeEditExt;
 use crate::effects::completion::{DelayArm, DelayFacts};
 
 impl GodotVimCore {
@@ -74,9 +74,9 @@ impl GodotVimCore {
     }
 
     /// Godot's `_code_complete_timer_timeout` (code_editor.cpp:1023-1028): an
-    /// unforced request on the raw editor, so Godot's own symbol rule still
-    /// decides. Checked again here, since a click moves the caret without a
-    /// key.
+    /// unforced request on the raw editor, popup open or not, so Godot's own
+    /// symbol rule still decides. Checked again here, since a click moves the
+    /// caret without a key.
     pub(super) fn on_completion_timeout_impl(&mut self) {
         let Some(arm) = self.completion_arm.take() else {
             return;
@@ -105,7 +105,6 @@ impl GodotVimCore {
                 let mode = controller.mode();
                 mode.is_insert() || mode.is_replace()
             }),
-            popup_open: editor.is_some_and(|editor| editor.completion_popup_open()),
         }
     }
 }

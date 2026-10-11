@@ -120,11 +120,9 @@ fn requery(prev: Option<char>, editor: &impl IdeCapable) -> Follow {
     }
 }
 
-/// Runs once at the end of every engine pass, whatever started it (a typed
-/// key, a mapping-timeout flush). An insertion that leaves the popup closed
-/// arms Code Complete Delay: Godot restarts its timer on every insert and
-/// stops it on nothing else (code_editor.cpp:1010-1014), and its timer never
-/// fires for text the engine writes.
+/// Runs at the end of every engine pass (a typed key, a mapping-timeout
+/// flush). Every insertion restarts Code Complete Delay, popup open or not,
+/// as Godot restarts its timer on every insert (code_editor.cpp:1010-1014).
 pub(crate) fn follow_engine_edit(
     editor: &mut impl IdeCapable,
     edit: Edit,
@@ -135,8 +133,7 @@ pub(crate) fn follow_engine_edit(
     if !insert_like || edit == Edit::None {
         return;
     }
-    let follow = follow(edit, after.prev(), editor);
-    match follow {
+    match follow(edit, after.prev(), editor) {
         Follow::Keep => {}
         Follow::Close => editor.cancel_code_completion(),
         Follow::Requery { force } => {
@@ -144,7 +141,7 @@ pub(crate) fn follow_engine_edit(
             editor.request_code_completion(force);
         }
     }
-    if edit == Edit::Inserted && auto_complete && !matches!(follow, Follow::Requery { .. }) {
+    if edit == Edit::Inserted && auto_complete {
         editor.arm_code_completion();
     }
 }
@@ -162,19 +159,14 @@ pub(crate) struct DelayFacts {
     pub(crate) editor: Option<i64>,
     pub(crate) line: i32,
     pub(crate) insert_like: bool,
-    pub(crate) popup_open: bool,
 }
 
 impl DelayArm {
-    /// Godot stops its timer when the caret leaves the line
+    /// Godot stops its timer only when the caret leaves the line
     /// (code_editor.cpp:988-991). Leaving Insert stops it too, so Esc inside
-    /// the delay never shows a popup, and an open popup makes it moot (and
-    /// must not come back after Ctrl+E).
+    /// the delay never shows a popup. An open popup does not stop it.
     pub(crate) fn still_wanted(self, now: DelayFacts) -> bool {
-        now.insert_like
-            && !now.popup_open
-            && now.editor == Some(self.editor)
-            && now.line == self.line
+        now.insert_like && now.editor == Some(self.editor) && now.line == self.line
     }
 }
 
@@ -415,7 +407,7 @@ mod tests {
     }
 
     #[test]
-    fn only_an_insertion_that_leaves_the_popup_closed_arms_the_delay() {
+    fn an_insertion_arms_the_delay_unless_code_complete_is_off() {
         // (what, edit, popup, line head, Code Complete Enabled, calls)
         type Row<'a> = (&'a str, Edit, Popup, &'a str, bool, &'a [&'a str]);
         let rows: &[Row] = &[
@@ -444,12 +436,12 @@ mod tests {
                 &[],
             ),
             (
-                "narrowing an open popup",
+                "narrowing an open popup arms too, as Godot does",
                 Edit::Inserted,
                 Popup::Words,
                 "pr",
                 true,
-                &["cancel", "request(force=false)"],
+                &["cancel", "request(force=false)", "arm"],
             ),
             (
                 // Shaders share these prefixes (code_editor.cpp:2099).
@@ -484,7 +476,6 @@ mod tests {
             editor: Some(7),
             line: 4,
             insert_like: true,
-            popup_open: false,
         };
         assert!(arm.still_wanted(here));
         let rows = [
@@ -507,13 +498,6 @@ mod tests {
                 "detached",
                 DelayFacts {
                     editor: None,
-                    ..here
-                },
-            ),
-            (
-                "a popup is already open",
-                DelayFacts {
-                    popup_open: true,
                     ..here
                 },
             ),
