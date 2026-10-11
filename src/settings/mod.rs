@@ -14,6 +14,7 @@
 
 pub(crate) mod defaults;
 mod keys;
+pub(crate) mod overrides;
 pub(crate) mod reader;
 pub(crate) mod registration;
 mod snapshot;

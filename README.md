@@ -199,7 +199,8 @@ GodotVim is a native extension, so it ships restrictive:
   ex-commands, is commented out with a reason rather than deleted, so nothing
   changes silently. A `user://.godot-vimrc` is trusted in full.
 
-All three are settings. [Security](docs/REFERENCE.md#security)
+All three are settings, and a project cannot change them through its Editor
+Settings overrides. [Security](docs/REFERENCE.md#security)
 
 
 ## Configuration

@@ -100,6 +100,8 @@ pub struct GodotVimCore {
     /// `input::GodotVimCore::sync_search_suppression`.
     search_suppression: Option<SearchSuppression>,
     settings: Option<crate::settings::SettingsSnapshot>,
+    /// Project overrides of user-only settings already warned about.
+    override_notice: crate::settings::overrides::OverrideNotice,
     /// Lazily created on first `:mappings` invocation.
     mapping_dialog: Option<Gd<crate::ui::mapping_dialog::MappingDialog>>,
     /// Tracks whether a pending `caret_changed` signal was caused by the
@@ -165,6 +167,7 @@ impl INode for GodotVimCore {
             pending: crate::actions::sequence::Pending::default(),
             search_suppression: None,
             settings: None,
+            override_notice: crate::settings::overrides::OverrideNotice::default(),
             mapping_dialog: None,
             caret_reconciler: caret_reconcile::CaretReconciler::new(),
             pending_tooltip: None,
@@ -1075,6 +1078,17 @@ impl GodotVimCore {
         if !ok {
             self.recover_controller_from_panic();
         }
+    }
+
+    /// A project override appears through ProjectSettings, not EditorSettings
+    /// (`set_editor_setting_override`), so this is where a new one is seen.
+    #[func]
+    fn on_project_settings_changed(&mut self) {
+        panic_guard(
+            "on_project_settings_changed",
+            || self.report_user_only_overrides(),
+            (),
+        );
     }
 
     /// Deferred from `NOTIFICATION_EDITOR_SETTINGS_CHANGED`, once every
