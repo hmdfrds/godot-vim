@@ -195,9 +195,11 @@ GodotVim is a native extension, so it ships restrictive:
   constructs pass: comments, most `set` and `setlocal` options, `filetype`
   lines, `let mapleader`, the `noremap`
   forms, `panelunmap`, and `panelmap` lines targeting a registered `godotvim.*`
-  action. Everything else, including the recursive `map` forms and raw
-  ex-commands, is commented out with a reason rather than deleted, so nothing
-  changes silently. A `user://.godot-vimrc` is trusted in full.
+  action. A line holding several commands separated by `|` passes only when
+  every one of them does. Everything else, including the recursive `map`
+  forms and raw ex-commands, is commented out with a reason rather than
+  deleted, so nothing changes silently. A `user://.godot-vimrc` is trusted in
+  full.
 
 All three are settings, and a project cannot change them through its Editor
 Settings overrides. [Security](docs/REFERENCE.md#security)

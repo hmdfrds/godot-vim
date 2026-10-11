@@ -3,6 +3,16 @@
 Notes for people arriving from an older release. Nothing here applies to a
 fresh install.
 
+## From v1.9.0
+
+**A project vimrc line with several commands is judged command by
+command.** Under the default Sandbox policy, a line was judged by its first
+command, so `set so=5 | nnoremap x :!cmd<CR>` passed because it starts with
+`set`. Now every command after a `|` must pass on its own, or the whole line
+is commented out with the usual `" [sandbox] stripped` reason. Write a bar
+meant for a mapping's right-hand side as `\|` or `<Bar>`, as Vim needs too;
+those stay part of the mapping.
+
 ## From v1.8.2
 
 **The completion popup follows Godot again.** Six notes:
