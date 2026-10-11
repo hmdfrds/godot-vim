@@ -16,7 +16,8 @@ use super::error::HostError;
 pub(crate) trait EditorHost {
     fn get_text(&self) -> String;
 
-    /// Returns the current script's `res://` path, or `None` if no script is open.
+    /// The `res://` path of the script the attached CodeEdit edits: `None`
+    /// when no script is open or the CodeEdit is outside the script editor.
     fn current_script_path(&self) -> Option<String>;
 
     /// Whether the attached CodeEdit has unsaved changes: its version against
@@ -52,6 +53,7 @@ pub(crate) trait EditorHost {
 
     /// Update the in-memory Script resource without saving to disk. Used by
     /// `reload_from_disk` to keep the Script resource in sync after a reload.
+    /// Like `save_script`, it touches only the attached CodeEdit's script.
     fn update_script_source(&mut self, text: &str);
 }
 
@@ -182,7 +184,9 @@ mod godot_impl {
         }
 
         fn current_script_path(&self) -> Option<String> {
-            current_script().map(|s| s.get_path().to_string())
+            attached_script(self.0)
+                .ok()
+                .map(|s| s.get_path().to_string())
         }
 
         fn is_modified(&self) -> bool {
@@ -280,7 +284,7 @@ mod godot_impl {
         }
 
         fn update_script_source(&mut self, text: &str) {
-            if let Some(mut script) = current_script() {
+            if let Ok(mut script) = attached_script(self.0) {
                 script.set_source_code(&GString::from(text));
             }
         }
@@ -379,7 +383,7 @@ pub(super) mod mock {
         }
 
         fn current_script_path(&self) -> Option<String> {
-            self.script_path.clone()
+            self.script_path.clone().filter(|_| self.owns_script())
         }
 
         fn is_modified(&self) -> bool {
@@ -464,7 +468,9 @@ pub(super) mod mock {
         }
 
         fn update_script_source(&mut self, text: &str) {
-            self.script_source_updated = Some(text.to_string());
+            if self.owns_script() {
+                self.script_source_updated = Some(text.to_string());
+            }
         }
     }
 }

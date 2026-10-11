@@ -1216,6 +1216,42 @@ mod tests {
         assert_eq!(editor.opened_path.as_deref(), Some("res://new.gd"));
     }
 
+    /// From a shader, main.gd is another file: `:e! res://main.gd` opens it
+    /// and never reloads main.gd's text into the shader.
+    #[test]
+    fn handle_edit_file_force_current_script_outside_script_editor_opens_it() {
+        let mut editor = shader_over_main();
+        editor
+            .files
+            .insert("res://main.gd".to_string(), "extends Node\n".to_string());
+        let result = handle_edit_file(
+            test_id(),
+            &mut editor,
+            "res://main.gd",
+            ForceOverride::Force,
+            FileAccessScope::ProjectOnly,
+        );
+        assert_success(&result);
+        assert_eq!(editor.text, "shader_type canvas_item;\n");
+        assert!(editor.script_source_updated.is_none());
+        assert!(!editor.save_called);
+        assert_eq!(editor.opened_path.as_deref(), Some("res://main.gd"));
+    }
+
+    #[test]
+    fn handle_edit_file_current_script_outside_script_editor_opens_it() {
+        let mut editor = shader_over_main();
+        let result = handle_edit_file(
+            test_id(),
+            &mut editor,
+            "res://main.gd",
+            ForceOverride::Normal,
+            FileAccessScope::ProjectOnly,
+        );
+        assert_success(&result);
+        assert_eq!(editor.opened_path.as_deref(), Some("res://main.gd"));
+    }
+
     #[test]
     fn handle_write_file_explicit_godot_path_saves_via_script() {
         let mut editor = MockEditorHost::new("content", Some("res://original.gd"));
