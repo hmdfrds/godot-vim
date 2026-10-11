@@ -75,6 +75,14 @@ and it could close a shader with unsaved changes without a word. It now
 checks the editor you typed it in. `:e! {file}` typed in a shader no longer
 loads the current script's text into the shader; it opens the file.
 
+**The Sandbox strips every mapping that reaches `:source` or `:!`.** Under
+the default Project Vimrc policy, a mapping in a committed
+`res://.godot-vimrc` was stripped only when a space followed `:source` or
+the `!` came right after the `:`. `:source<CR>`, `:silent !cmd`,
+`:noh<Bar>!cmd` and `:<Space>so file` passed. They are now stripped too,
+with the usual `" [sandbox] stripped` comment. Put such a mapping in
+`user://.godot-vimrc` if you want it.
+
 ## From v1.8.0
 
 **Textwidth now defaults to `0`, as in Vim.** With the old default of 80,

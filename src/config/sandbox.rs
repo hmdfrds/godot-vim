@@ -40,14 +40,63 @@ const FUNCTION_PATTERNS: &[&str] = &[
 
 /// Ex-command patterns checked via abbreviation + case-insensitive matching,
 /// mirroring the engine's `matches_abbrev` logic.
-/// Format: `(min_prefix, full_command, required_suffix)`.
-const EX_COMMAND_PATTERNS: &[(&str, &str, &str)] = &[
+/// Format: `(min_prefix, full_command, what_follows)`.
+const EX_COMMAND_PATTERNS: &[(&str, &str, Tail)] = &[
     // `:!` — shell execution (no abbreviation, just literal)
-    ("!", "!", ""),
+    ("!", "!", Tail::Any),
     // `:read !` — shell via read (abbreviation: r[ead])
-    ("r", "read", " !"),
-    // `:source ` — config chain-loading (abbreviation: so[urce])
-    ("so", "source", " "),
+    ("r", "read", Tail::Bang),
+    // `:source` in every form: config chain-loading (abbreviation: so[urce])
+    ("so", "source", Tail::Any),
+];
+
+/// What must follow a command name for [`EX_COMMAND_PATTERNS`] to match.
+#[derive(Clone, Copy)]
+enum Tail {
+    Any,
+    /// A `!` after optional blanks: `:r !cmd`, not `:r file`.
+    Bang,
+}
+
+/// Command modifiers and the commands that run another command, as
+/// `(min_prefix, full_command)`: `:silent so x` and `:windo so x` run
+/// `:so x`. Vim's list, a superset of the engine's.
+const COMMAND_PREFIXES: &[(&str, &str)] = &[
+    ("abo", "aboveleft"),
+    ("bel", "belowright"),
+    ("bo", "botright"),
+    ("bro", "browse"),
+    ("conf", "confirm"),
+    ("hid", "hide"),
+    ("hor", "horizontal"),
+    ("keepa", "keepalt"),
+    ("keepj", "keepjumps"),
+    ("kee", "keepmarks"),
+    ("keepp", "keeppatterns"),
+    ("lefta", "leftabove"),
+    ("leg", "legacy"),
+    ("loc", "lockmarks"),
+    ("noa", "noautocmd"),
+    ("nos", "noswapfile"),
+    ("rightb", "rightbelow"),
+    ("san", "sandbox"),
+    ("sil", "silent"),
+    ("tab", "tab"),
+    ("to", "topleft"),
+    ("uns", "unsilent"),
+    ("verb", "verbose"),
+    ("vert", "vertical"),
+    ("vim9", "vim9cmd"),
+    ("argdo", "argdo"),
+    ("bufdo", "bufdo"),
+    ("cdo", "cdo"),
+    ("cfdo", "cfdo"),
+    ("foldd", "folddoopen"),
+    ("folddoc", "folddoclosed"),
+    ("ldo", "ldo"),
+    ("lfdo", "lfdo"),
+    ("tabdo", "tabdo"),
+    ("windo", "windo"),
 ];
 
 /// Filter config text for sandbox mode using a **whitelist** approach.
@@ -397,45 +446,204 @@ fn is_map_or_noremap_abbrev(name: &str) -> bool {
 }
 
 /// Scan a mapping line for dangerous patterns: case-sensitive function names
-/// (Vim functions are case-sensitive) and abbreviation-aware, case-insensitive
-/// ex-commands after each `:`.
+/// (Vim functions are case-sensitive) anywhere in the line, and
+/// abbreviation-aware, case-insensitive ex-commands wherever the right-hand
+/// side can start one.
+///
+/// A blacklist, so not complete: register execution (`@a`, `:@a`), the `!`
+/// operator and expression mappings are not modelled.
 fn contains_shell_pattern(line: &str) -> bool {
     if FUNCTION_PATTERNS.iter().any(|pat| line.contains(pat)) {
         return true;
     }
-    for (i, _) in line.match_indices(':') {
-        let after_colon = &line[i + 1..];
-        // Skip range chars so `:%!sort` and `:'<,'>!cmd` are caught.
-        let after_range = after_colon.trim_start_matches(|c: char| {
+    let (cmd, rhs) = split_mapping(line);
+    command_lines(rhs, starts_in_command_line(cmd))
+        .iter()
+        .any(|text| starts_dangerous_command(text))
+}
+
+/// The map command and its right-hand side, split as the engine's
+/// `parse_map_command` splits them: the `<nowait>`, `<expr>` and `<silent>`
+/// flags, then the left-hand side up to the first blank.
+fn split_mapping(line: &str) -> (&str, &str) {
+    let (cmd, mut rest) = line
+        .split_once(|c: char| c.is_ascii_whitespace())
+        .unwrap_or((line, ""));
+    loop {
+        rest = rest.trim_start();
+        let flag = rest.find('>').map(|end| &rest[..=end]);
+        match flag {
+            Some(flag)
+                if ["<nowait>", "<expr>", "<silent>"]
+                    .iter()
+                    .any(|f| flag.eq_ignore_ascii_case(f)) =>
+            {
+                rest = &rest[flag.len()..];
+            }
+            _ => break,
+        }
+    }
+    let rhs = rest
+        .split_once(char::is_whitespace)
+        .map_or("", |(_, rhs)| rhs);
+    (cmd, rhs.trim_start())
+}
+
+/// `cmap`, `cnoremap` and the `!` forms (`map!`, `noremap!`) type their
+/// right-hand side into the command line.
+fn starts_in_command_line(cmd: &str) -> bool {
+    cmd.ends_with('!') || cmd.starts_with(['c', 'C'])
+}
+
+/// The command-line text a right-hand side types, cut wherever a command
+/// can start: at `:`, at a `|` typed in the command line, and at any key
+/// that edits the command line (`<Home>`, `<Left>`, `<Tab>`, `<C-R>`...),
+/// since what is typed after it can end up at the front.
+///
+/// Keys are read as the engine reads a mapping, `<...>` groups through
+/// [`KeyEvent::from_vim_notation`], so `<Bar>`, `<Space>` and `<S-Space>`
+/// are typed characters like `|` and ` `.
+fn command_lines(rhs: &str, mut in_command_line: bool) -> Vec<String> {
+    use vim_core::keymap::{Key, Modifiers};
+    let mut lines = Vec::new();
+    let mut text = String::new();
+    for key in mapping_keys(rhs) {
+        let typed = match key.key() {
+            Key::Char(c) if (key.modifiers() - Modifiers::SHIFT).is_empty() => Some(c),
+            _ => None,
+        };
+        match typed {
+            Some(':') => {
+                if in_command_line {
+                    lines.push(std::mem::take(&mut text));
+                }
+                in_command_line = true;
+            }
+            _ if !in_command_line => {}
+            Some('|') | None => {
+                lines.push(std::mem::take(&mut text));
+                in_command_line = !matches!(key.key(), Key::Enter | Key::Escape);
+            }
+            Some(c) => text.push(c),
+        }
+    }
+    if in_command_line {
+        lines.push(text);
+    }
+    lines
+}
+
+/// Mirrors vim-core's `key_notation::parse_impl`, the parser of mapping
+/// right-hand sides.
+fn mapping_keys(rhs: &str) -> Vec<vim_core::keymap::KeyEvent> {
+    use vim_core::keymap::{Key, KeyEvent};
+    let mut keys = Vec::new();
+    let mut rest = rhs;
+    while let Some(ch) = rest.chars().next() {
+        if ch == '<' {
+            if let Some(end) = rest.find('>') {
+                if let Some(key) = KeyEvent::from_vim_notation(&rest[..=end]) {
+                    rest = &rest[end + 1..];
+                    // `<Action>(name)` and `<Plug>(name)` take their name.
+                    if matches!(key.key(), Key::Action(_) | Key::Plug(_)) && rest.starts_with('(') {
+                        if let Some(close) = rest.find(')').filter(|&close| close > 1) {
+                            rest = &rest[close + 1..];
+                        }
+                    }
+                    keys.push(key);
+                    continue;
+                }
+            }
+        }
+        keys.push(KeyEvent::char(ch));
+        rest = &rest[ch.len_utf8()..];
+    }
+    keys
+}
+
+/// Whether `text`, typed where a command starts, runs one of
+/// [`EX_COMMAND_PATTERNS`], also behind a range and [`COMMAND_PREFIXES`].
+fn starts_dangerous_command(text: &str) -> bool {
+    let mut text = skip_range(text);
+    loop {
+        if EX_COMMAND_PATTERNS
+            .iter()
+            .any(|&(min, full, tail)| matches_ex_pattern(text, min, full, tail))
+        {
+            return true;
+        }
+        match strip_command_prefix(text) {
+            Some(rest) => text = skip_range(rest),
+            None => return false,
+        }
+    }
+}
+
+/// Skips blanks and a range: line numbers, `%`, `*`, `$`, `.`, marks (`'a`,
+/// `'<`), patterns (`/pat/`, `?pat?`, `\/`) and the `,;+-` between them.
+fn skip_range(mut text: &str) -> &str {
+    loop {
+        text = text.trim_start_matches(|c: char| {
             c.is_ascii_digit()
                 || matches!(
                     c,
-                    '%' | '$' | '.' | '\'' | ',' | '+' | '-' | '<' | '>' | ' '
+                    ' ' | '\t' | '%' | '*' | '$' | '.' | ',' | ';' | '+' | '-'
                 )
         });
-        for &(min, full, suffix) in EX_COMMAND_PATTERNS {
-            if matches_ex_pattern(after_range, min, full, suffix) {
-                return true;
+        let mut chars = text.chars();
+        text = match chars.next() {
+            Some('\'' | '\\') => {
+                chars.next();
+                chars.as_str()
             }
-        }
+            Some(delim @ ('/' | '?')) => {
+                let pattern = chars.as_str();
+                pattern
+                    .find(delim)
+                    .map_or("", |end| &pattern[end + delim.len_utf8()..])
+            }
+            _ => return text,
+        };
     }
-    false
 }
 
-fn matches_ex_pattern(text: &str, min: &str, full: &str, suffix: &str) -> bool {
-    for len in min.len()..=full.len() {
-        if text.len() < len + suffix.len() {
-            continue;
-        }
+/// The text after a leading command modifier, such as `silent` in
+/// `silent so x`, or `None` when `text` starts with none.
+fn strip_command_prefix(text: &str) -> Option<&str> {
+    let end = text
+        .find(|c: char| !c.is_ascii_alphabetic())
+        .unwrap_or(text.len());
+    let (word, rest) = text.split_at(end);
+    let rest = match rest.strip_prefix('!') {
+        Some(after_bang) => after_bang,
+        None if rest.starts_with([' ', '\t']) => rest,
+        None => return None,
+    };
+    COMMAND_PREFIXES
+        .iter()
+        .any(|&(min, full)| matches_abbrev(word, min, full))
+        .then_some(rest)
+}
+
+fn matches_ex_pattern(text: &str, min: &str, full: &str, tail: Tail) -> bool {
+    let is_word = full.bytes().all(|b| b.is_ascii_alphabetic());
+    (min.len()..=full.len()).any(|len| {
         // .get() avoids panic on multi-byte UTF-8 character boundaries.
-        let Some(prefix) = text.get(..len) else {
-            continue;
+        let (Some(name), Some(rest)) = (text.get(..len), text.get(len..)) else {
+            return false;
         };
-        if prefix.eq_ignore_ascii_case(&full[..len]) && text[len..].starts_with(suffix) {
-            return true;
+        // A command name ends at the first non-letter, so `:sort` is not
+        // `:so` and `:source<Tab>x` is `:source`.
+        if !name.eq_ignore_ascii_case(&full[..len])
+            || (is_word && rest.starts_with(|c: char| c.is_ascii_alphabetic()))
+        {
+            return false;
         }
-    }
-    false
+        match tail {
+            Tail::Any => true,
+            Tail::Bang => rest.trim_start_matches([' ', '\t']).starts_with('!'),
+        }
+    })
 }
 
 /// Apply the project vimrc security policy. Returns `None` to block loading
@@ -773,6 +981,93 @@ inoremap jk <Esc>
                 abbrev
             );
         }
+    }
+
+    const STRIPPED: &str = "\" [sandbox] stripped";
+
+    fn assert_all_stripped(lines: &[&str]) {
+        for line in lines {
+            let out = sandbox_config_text(line);
+            assert!(out.starts_with(STRIPPED), "kept: {line}");
+        }
+    }
+
+    fn assert_all_kept(lines: &[&str]) {
+        for line in lines {
+            let out = sandbox_config_text(line);
+            assert_eq!(out.trim_end(), *line, "stripped: {line}");
+        }
+    }
+
+    /// The engine ends a command name at the first non-letter, so `so`
+    /// followed by any blank, key or digit is `:source`.
+    #[test]
+    fn strips_source_however_its_name_ends() {
+        assert_all_stripped(&[
+            "nnoremap x :source<Tab>user://a.vim<CR>",
+            "nnoremap x :source<Space>user://a.vim<CR>",
+            "nnoremap x :so<S-Space>user://a.vim<CR>",
+            "nnoremap x :sou\tuser://a.vim<CR>",
+            "nnoremap x :so<C-I>user://a.vim<CR>",
+            "nnoremap x :so1<CR>",
+            "nnoremap x :source!<Space>user://a.vim<CR>",
+            "nnoremap x :so<CR>",
+            "nnoremap x :source",
+        ]);
+    }
+
+    #[test]
+    fn strips_source_wherever_a_command_starts() {
+        assert_all_stripped(&[
+            "nnoremap x :noh<Bar>so user://a.vim<CR>",
+            "nnoremap x :noh\\|so user://a.vim<CR>",
+            "nnoremap x :silent so user://a.vim<CR>",
+            "nnoremap x :silent!so user://a.vim<CR>",
+            "nnoremap x :sil so user://a.vim<CR>",
+            "nnoremap x :keepjumps so user://a.vim<CR>",
+            "nnoremap x :2verbose so user://a.vim<CR>",
+            "nnoremap x :windo so user://a.vim<CR>",
+            "nnoremap x :<Space>so<Space>user://a.vim<CR>",
+            "nnoremap x :<Tab>so user://a.vim<CR>",
+            "nnoremap x :\tso user://a.vim<CR>",
+            "nnoremap <silent> x :so user://a.vim<CR>",
+            "cnoremap <C-x> <Home>so<Space>user://a.vim",
+        ]);
+    }
+
+    /// Editing keys move what is typed after them to the front.
+    #[test]
+    fn strips_source_assembled_by_editing_the_command_line() {
+        assert_all_stripped(&[
+            "nnoremap x :urce user://a.vim<Home>so<CR>",
+            "nnoremap x :so<Left>urce user://a.vim<CR>",
+        ]);
+    }
+
+    #[test]
+    fn strips_shell_behind_a_modifier_a_bar_or_any_range() {
+        assert_all_stripped(&[
+            "nnoremap x :silent !rm -rf ~<CR>",
+            "nnoremap x :noh<Bar>!ls<CR>",
+            "nnoremap x :r\t!ls<CR>",
+            "nnoremap x :'a,'b!sort<CR>",
+            "nnoremap x :/foo/!sort<CR>",
+        ]);
+    }
+
+    #[test]
+    fn keeps_mappings_that_only_resemble_a_dangerous_command() {
+        assert_all_kept(&[
+            "nnoremap x :sort<CR>",
+            "nnoremap x :set so=5<CR>",
+            "nnoremap x :echo 'so far'<CR>",
+            "nnoremap x :tabnew so.gd<CR>",
+            "nnoremap x :retab<CR>",
+            "nnoremap <Leader>so :w<CR>",
+            "nnoremap x <C-w>so",
+            "nnoremap x :w<CR><C-w>so",
+            "nnoremap x :%s/a/so/g<Left><Left>",
+        ]);
     }
 
     #[test]
