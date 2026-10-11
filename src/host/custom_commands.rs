@@ -387,7 +387,6 @@ pub(super) const fn list_all_commands() -> &'static [&'static str] {
         "mappings",
         "perf",
         "vimdebug",
-        "source",
         "undotree",
     ]
 }
@@ -438,10 +437,10 @@ mod tests {
     /// here, so it never tab-completed and nothing ever printed its name.
     #[test]
     fn every_intercepted_command_is_discoverable() {
-        // These five are matched in `bridge::godot_host` before the chain in
+        // These four are matched in `bridge::godot_host` before the chain in
         // this file is consulted, so nothing here dispatches them and it is
         // easy to forget they exist.
-        for cmd in ["panelmap", "mappings", "perf", "vimdebug", "source"] {
+        for cmd in ["panelmap", "mappings", "perf", "vimdebug"] {
             assert!(
                 list_all_commands().contains(&cmd),
                 "`:{cmd}` is implemented but cannot be tab-completed or listed"

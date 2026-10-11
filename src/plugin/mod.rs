@@ -21,6 +21,7 @@ mod lifecycle;
 mod outcome;
 mod processing_guard;
 mod signals;
+mod source_cmd;
 
 use godot::classes::notify::{EditorSettingsNotification, NodeNotification};
 use godot::classes::{
@@ -1187,10 +1188,9 @@ impl GodotVimCore {
     /// Execute a pending UI action that requires plugin-level access (scene tree,
     /// settings snapshot) which the controller cannot reach directly.
     ///
-    /// `OpenMappingDialog`, `SourceConfigFile`, `ShowTooltip` and the
-    /// completion delay reach the plugin layer; the controller handles all
-    /// other variants inline before storing. The catch-all arm is
-    /// defense-in-depth.
+    /// `OpenMappingDialog`, `Source`, `ShowTooltip` and the completion delay
+    /// reach the plugin layer; the controller handles all other variants inline
+    /// before storing. The catch-all arm is defense-in-depth.
     pub(super) fn handle_pending_ui_action(
         &mut self,
         action: crate::bridge::godot_host::PendingUiAction,
@@ -1225,11 +1225,8 @@ impl GodotVimCore {
             PendingUiAction::DisarmCompletion => {
                 self.disarm_completion_delay();
             }
-            PendingUiAction::SourceConfigFile => {
-                if self.source_config_from_disk("pending_ui_action") == Loaded::Missing {
-                    let path = self.resolve_config_path().path;
-                    log::warn!("pending_ui_action: SourceConfigFile — file not found at '{path}'",);
-                }
+            PendingUiAction::Source(raw) => {
+                self.source_command(raw.as_deref());
             }
             PendingUiAction::ShowTooltip {
                 symbol,
@@ -1565,6 +1562,7 @@ impl GodotVimCore {
                     self.refresh_filetype_setup();
                     Loaded::Sourced {
                         stripped: policed.stripped,
+                        ignored_panel_lines: 0,
                     }
                 }
             },

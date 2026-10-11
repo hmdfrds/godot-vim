@@ -99,18 +99,6 @@ const COMMAND_PREFIXES: &[(&str, &str)] = &[
     ("windo", "windo"),
 ];
 
-/// Filter config text for sandbox mode using a **whitelist** approach.
-///
-/// Only known-safe constructs pass through (comments, blanks, safe `:set`
-/// and `:setlocal`, `:filetype`, `:let mapleader`, non-recursive mappings
-/// with clean RHS). Everything else
-/// -- including raw ex-commands like `:source` or `:!` -- is replaced with
-/// a diagnostic comment. This prevents a malicious `res://.godot-vimrc`
-/// from executing arbitrary commands.
-pub(crate) fn sandbox_config_text(text: &str) -> String {
-    sandbox(text).text
-}
-
 /// A vimrc after the Project Vimrc policy.
 #[derive(Debug, Default)]
 pub(crate) struct PolicyText {
@@ -119,6 +107,14 @@ pub(crate) struct PolicyText {
     pub(crate) stripped: usize,
 }
 
+/// Filter config text for sandbox mode using a **whitelist** approach.
+///
+/// Only known-safe constructs pass through (comments, blanks, safe `:set`
+/// and `:setlocal`, `:filetype`, `:let mapleader`, non-recursive mappings
+/// with clean RHS). Everything else
+/// -- including raw ex-commands like `:source` or `:!` -- is replaced with
+/// a diagnostic comment. This prevents a malicious `res://.godot-vimrc`
+/// from executing arbitrary commands.
 fn sandbox(text: &str) -> PolicyText {
     let mut output = String::with_capacity(text.len());
     let mut stripped = 0;
@@ -697,6 +693,10 @@ pub(crate) fn apply_vimrc_policy(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sandbox_config_text(text: &str) -> String {
+        sandbox(text).text
+    }
 
     #[test]
     fn preserves_safe_mappings() {

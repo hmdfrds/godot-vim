@@ -262,7 +262,7 @@ pub(super) fn process_cycle_impl(
 /// Handle pending UI actions from GodotHost (deferred commands that need
 /// controller-level access).
 ///
-/// Actions that the plugin layer handles (OpenMappingDialog, SourceConfigFile)
+/// Actions that the plugin layer handles (OpenMappingDialog, Source)
 /// are stored in `transient.pending_ui_action` for the plugin to consume.
 /// Actions the controller handles directly (ShowUndoTree, Perf*, Vimdebug)
 /// are executed inline.
@@ -275,7 +275,7 @@ fn handle_host_pending_ui_action(
     use crate::bridge::godot_host::PendingUiAction;
     match action {
         PendingUiAction::OpenMappingDialog
-        | PendingUiAction::SourceConfigFile
+        | PendingUiAction::Source(..)
         | PendingUiAction::ShowTooltip { .. }
         // The delay timer is a node on `GodotVimCore`.
         | PendingUiAction::ArmCompletion { .. }
