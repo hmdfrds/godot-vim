@@ -75,7 +75,7 @@ and it could close a shader with unsaved changes without a word. It now
 checks the editor you typed it in. `:e! {file}` typed in a shader no longer
 loads the current script's text into the shader; it opens the file.
 
-**`:source` works, which it has not since 1.0.** A bare `:source` gave
+**`:source` works, which it has not done since 1.0.** A bare `:source` gave
 `E471: Argument required`, and `:source {file}` showed the file in the status
 bar instead of sourcing it. Now `:source` and `:source $MYVIMRC` re-read your
 `.godot-vimrc` as the `:mappings` dialog does, and `:source {file}` sources
@@ -84,13 +84,18 @@ here and in issue replies, now holds. See
 [`:source`](REFERENCE.md#configuration-and-misc) for what a project file is
 allowed.
 
-**The Sandbox strips every mapping that reaches `:source` or `:!`.** Under
-the default Project Vimrc policy, a mapping in a committed
+**The Sandbox strips more of the mappings that reach `:source` or `:!`.**
+Under the default Project Vimrc policy, a mapping in a committed
 `res://.godot-vimrc` was stripped only when a space followed `:source` or
 the `!` came right after the `:`. `:source<CR>`, `:silent !cmd`,
-`:noh<Bar>!cmd` and `:<Space>so file` passed. They are now stripped too,
-with the usual `" [sandbox] stripped` comment. Put such a mapping in
-`user://.godot-vimrc` if you want it.
+`:noh<Bar>!cmd`, `:<Space>so file`, a `<Cmd>so file<CR>` sequence and a
+command assembled with command-line editing keys (`:o file<Home>s<CR>`) all
+passed. They are now stripped too, with the usual `" [sandbox] stripped`
+comment. The Sandbox still does not analyse register execution (`@a`,
+`:@a`), the `!` filter operator, `<expr>` mappings, or keys run through
+`:normal` or `:global`, so a right-hand side that reaches `:source` or `:!`
+only through one of those is not caught. Put a mapping you want kept in
+`user://.godot-vimrc`.
 
 ## From v1.8.0
 
