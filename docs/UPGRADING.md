@@ -75,6 +75,15 @@ and it could close a shader with unsaved changes without a word. It now
 checks the editor you typed it in. `:e! {file}` typed in a shader no longer
 loads the current script's text into the shader; it opens the file.
 
+**`:source` works, which it has not since 1.0.** A bare `:source` gave
+`E471: Argument required`, and `:source {file}` showed the file in the status
+bar instead of sourcing it. Now `:source` and `:source $MYVIMRC` re-read your
+`.godot-vimrc` as the `:mappings` dialog does, and `:source {file}` sources
+another file on top of it. Advice to run `:source` after editing the vimrc,
+here and in issue replies, now holds. See
+[`:source`](REFERENCE.md#configuration-and-misc) for what a project file is
+allowed.
+
 **The Sandbox strips every mapping that reaches `:source` or `:!`.** Under
 the default Project Vimrc policy, a mapping in a committed
 `res://.godot-vimrc` was stripped only when a space followed `:source` or

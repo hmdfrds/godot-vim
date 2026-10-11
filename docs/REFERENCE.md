@@ -341,7 +341,8 @@ shader.
 | `:!{cmd}` | Execute shell command (when enabled) |
 | `:actionlist [filter]` | List available Godot editor actions |
 | `:mkvimrc` | Write a starter `res://.godot-vimrc`: header, `let mapleader`, `set timeoutlen`, and all 20 presets commented out. Refuses if the file exists; `:mkvimrc!` overwrites. |
-| `:source` | Re-read the active `.godot-vimrc` from disk. There is no file watcher, so this is how a hand edit takes effect. |
+| `:source` | Re-read the active `.godot-vimrc` from disk. There is no file watcher, so this is how a hand edit takes effect. Save the file first if it is open in the script editor. `:source $MYVIMRC` does the same. |
+| `:source {file}` | Source another file on top of your config, as in Vim. `~` is your home folder and `%` the current script (a text file such as a `.json` has no script and gives `E499`). The file follows **File Access Scope** like `:e`, and a project file (under `res://` or inside the project folder) follows **Security > Project Vimrc** like `res://.godot-vimrc`. `panelmap` lines are read only from the active config, and the status bar says how many were ignored. `:source! {file}` and `:[range]source` give `E319`. |
 
 ---
 
@@ -679,7 +680,7 @@ because they are Godot integrations rather than Vim engine features.
 
 ## .godot-vimrc Syntax
 
-Place a `.godot-vimrc` file at your project root (`res://.godot-vimrc`) or user directory (`user://.godot-vimrc`). Auto-detected on startup, hot-reloadable via `:source`.
+Place a `.godot-vimrc` file at your project root (`res://.godot-vimrc`) or user directory (`user://.godot-vimrc`). Auto-detected on startup, re-read with `:source`.
 
 ### Supported Commands
 
@@ -770,7 +771,7 @@ Exactly **one** config file is read, and the first hit wins:
 2. `res://.godot-vimrc`, your project root, committed with the project
 3. `user://.godot-vimrc`, per-user, shared by every project you open
 
-There is no layering between files: if `res://.godot-vimrc` exists, `user://.godot-vimrc` is never read. After editing the file by hand, run `:source`, the binding table is rebuilt from scratch and swapped in atomically, so a broken line can never leave a half-built keyset live.
+There is no layering between files: if `res://.godot-vimrc` exists, `user://.godot-vimrc` is never read. After editing the file by hand, run `:source`. Mappings and the panel binding table are rebuilt from the file, the binding table atomically, so a broken line can never leave a half-built keyset live. Options are applied on top of the current values, as Vim's `:source` does: an option line you delete keeps its value until a restart.
 
 ### Seeing what you have
 
@@ -994,6 +995,7 @@ GodotVim defaults to a locked-down security posture:
 - **Shell execution disabled**: `:!` commands are blocked by default. Enable in EditorSettings under `security/shell_execution`.
 - **File access scoped to project**: `:w`, `:r`, `:e` restricted to `res://` and `user://` paths by default.
 - **Sandboxed project vimrc:** Under the default `Sandbox` policy a project-level `.godot-vimrc` is filtered by **whitelist**, not by pattern-stripping: only known-safe constructs survive. Comments and blanks, safe `set` and `setlocal` options, `filetype` lines, `let mapleader`, the non-recursive `noremap` forms with a clean right-hand side, `panelunmap`, and `panelmap` lines targeting a registered `godotvim.*` action all pass. A right-hand side is not clean when it can run `:!`, `:read !` or `:source` (any form, the bare `:source` included), also after a `|`, behind a modifier such as `:silent`, or put together with keys that edit the command line. Everything else is stripped, including **every recursive `map` form regardless of its right-hand side** (`map`, `nmap`, `vmap`, `imap`, `omap`, `cmap`), because a recursive expansion can compose safe fragments into a dangerous one at runtime. Stripped means commented out with a `" [sandbox] stripped` comment naming the reason, never deleted, so nothing changes silently. Three policies: Disabled, Sandbox (default), Trusted.
+- **`:source {file}` trusts a file by where it lives**, as startup does: a file under `res://` or inside the project folder follows the Project Vimrc policy, and the status bar says how many lines the Sandbox skipped or that `Disabled` refused it. Any other file is yours and is trusted.
 - **Panel bindings are honoured from a project vimrc**, but only because their right-hand side is a closed vocabulary. Under the default `Sandbox` policy a committed `res://.godot-vimrc` may use `panelunmap` (it can only *remove* a binding), `native` (it can only *reduce* what the plugin consumes), and any registered `godotvim.*` action id with integer-only parameters. None of those can expand into `:!`, `:source`, or another mapping, and an unregistered action id is refused at load. A `panelmap` line that fails to parse is stripped rather than trusted, "unparseable" and "harmless" are different claims. Stripping means commenting the line out with a reason, never deleting it, so nothing changes silently. `Trusted` honours the file verbatim; `Disabled` skips it entirely. Lines in `user://.godot-vimrc`, or in a file you named yourself under Config File Path, are trusted at every tier. See [Panel Key Bindings](#panel-key-bindings-panelmap).
 
 ---
