@@ -67,6 +67,9 @@ grep '\[key\]' output.log
 # Mode transitions only
 grep 'mode→' output.log
 
+# Selections made with the mouse or a line-number click, as Visual takes them
+grep 'apply_mouse_selection' output.log
+
 # Text mutations only
 grep 'text_mutated' output.log
 
