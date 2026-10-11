@@ -3,6 +3,24 @@
 Notes for people arriving from an older release. Nothing here applies to a
 fresh install.
 
+## From v1.8.2
+
+**`:w` no longer writes a shader into your script.** GodotVim runs in the
+Shader Editor too, but `:w` saved the text of the editor you typed it in into
+the script editor's current script. With a `.gdshader` focused, `:w` replaced
+the open `.gd` file with the shader's text, and `:wq`, `:x`, `ZZ`, `:wqa` and
+`:save` did the same. These commands now save only when typed in the script
+editor's current script. Anywhere else they stop with `E382: Cannot write`
+and change no file; save a shader with the Shader Editor's own Save. If you
+used `:w` in a shader before, check the script that was open at the time: it
+may hold the shader's text.
+
+**`:q` in a shader checks the shader.** It used to refuse with `E37` when the
+current script had unsaved changes, although only the shader tab would close,
+and it could close a shader with unsaved changes without a word. It now
+checks the editor you typed it in. `:e! {file}` typed in a shader no longer
+loads the current script's text into the shader; it opens the file.
+
 ## From v1.8.0
 
 **Textwidth now defaults to `0`, as in Vim.** With the old default of 80,
