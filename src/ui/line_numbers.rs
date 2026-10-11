@@ -6,7 +6,7 @@
 //! width, zero padding and per-line colours are read from Godot on every
 //! update. None hides Godot's numbers and nothing else.
 
-use godot::classes::text_edit::GutterType;
+use godot::classes::text_edit::{GutterType, SelectionMode};
 use godot::classes::{CodeEdit, EditorInterface, EditorSettings, INode, Node};
 use godot::prelude::*;
 
@@ -16,6 +16,7 @@ use crate::settings::LineNumberMode;
 const SIG_CARET_CHANGED: &str = "caret_changed";
 const SIG_TEXT_CHANGED: &str = "text_changed";
 const SIG_VALUE_CHANGED: &str = "value_changed";
+const SIG_GUTTER_CLICKED: &str = "gutter_clicked";
 const SIG_THEME_CHANGED: &str = "theme_changed";
 const SIG_VISIBILITY_CHANGED: &str = "visibility_changed";
 // User signal fold_line, unfold_line and their _all variants emit
@@ -118,6 +119,31 @@ impl LineNumberManager {
             editor.set_draw_line_numbers(self.native_shown);
             self.hid_native = false;
         }
+    }
+
+    #[func]
+    pub fn on_gutter_clicked(&mut self, line: i32, gutter: i32) {
+        panic_guard(
+            "line_numbers::on_gutter_clicked",
+            || {
+                let Some(mut editor) = self.valid_editor() else {
+                    return;
+                };
+                if find_gutter(&editor, GUTTER_NAME) != Some(gutter) {
+                    return;
+                }
+                // What a click on Godot's own number gutter does
+                // (code_edit.cpp@4.7:3350-3357).
+                editor.remove_secondary_carets();
+                editor.set_selection_mode(SelectionMode::LINE);
+                if line == editor.get_line_count() - 1 {
+                    editor.select(line, 0, line, i32::MAX);
+                } else {
+                    editor.select(line, 0, line + 1, 0);
+                }
+            },
+            (),
+        );
     }
 
     /// CodeTextEditor re-applies its gutter settings on theme change
@@ -431,10 +457,11 @@ impl LineNumberManager {
         }
     }
 
-    fn editor_signals() -> [(&'static str, &'static str); 6] {
+    fn editor_signals() -> [(&'static str, &'static str); 7] {
         [
             (SIG_CARET_CHANGED, "on_caret_changed"),
             (SIG_TEXT_CHANGED, "on_text_changed"),
+            (SIG_GUTTER_CLICKED, "on_gutter_clicked"),
             (SIG_THEME_CHANGED, "on_theme_changed"),
             (SIG_VISIBILITY_CHANGED, "on_visibility_changed"),
             (SIG_FOLD_UPDATED, "on_fold_updated"),
