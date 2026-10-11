@@ -1672,7 +1672,6 @@ impl GodotVimCore {
             at_attached_editor: true,
             mode: Some(vim_core::primitives::Mode::Insert),
             selected_index: 0,
-            caret: (0, 0),
             host_key: crate::actions::surface::HostKey::None,
         };
         let overlay = self.bindings.forest().overlay(&hypothetical);

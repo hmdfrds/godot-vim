@@ -222,8 +222,7 @@ impl std::fmt::Debug for ActionSpec {
 /// only real implementation holds `&mut VimSession<GodotHost>` and
 /// `&mut Gd<CodeEdit>`, and neither can exist under `cargo test` in a
 /// `cdylib`. Behind this seam the `godotvim.completion.*` bodies are pure
-/// decision logic over one boolean, two integers and one provenance answer,
-/// so the trichotomy they
+/// decision logic over one boolean and two integers, so the trichotomy they
 /// produce — consume / hand to the control / let the engine have it — is
 /// table-tested headlessly, which is the same trick `FocusChain` plays for the
 /// surface plane.
@@ -247,21 +246,11 @@ pub(crate) trait CompletionOps {
     /// selected index are valid immediately after the call.
     fn request(&mut self, force: bool);
     fn select(&mut self, index: i32);
-    /// The user pressed a key `CodeEdit` moves the selection on by itself.
-    fn navigated(&mut self);
     /// Accept the selected candidate (`replace` also overwrites the rest of
     /// the word, code_edit.cpp:2611-2639) and reconcile the text delta with
     /// the engine, so dot-repeat and macro recording capture it.
     fn confirm(&mut self, replace: bool);
     fn cancel(&mut self);
-    /// Whether the current selection was chosen by the user rather than
-    /// preselected by Godot.
-    ///
-    /// Answered from the provenance machine on the port. Sound because
-    /// `effects::completion` re-requests on the raw editor and never touches
-    /// this port, so a port `request` is reachable only from a user-initiated
-    /// verb.
-    fn selection_is_explicit(&self) -> bool;
 }
 
 /// The focused panel control, as commands.

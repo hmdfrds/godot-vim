@@ -59,14 +59,6 @@ pub(crate) struct TransientShellState {
     vimdebug: vimdebug::VimdebugState,
     /// Pass-2 effects deferred by vimdebug step-mode.
     pending_step_effects: Option<Vec<vim_core::effects::Effect>>,
-    /// Whether the completion selection was chosen by the user, advanced once
-    /// per keystroke by `process_cycle_impl` from the overlay facts.
-    ///
-    /// On the transient state and NOT on `GodotVimCore`, for a decisive
-    /// reason: the port writes `explicit = true` from `select()` and
-    /// `request()`, and the port is constructed inside `process_cycle_impl`
-    /// where `&mut ctx.transient` is in hand.
-    completion: completion::Provenance,
 }
 
 impl TransientShellState {
@@ -76,7 +68,6 @@ impl TransientShellState {
             pending_ui_actions: Vec::new(),
             vimdebug: vimdebug::VimdebugState::default(),
             pending_step_effects: None,
-            completion: completion::Provenance::default(),
         }
     }
 
@@ -90,13 +81,11 @@ impl TransientShellState {
             pending_ui_actions,
             vimdebug,
             pending_step_effects,
-            completion,
         } = self;
         *operations_this_cycle = 0;
         pending_ui_actions.clear();
         vimdebug.set_mode(vimdebug::VimdebugMode::Off);
         *pending_step_effects = None;
-        *completion = completion::Provenance::default();
     }
 }
 

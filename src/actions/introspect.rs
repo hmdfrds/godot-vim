@@ -550,7 +550,6 @@ mod tests {
                 at_attached_editor: true,
                 mode: Some(vim_core::primitives::Mode::Insert),
                 selected_index: 0,
-                caret: (0, 0),
                 host_key: crate::actions::surface::HostKey::None,
             })
             .expect("the hypothetical facts activate the overlay");
@@ -674,7 +673,7 @@ editor.insert  (barrier — takes no bindings)
 editor.completion  (overlay: while the script editor is in an insert-like mode, seal: Open)
   panelmap editor.completion <C-n> godotvim.completion.next    [godotvim.completion]
   panelmap editor.completion <C-p> godotvim.completion.prev    [godotvim.completion]
-  panelmap editor.completion <C-y> godotvim.completion.confirm require_selection=0    [godotvim.completion]
+  panelmap editor.completion <C-y> godotvim.completion.confirm    [godotvim.completion]
   panelmap editor.completion <C-e> godotvim.completion.dismiss    [godotvim.completion]
 prompt  (no bindings)
 searchbox  (parent: panel, seal: Sealed)
@@ -1077,7 +1076,6 @@ panel  (parent: -, seal: Open)
                 at_attached_editor: true,
                 mode: Some(vim_core::primitives::Mode::Insert),
                 selected_index: 0,
-                caret: (0, 0),
                 host_key: crate::actions::surface::HostKey::None,
             })
             .expect("active");

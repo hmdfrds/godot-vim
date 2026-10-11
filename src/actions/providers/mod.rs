@@ -825,7 +825,6 @@ mod tests {
                         at_attached_editor,
                         mode,
                         selected_index,
-                        caret: (0, 0),
                         host_key: crate::actions::surface::HostKey::None,
                     };
                     let active = all

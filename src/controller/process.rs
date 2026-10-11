@@ -49,13 +49,6 @@ pub(super) fn process_cycle_impl(
         return PipelineOutcome::VimdebugStep;
     }
 
-    // Advances on EVERY keystroke that reaches the editor, typed characters
-    // included, with no early return above it (the vimdebug step intercept
-    // holds no popup: entering step mode leaves Insert). That is what makes
-    // the caret-move reset work: typing re-derives the popup on the raw
-    // editor (`effects::completion`), and must clear an inherited selection.
-    ctx.transient.completion = completion::advance(ctx.transient.completion, &plan.facts);
-
     // The overlay fold, at the source line try_handle_completion occupied.
     // The return point does not move, which preserves four obligations:
     // ensure_undo_balanced fires on the same two branches;
@@ -65,8 +58,7 @@ pub(super) fn process_cycle_impl(
     // and the block still precedes should_passthrough_key, so mapping
     // precedence is byte-for-byte today's.
     if !plan.candidates.is_empty() {
-        let disposition =
-            completion::dispatch_overlay(session, editor, &mut ctx.transient.completion, &plan);
+        let disposition = completion::dispatch_overlay(session, editor, &plan);
         // `None` falls through to `should_passthrough_key` below, exactly as
         // `try_handle_completion`'s `None` did. The mapping itself lives in
         // `pipeline_outcome` because this function is Gd-bound: inline, the
@@ -87,12 +79,7 @@ pub(super) fn process_cycle_impl(
     }
 
     // Godot's own popup keys, for a key no row claimed.
-    let disposition = completion::dispatch_host_key(
-        session,
-        editor,
-        &mut ctx.transient.completion,
-        plan.facts.host_key,
-    );
+    let disposition = completion::dispatch_host_key(session, editor, plan.facts.host_key);
     if let Some(outcome) = super::pipeline_outcome::outcome_for(disposition) {
         log::debug!(
             "process_cycle: godot completion key={key} -> {}",

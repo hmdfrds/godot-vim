@@ -233,23 +233,13 @@ pub(crate) static CONFIRM: ActionSpec = ActionSpec {
     requires: Caps::POPUP,
     host_invocable: false,
     default_consume: None,
+    // The highlighted row, chosen or preselected, as Godot accepts it. A
+    // `require_selection=` from an older vimrc is read by nothing.
     run: |cx| {
-        // Read before the `ops` borrow, so the parameter is legible at the
-        // top of the decision rather than buried in it.
-        let want_selection = cx.params.int("require_selection", 1) != 0;
         let replace = cx.params.int("replace", 0) != 0;
         let Some(ops) = ops(cx) else {
             return Outcome::Declined;
         };
-        if want_selection && !ops.selection_is_explicit() {
-            // Vim's rule (insert.txt:1399-1410): Enter inserts a newline
-            // unless the selection was explicitly moved, and the menu closes.
-            // The engine's newline alone would only re-derive the popup.
-            // Cancelling is cleanup, NOT a consumption decision: consumption
-            // is the rule's declared policy, read by `dispose` downstream.
-            ops.cancel();
-            return Outcome::Declined;
-        }
         ops.confirm(replace);
         Outcome::Handled
     },
@@ -289,10 +279,9 @@ pub(crate) static NAVIGATE: ActionSpec = ActionSpec {
     // declaration to a capability no classified path can satisfy.
     default_consume: Some(Consumption::Handoff),
     run: |cx| {
-        let Some(ops) = ops(cx) else {
+        if ops(cx).is_none() {
             return Outcome::Declined;
-        };
-        ops.navigated();
+        }
         Outcome::Handled
     },
 };
@@ -312,15 +301,14 @@ const ACTIONS: &[&ActionSpec] = &[&TRIGGER, &NEXT, &PREV, &CONFIRM, &DISMISS, &N
 /// own `SetMode(Normal)` cancels the popup on the way out (`effects/mode.rs`),
 /// so one press still does both. The two-stage Escape is one vimrc line.
 ///
-/// `<C-y>` and `<C-e>` are Vim's real popup keys: explicit accept and close
-/// keeping the typed text (insert.txt:1399-1410). Both are claimed only
-/// while a popup is up; with none, `POPUP` misses and vim-core's
-/// `CopyCharAbove` / `CopyCharBelow` run exactly as before. `<C-y>` carries
-/// `require_selection=0` because pressing it IS choosing.
+/// `<C-y>` and `<C-e>` are Vim's real popup keys: accept and close keeping
+/// the typed text (insert.txt:1399-1410). Both are claimed only while a popup
+/// is up; with none, `POPUP` misses and vim-core's `CopyCharAbove` /
+/// `CopyCharBelow` run exactly as before.
 const DEFAULTS: &str = "\
 panelmap editor.completion <C-n> godotvim.completion.next
 panelmap editor.completion <C-p> godotvim.completion.prev
-panelmap editor.completion <C-y> godotvim.completion.confirm require_selection=0
+panelmap editor.completion <C-y> godotvim.completion.confirm
 panelmap editor.completion <C-e> godotvim.completion.dismiss
 ";
 
@@ -353,8 +341,6 @@ mod tests {
         /// Every command, in order. Asserting the LOG rather than the end
         /// state is what catches "confirmed, but also cancelled".
         log: Vec<String>,
-        /// The provenance answer the port would give.
-        explicit: bool,
     }
 
     impl FakePopup {
@@ -387,9 +373,6 @@ mod tests {
         }
         fn request(&mut self, force: bool) {
             self.log.push(format!("request(force={force})"));
-            // Mirrors the real port: a port request is user-initiated by the
-            // invariant on `CompletionPort`, so it adopts the selection.
-            self.explicit = true;
             // Godot's request is synchronous and auto-selects index 0 when it
             // finds candidates. The fake reproduces that, because `prev`'s
             // "then jump to the last one" depends on it.
@@ -400,12 +383,7 @@ mod tests {
         }
         fn select(&mut self, index: i32) {
             self.log.push(format!("select({index})"));
-            self.explicit = true;
             self.selected = index;
-        }
-        fn navigated(&mut self) {
-            self.log.push("navigated".into());
-            self.explicit = true;
         }
         fn confirm(&mut self, replace: bool) {
             self.log
@@ -417,20 +395,14 @@ mod tests {
             self.visible = false;
             // Godot's `cancel_code_completion` (code_edit.cpp:2711-2719)
             // clears `code_completion_active` and leaves the index and the
-            // option list intact. Resetting the index here makes the
-            // provenance regression test pass vacuously.
-        }
-
-        fn selection_is_explicit(&self) -> bool {
-            self.explicit
+            // option list intact.
         }
     }
 
     /// Run one verb against one popup state, returning the outcome.
     ///
     /// Takes `params` rather than hardcoding `Params::new()`: parameter
-    /// behaviour is untestable otherwise, and `require_selection` is on its
-    /// way here.
+    /// behaviour is untestable otherwise.
     fn run(spec: &ActionSpec, params: Params, popup: &mut FakePopup) -> Outcome {
         let mut cx = ActionCtx::new(None, params).with_completion(popup);
         (spec.run)(&mut cx)
@@ -530,61 +502,37 @@ mod tests {
     }
 
     #[test]
-    fn confirm_accepts_a_visible_popup_and_consumes() {
-        let mut popup = FakePopup::open(2, 1);
-        // The user chose this row; provenance says so.
-        popup.explicit = true;
-        assert_eq!(
-            fold(&CONFIRM, Params::new(), &mut popup),
-            Disposition::Consume
-        );
-        assert_eq!(popup.log, vec!["confirm"]);
-    }
-
-    #[test]
-    fn confirm_declines_an_unchosen_candidate_and_cancels_it() {
-        // Vim's rule: Enter inserts a newline unless the selection was
-        // explicitly moved. Cancelled first, so a same-line <Tab> cannot meet
-        // a popup describing text that no longer exists; no "confirm" in the
-        // log means no ExternalEdit and no dot-repeat capture.
-        let mut popup = FakePopup::open(3, 3);
-        assert_eq!(run(&CONFIRM, Params::new(), &mut popup), Outcome::Declined);
-        assert_eq!(popup.log, vec!["cancel"]);
-        let mut popup = FakePopup::open(3, 3);
-        assert_eq!(
-            fold(&CONFIRM, Params::new(), &mut popup),
-            Disposition::Ignore
-        );
-    }
-
-    #[test]
-    fn require_selection_zero_restores_the_old_behaviour() {
-        let mut params = Params::new();
-        params.set_int("require_selection", 0);
-        let mut popup = FakePopup::open(3, 3);
-        assert_eq!(run(&CONFIRM, params, &mut popup), Outcome::Handled);
-        assert_eq!(popup.log, vec!["confirm"]);
+    fn confirm_accepts_the_highlighted_row_whether_or_not_it_was_moved() {
+        // Godot preselects row 0 and accepts it (code_edit.cpp:2582, 822-823).
+        for selected in [0, 1] {
+            let mut popup = FakePopup::open(2, selected);
+            assert_eq!(
+                fold(&CONFIRM, Params::new(), &mut popup),
+                Disposition::Consume
+            );
+            assert_eq!(popup.log, vec!["confirm"]);
+        }
     }
 
     #[test]
     fn the_replace_parameter_replaces() {
         let mut params = Params::new();
         params.set_int("replace", 1);
-        params.set_int("require_selection", 0);
         let mut popup = FakePopup::open(3, 0);
         assert_eq!(run(&CONFIRM, params, &mut popup), Outcome::Handled);
         assert_eq!(popup.log, vec!["replace"]);
     }
 
     #[test]
-    fn pressing_ctrl_n_first_makes_the_selection_explicit() {
-        // The port-side adoption: NEXT's request marks the selection chosen,
-        // so an immediate default-parameter CONFIRM accepts.
-        let mut popup = FakePopup::closed();
-        popup.options = 3;
-        assert_eq!(run(&NEXT, Params::new(), &mut popup), Outcome::Handled);
-        assert_eq!(run(&CONFIRM, Params::new(), &mut popup), Outcome::Handled);
-        assert!(popup.log.contains(&"confirm".to_string()));
+    fn a_stale_require_selection_parameter_is_ignored() {
+        // Older vimrc lines carry `require_selection=`.
+        for value in [0, 1] {
+            let mut params = Params::new();
+            params.set_int("require_selection", value);
+            let mut popup = FakePopup::open(3, 0);
+            assert_eq!(run(&CONFIRM, params, &mut popup), Outcome::Handled);
+            assert_eq!(popup.log, vec!["confirm"]);
+        }
     }
 
     #[test]
@@ -643,11 +591,7 @@ mod tests {
         // marked handled".
         let mut popup = FakePopup::open(3, 0);
         assert_eq!(run(&NAVIGATE, Params::new(), &mut popup), Outcome::Handled);
-        assert_eq!(
-            popup.log,
-            ["navigated"],
-            "the control does the moving, not us"
-        );
+        assert!(popup.log.is_empty(), "the control does the moving, not us");
         assert_eq!(
             popup.selected, 0,
             "we must not move the selection ourselves"
@@ -657,14 +601,6 @@ mod tests {
             fold(&NAVIGATE, Params::new(), &mut popup),
             Disposition::Handoff
         );
-    }
-
-    #[test]
-    fn navigating_a_one_row_list_then_enter_accepts() {
-        let mut popup = FakePopup::open(1, 0);
-        assert_eq!(run(&NAVIGATE, Params::new(), &mut popup), Outcome::Handled);
-        assert_eq!(run(&CONFIRM, Params::new(), &mut popup), Outcome::Handled);
-        assert_eq!(popup.log, ["navigated", "confirm"]);
     }
 
     #[test]
@@ -745,7 +681,6 @@ mod tests {
                     at_attached_editor,
                     mode,
                     selected_index: -1,
-                    caret: (0, 0),
                     host_key: crate::actions::surface::HostKey::None,
                 };
                 let want = at_attached_editor
@@ -771,7 +706,6 @@ mod tests {
                 at_attached_editor: true,
                 mode: Some(vim_core::primitives::Mode::Insert),
                 selected_index,
-                caret: (0, 0),
                 host_key: crate::actions::surface::HostKey::None,
             };
             assert_eq!((overlay.grants)(&facts), want, "index {selected_index}");
@@ -793,7 +727,6 @@ mod tests {
             at_attached_editor: true,
             mode: Some(vim_core::primitives::Mode::Insert),
             selected_index,
-            caret: (0, 0),
             host_key: crate::actions::surface::HostKey::None,
         }
     }
@@ -959,7 +892,6 @@ mod tests {
                 at_attached_editor: true,
                 mode,
                 selected_index: 0,
-                caret: (0, 0),
                 host_key: crate::actions::surface::HostKey::None,
             };
             assert!(forest.overlay(&facts).is_none(), "{mode:?}");
@@ -1076,6 +1008,28 @@ mod tests {
             "panelunmap editor.completion <C-@>\n\
              panelunmap editor.completion <Tab>\n\
              panelunmap editor.completion <CR>",
+        );
+    }
+
+    #[test]
+    fn the_lines_upgrading_says_to_delete_still_load() {
+        use crate::actions::resolve::{CandidateTarget, Resolution, Stop};
+        let index = index_with(
+            "panelmap editor.completion <CR> godotvim.completion.confirm require_selection=0\n\
+             panelunmap editor.completion <Tab>\n\
+             panelunmap editor.completion <C-@>",
+        );
+        let Resolution::Run { candidates, .. } = resolve_overlay(&index, "<CR>", &popup_facts(0))
+        else {
+            panic!("the user's <CR> row must still resolve");
+        };
+        let CandidateTarget::Action(_, spec) = &candidates[0].target else {
+            panic!("an action rule");
+        };
+        assert_eq!(spec.id, CONFIRM.id);
+        assert_eq!(
+            resolve_overlay(&index, "<C-@>", &popup_facts(0)),
+            Resolution::None(Stop::Exhausted)
         );
     }
 }

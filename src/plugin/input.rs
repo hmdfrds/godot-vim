@@ -672,15 +672,13 @@ impl GodotVimCore {
                 at_attached_editor: true,
                 mode: self.controller.as_ref().map(VimController::mode),
                 selected_index: ed.get_code_completion_selected_index(),
-                caret: (ed.get_caret_line(), ed.get_caret_column()),
                 host_key: crate::actions::surface::HostKey::None,
             };
             if facts.insert_like() {
                 facts.host_key = host_completion_key(&key_event, facts.popup());
             }
-            // Candidates only; the facts cross on BOTH arms, because the
-            // provenance machine advances on every keystroke, typed
-            // characters included.
+            // Candidates only; the facts cross on BOTH arms, because a key no
+            // row claims can still be one of Godot's popup keys.
             let candidates = match index.forest().overlay(&facts) {
                 None => Vec::new(),
                 Some(path) => {

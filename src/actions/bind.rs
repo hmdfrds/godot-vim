@@ -914,10 +914,9 @@ mod tests {
             false,
             &[],
         ),
-        // Vim's real popup keys (insert.txt:1399-1410). `<C-y>` carries
-        // `require_selection=0` because pressing it IS choosing; both are
-        // POPUP-gated, so with none up they reach vim-core's CopyCharAbove /
-        // CopyCharBelow untouched.
+        // Vim's real popup keys (insert.txt:1399-1410), POPUP-gated, so with
+        // none up they reach vim-core's CopyCharAbove / CopyCharBelow
+        // untouched.
         (
             "editor.completion",
             "<C-y>",
@@ -926,7 +925,7 @@ mod tests {
             Consumption::Elastic,
             Repeat::Allow,
             false,
-            &[("require_selection", 0)],
+            &[],
         ),
         (
             "editor.completion",
@@ -1773,7 +1772,6 @@ mod tests {
                 at_attached_editor: true,
                 mode: Some(vim_core::primitives::Mode::Insert),
                 selected_index: 0,
-                caret: (0, 0),
                 host_key: crate::actions::surface::HostKey::None,
             })
             .expect("popup-open facts activate the overlay");
