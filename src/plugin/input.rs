@@ -755,6 +755,7 @@ impl GodotVimCore {
                 self.handle_pending_ui_action(action);
             }
         }
+        self.recheck_completion_delay();
 
         // Start/restart the mapping timer if keys are buffered, stop if not.
         if let Some(controller) = &self.controller {
@@ -825,6 +826,7 @@ impl GodotVimCore {
                 self.handle_pending_ui_action(action);
             }
         }
+        self.recheck_completion_delay();
 
         // Timeout resolution may produce new pending keys (e.g. partial
         // match of a longer mapping) -- restart the timer so they resolve.

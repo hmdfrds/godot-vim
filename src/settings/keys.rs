@@ -71,6 +71,9 @@ pub(crate) const CONFIG_FILE_PATH: &str = "plugins/GodotVim/mapping/config_file_
 /// This is Godot's native EditorSetting, not a GodotVim setting.
 pub(crate) const CODE_COMPLETE_ENABLED: &str = "text_editor/completion/code_complete_enabled";
 
+/// Seconds from a typed character to the popup Godot opens for it.
+pub(crate) const CODE_COMPLETE_DELAY: &str = "text_editor/completion/code_complete_delay";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Input
 // ─────────────────────────────────────────────────────────────────────────────

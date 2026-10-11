@@ -121,6 +121,8 @@ pub(crate) trait IdeCapable: TextEditorPort {
         false
     }
     fn request_code_completion(&mut self, _force: bool) {}
+    /// Open the popup after Code Complete Delay unless something intervenes.
+    fn arm_code_completion(&mut self) {}
 }
 
 /// LSP navigation: go-to-definition and hover documentation.

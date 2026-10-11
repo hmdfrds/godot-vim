@@ -162,6 +162,7 @@ impl GodotVimCore {
         let Some(mut editor) = self.attached_editor.take() else {
             return;
         };
+        self.disarm_completion_delay();
 
         // Catch ANY panic after the take() so the teardown tail always runs.
         let teardown_ok = crate::safety::panic_guard(

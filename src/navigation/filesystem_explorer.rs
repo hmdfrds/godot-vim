@@ -1,6 +1,6 @@
 //! Vim-like file operations on Godot's FileSystem dock.
 //!
-//! Adds nvim-tree-style keybindings (`a` create, `d` delete, `r` rename,
+//! Adds file operation keys (`a` create, `d` delete, `r` rename,
 //! `y` yank path, `R` refresh) when focus is on the FileSystem dock's Tree
 //! or ItemList. These are **executors**: the keyset itself lives on the
 //! `dock.filesystem` surface in `actions::providers::filesystem`, and the

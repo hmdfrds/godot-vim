@@ -1,6 +1,6 @@
 //! `dock.filesystem` — the FileSystem dock's own Tree and file list.
 //!
-//! The surface that carries the nvim-tree keyset (`a` create, `d` delete,
+//! The surface that carries the file operation keys (`a` create, `d` delete,
 //! `r` rename, `y` yank path, `R` refresh) and the one place in the design
 //! where a *surface* grants a capability.
 //!
@@ -64,7 +64,7 @@ pub(crate) static DOCK_FILESYSTEM: SurfaceSpec = SurfaceSpec {
     yields_to_engine: false,
 };
 
-/// The nvim-tree-flavoured file operations of `resolve_fs_action`
+/// The file operations of `resolve_fs_action`
 /// (`filesystem_explorer.rs`).
 ///
 /// `R` and `r` are two *keys*, not one key with a modifier: `bridge::input`

@@ -1163,7 +1163,7 @@ pub(crate) fn dispatch_pass2_effect(
             log::trace!("[internal] substitute confirm state update");
         }
 
-        // ── Engine-internal: syntax selection (VS Code / multi-cursor) ──
+        // ── Engine-internal: syntax selection (multi-cursor) ──
         Effect::SyntaxSelectionPush { .. } | Effect::SyntaxSelectionPop => {
             log::trace!("[internal] syntax selection (no-op in CodeEdit)");
         }

@@ -136,6 +136,11 @@ mod deferred_delivery_contract {
     const PLUGIN_FILES: &[(&str, &str, usize)] = &[
         ("attach.rs", include_str!("attach.rs"), 6),
         ("caret_reconcile.rs", include_str!("caret_reconcile.rs"), 0),
+        (
+            "completion_delay.rs",
+            include_str!("completion_delay.rs"),
+            0,
+        ),
         ("discovery.rs", include_str!("discovery.rs"), 0),
         ("floating.rs", include_str!("floating.rs"), 1),
         ("input.rs", include_str!("input.rs"), 0),

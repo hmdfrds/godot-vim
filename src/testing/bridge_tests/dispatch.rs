@@ -1060,10 +1060,6 @@ fn descending_removal_after_multi_cursor_insert_then_escape() {
     assert_editor!(mock, carets: 1, cursor: (0, 1));
 }
 
-// SetMode dispatch requires the Godot logger to be initialized (it logs
-// mode transitions), so it cannot be tested here. The handler itself only
-// calls cancel_code_completion() and dismiss_code_hint() (both no-ops).
-
 // ── Architecture B: multi-cursor dispatch guards ────────────────────────────
 
 #[test]

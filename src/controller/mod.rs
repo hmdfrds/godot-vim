@@ -1294,8 +1294,8 @@ impl VimController {
 
         // H1: Clear secondary cursors on external edit. External text changes
         // (Find-Replace, formatter, etc.) invalidate secondary cursor positions
-        // because reconciliation only syncs the primary cursor. This matches
-        // VS Code behavior where external edits collapse multi-cursor.
+        // because reconciliation only syncs the primary cursor, so an external
+        // edit collapses multi-cursor.
         if session.engine().state().multi_cursor().is_active() {
             use vim_core::state::MultiCursorCommand;
             let ctx = vim_core::execution::MultiCursorContext {

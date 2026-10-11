@@ -1092,7 +1092,7 @@ mod tests {
             true,
             &[],
         ),
-        // nvim-tree-flavoured file operations. `R` refreshes while `r`
+        // File operations. `R` refreshes while `r`
         // renames: Shift is a discriminant here, carried by the character
         // itself because `bridge::input` folds it in.
         (
