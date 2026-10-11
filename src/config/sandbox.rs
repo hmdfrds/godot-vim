@@ -275,6 +275,14 @@ fn extract_option_name_from_token(token: &str) -> &str {
     name.strip_prefix("no").unwrap_or(name)
 }
 
+/// Whether a `set` token, or an option name, names a blocked option.
+fn is_blocked_option(token: &str) -> bool {
+    let name = extract_option_name_from_token(token);
+    BLOCKED_SET_OPTIONS
+        .iter()
+        .any(|blocked| name.eq_ignore_ascii_case(blocked))
+}
+
 /// Whitelist check for non-mapping lines that are safe to pass through.
 /// Whether a `panelmap` / `panelunmap` line is safe to honour from a
 /// project-level vimrc, which is committed and therefore attacker-supplied.
@@ -345,13 +353,7 @@ fn is_safe_non_mapping_line(trimmed: &str) -> bool {
     if let Some(options_str) = after_set {
         // Check ALL space-separated options -- `set scrolloff=5 shell=/bin/evil`
         // must be blocked because `shell` is dangerous even if `scrolloff` is safe.
-        let has_blocked = options_str.split_whitespace().any(|token| {
-            let name = extract_option_name_from_token(token);
-            BLOCKED_SET_OPTIONS
-                .iter()
-                .any(|blocked| name.eq_ignore_ascii_case(blocked))
-        });
-        return !has_blocked;
+        return !options_str.split_whitespace().any(is_blocked_option);
     }
     // `:filetype plugin off` and the rest of `:filetype` only switch the
     // built-in filetype plugins on or off; nothing in them runs code. What
@@ -625,11 +627,67 @@ fn simulate_command_line(rhs: &str, starts_in_command_line: bool) -> bool {
         || ex.is_some_and(|(buf, _)| line_runs_dangerous(&buf))
 }
 
-/// One committed command line, split on `|` into its commands. Splitting is an
-/// over-approximation (a `|` inside a pattern or string makes extra pieces),
+/// One committed command line, judged by the text check and by vim-core's
+/// parser; either one strips. The text check splits on every `|`, an
+/// over-approximation (a `|` inside a pattern or string makes extra pieces)
 /// which can only strip more, never less.
 fn line_runs_dangerous(line: &str) -> bool {
-    line.split('|').any(starts_dangerous_command)
+    line.split('|').any(starts_dangerous_command) || parses_to_unsafe_command(line)
+}
+
+/// Whether one of the commands vim-core runs for `line` is unsafe, split and
+/// parsed as `execute_ex_line` does. A piece that fails to parse runs nothing.
+fn parses_to_unsafe_command(line: &str) -> bool {
+    use vim_core::grammar::{parse_ex_command_with_modifiers, split_ex_pipeline};
+    let pieces = split_ex_pipeline(line);
+    let pieces = if pieces.len() <= 1 {
+        vec![line]
+    } else {
+        pieces
+    };
+    pieces.into_iter().any(|piece| {
+        parse_ex_command_with_modifiers(piece).is_ok_and(|(_, command)| is_unsafe_command(&command))
+    })
+}
+
+/// A command a right-hand side may not run: the shell, `:source`, one that
+/// changes mappings, abbreviations, handlers or the leader, or a `:set` of a
+/// blocked option.
+fn is_unsafe_command(command: &vim_core::grammar::types::ExCommand) -> bool {
+    use vim_core::grammar::types::{ExCommand, SetAssignment};
+    match command {
+        ExCommand::External { .. }
+        | ExCommand::Filter { .. }
+        | ExCommand::Source { .. }
+        | ExCommand::Map { .. }
+        | ExCommand::Unmap { .. }
+        | ExCommand::MapClear { .. }
+        | ExCommand::Abbreviate { .. }
+        | ExCommand::Unabbreviate { .. }
+        | ExCommand::AbClear { .. }
+        | ExCommand::SetHandler { .. }
+        | ExCommand::LetMapleader { .. } => true,
+        ExCommand::Set { assignments }
+        | ExCommand::SetLocal { assignments }
+        | ExCommand::SetGlobal { assignments } => {
+            assignments.iter().any(|assignment| match assignment {
+                SetAssignment::SetBool(name)
+                | SetAssignment::UnsetBool(name)
+                | SetAssignment::ToggleBool(name)
+                | SetAssignment::Query(name)
+                | SetAssignment::Assign(name, _)
+                | SetAssignment::Append(name, _)
+                | SetAssignment::Remove(name, _)
+                | SetAssignment::Prepend(name, _) => is_blocked_option(name),
+                _ => false,
+            })
+        }
+        ExCommand::Read { path, .. } => path.starts_with('!'),
+        ExCommand::WinDo { command, .. }
+        | ExCommand::BufDo { command, .. }
+        | ExCommand::TabDo { command, .. } => is_unsafe_command(command),
+        _ => false,
+    }
 }
 
 /// How a key acts on a `:` command line.
@@ -1303,6 +1361,89 @@ inoremap jk <Esc>
             "nnoremap x :\u{a0}!echo hi<CR>",
             "nnoremap x :\u{3000}!echo hi<CR>",
         ]);
+    }
+
+    /// vim-core's parser judges each committed line too, so a right-hand side
+    /// cannot define a mapping, an abbreviation, a handler or the leader, or
+    /// set a blocked option, however the text check reads it.
+    #[test]
+    fn strips_a_right_hand_side_that_changes_mappings_or_blocked_options() {
+        assert_all_stripped(&[
+            "nnoremap x :nnoremap y :!echo hi<lt>CR><CR>",
+            "nnoremap x :nmap y Z<CR>",
+            "nnoremap x :nunmap j<CR>",
+            "nnoremap x :mapclear<CR>",
+            "nnoremap x :iabbrev teh the<CR>",
+            "nnoremap x :unabbreviate teh<CR>",
+            "nnoremap x :abclear<CR>",
+            "nnoremap x :sethandler n:ide<CR>",
+            "nnoremap x :let mapleader = ','<CR>",
+            "nnoremap x :set langmap=q:<CR>",
+            "nnoremap x :setlocal shell=/bin/evil<CR>",
+            "nnoremap x :setglobal kp?<CR>",
+            "nnoremap x :noh<Bar>silent nnoremap y Z<CR>",
+            "nnoremap x <Cmd>nnoremap y Z<CR>",
+            "nnoremap x :windo nnoremap y Z<CR>",
+            "nnoremap x :bufdo set mp=evil<CR>",
+            "cnoremap <C-x> <C-u>nnoremap y Z<CR>",
+            "nnoremap x :nnoremap y Z",
+        ]);
+    }
+
+    #[test]
+    fn keeps_ordinary_command_line_mappings() {
+        assert_all_kept(&[
+            "nnoremap <Leader>w :set wrap!<CR>",
+            "nnoremap <Esc><Esc> :noh<CR>",
+            "nnoremap x :echo 'hi'<CR>",
+            "nnoremap x <Cmd>set hlsearch!<CR>",
+            "nnoremap x :set so=5 tw=80 nonumber ic?<CR>",
+            "nnoremap x :setlocal fo-=t<CR>",
+            "nnoremap x :windo set wrap<CR>",
+            "nnoremap x :r notes.txt<CR>",
+            "nnoremap x :g/TODO/d<CR>",
+            "nnoremap x :e res://main.gd<CR>",
+            "nnoremap x :undefined<CR>",
+        ]);
+    }
+
+    #[test]
+    fn a_mapping_that_defines_a_mapping_defines_nothing_in_the_engine() {
+        assert_defines_nothing_in_the_engine(&["nnoremap x :nnoremap y :!echo hi<lt>CR><CR>"]);
+    }
+
+    /// Each vimrc runs `:!echo hi` when its keys are pressed, and runs nothing
+    /// after the sandbox.
+    #[test]
+    fn the_known_routes_to_the_shell_run_nothing_after_the_sandbox() {
+        use vim_core::execution::{HostRequest, HostSession};
+        let shell_commands = |text: &str, keys: &str| {
+            let mut session = HostSession::new("one\ntwo\n");
+            let _ = session.source_config(text);
+            let mut commands = Vec::new();
+            for ch in keys.chars() {
+                let response = session.process_key_host(vim_core::keymap::KeyEvent::char(ch));
+                for request in response.host_requests {
+                    if let HostRequest::ExternalCommand { command, .. } = request {
+                        commands.push(command.to_string());
+                    }
+                }
+            }
+            commands
+        };
+        for (text, keys) in [
+            ("nnoremap x :!echo hi<CR>\n", "x"),
+            ("nnoremap x :\u{a0}!echo hi<CR>\n", "x"),
+            ("nnoremap x :\u{3000}!echo hi<CR>\n", "x"),
+            ("nnoremap x :nnoremap y :!echo hi<lt>CR><CR>\n", "xy"),
+            ("set langmap=q:\nnnoremap x 0q!echo hi<CR>\n", "x"),
+        ] {
+            assert_eq!(shell_commands(text, keys), ["echo hi"], "{text}");
+            assert!(
+                shell_commands(&sandbox_config_text(text), keys).is_empty(),
+                "{text}"
+            );
+        }
     }
 
     #[test]
