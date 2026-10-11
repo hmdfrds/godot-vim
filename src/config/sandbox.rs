@@ -754,16 +754,15 @@ fn starts_dangerous_command(text: &str) -> bool {
     }
 }
 
-/// Skips blanks and a range: line numbers, `%`, `*`, `$`, `.`, marks (`'a`,
-/// `'<`), patterns (`/pat/`, `?pat?`, `\/`) and the `,;+-` between them.
+/// Skips blanks (any `char::is_whitespace`, as vim-core reads them), colons
+/// and a range: line numbers, `%`, `*`, `$`, `.`, marks (`'a`, `'<`),
+/// patterns (`/pat/`, `?pat?`, `\/`) and the `,;+-` between them.
 fn skip_range(mut text: &str) -> &str {
     loop {
         text = text.trim_start_matches(|c: char| {
             c.is_ascii_digit()
-                || matches!(
-                    c,
-                    ' ' | '\t' | '%' | '*' | '$' | '.' | ',' | ';' | '+' | '-'
-                )
+                || c.is_whitespace()
+                || matches!(c, ':' | '%' | '*' | '$' | '.' | ',' | ';' | '+' | '-')
         });
         let mut chars = text.chars();
         text = match chars.next() {
@@ -791,7 +790,7 @@ fn strip_command_prefix(text: &str) -> Option<&str> {
     let (word, rest) = text.split_at(end);
     let rest = match rest.strip_prefix('!') {
         Some(after_bang) => after_bang,
-        None if rest.starts_with([' ', '\t']) => rest,
+        None if rest.starts_with(char::is_whitespace) => rest,
         None => return None,
     };
     COMMAND_PREFIXES
@@ -816,7 +815,7 @@ fn matches_ex_pattern(text: &str, min: &str, full: &str, tail: Tail) -> bool {
         }
         match tail {
             Tail::Any => true,
-            Tail::Bang => rest.trim_start_matches([' ', '\t']).starts_with('!'),
+            Tail::Bang => rest.trim_start().starts_with('!'),
         }
     })
 }
@@ -1033,8 +1032,7 @@ inoremap jk <Esc>
     }
 
     // A `!`-suffix map and a cmap type their RHS into the command line, so a
-    // shell command in it (no leading `:`, which in an open command line is a
-    // literal colon, not a fresh prompt) is checked and stripped.
+    // shell command in it is checked and stripped.
     #[test]
     fn strips_bang_suffix_map_command() {
         let input = "nnoremap! <Leader>x !ls<CR>\n";
@@ -1056,8 +1054,6 @@ inoremap jk <Esc>
         assert!(output.contains("[sandbox] stripped"));
     }
 
-    /// A normal-mode map opens the command line with `:`, so its RHS runs the
-    /// shell even though a cmap's leading `:` would be a literal colon.
     #[test]
     fn strips_case_insensitive_map_command() {
         let input = "NNOREMAP <Leader>x :!ls<CR>\n";
@@ -1079,12 +1075,15 @@ inoremap jk <Esc>
         assert!(output.contains("[sandbox] stripped"));
     }
 
-    /// In an already-open command line (a cmap) the RHS's leading `:` is a
-    /// literal colon, so `:!ls` is the inert text `:!ls`, not a shell command;
-    /// the engine does not run it, so the mapping is left in place.
+    /// Vim skips colons where a command starts, so `::!ls` is `:!ls`.
     #[test]
-    fn keeps_cmap_whose_leading_colon_is_literal() {
-        assert_all_kept(&["cnoremap <C-x> :!ls<CR>"]);
+    fn strips_shell_behind_extra_colons() {
+        assert_all_stripped(&[
+            "cnoremap <C-x> :!ls<CR>",
+            "nnoremap x ::!ls<CR>",
+            "nnoremap x <Cmd>:!ls<CR>",
+            "nnoremap x :noh<Bar>:so f<CR>",
+        ]);
     }
 
     #[test]
@@ -1265,6 +1264,44 @@ inoremap jk <Esc>
             "nnoremap x :r\t!ls<CR>",
             "nnoremap x :'a,'b!sort<CR>",
             "nnoremap x :/foo/!sort<CR>",
+        ]);
+    }
+
+    /// vim-core reads any `char::is_whitespace` character as a blank, not
+    /// only space and tab.
+    #[test]
+    fn strips_shell_and_source_behind_any_blank() {
+        assert_all_stripped(&[
+            "nnoremap x :\u{a0}!echo hi<CR>",
+            "nnoremap x :\u{3000}!echo hi<CR>",
+            "nnoremap x :\u{a0}so f<CR>",
+            "nnoremap x :r\u{a0}!id<CR>",
+            "nnoremap x :1,\u{a0}2!sort<CR>",
+            "nnoremap x <Cmd>\u{b}!ls<CR>",
+        ]);
+    }
+
+    /// Sources `line` into the engine as it is and after the sandbox: the
+    /// engine maps `x` from the line itself, and nothing from what the sandbox
+    /// leaves of it.
+    fn assert_defines_nothing_in_the_engine(lines: &[&str]) {
+        use vim_core::execution::VimEngine;
+        let x = vim_core::keymap::KeyEvent::char('x');
+        for line in lines {
+            let mut trusted = VimEngine::new();
+            let _ = trusted.source_config_text(line);
+            assert!(trusted.could_start_mapping(x), "not a mapping: {line}");
+            let mut engine = VimEngine::new();
+            let _ = engine.source_config_text(&sandbox_config_text(line));
+            assert!(!engine.could_start_mapping(x), "{line}");
+        }
+    }
+
+    #[test]
+    fn a_shell_line_behind_a_unicode_blank_defines_nothing_in_the_engine() {
+        assert_defines_nothing_in_the_engine(&[
+            "nnoremap x :\u{a0}!echo hi<CR>",
+            "nnoremap x :\u{3000}!echo hi<CR>",
         ]);
     }
 
