@@ -11,10 +11,12 @@ use godot::prelude::InstanceId;
 use vim_core::document::{Document, Providers};
 use vim_core::effects::Effect;
 use vim_core::execution::{
-    parse_keys_from_string, HostCapability, HostCapabilitySet, HostRequest, HostResult,
-    RequestDisposition, ViewportInfo, VimEngine, VimHost, VimSession,
+    parse_keys_from_string, ExternalEditKind, HostCapability, HostCapabilitySet, HostRequest,
+    HostResult, RequestDisposition, ViewportInfo, VimEngine, VimHost, VimSession,
 };
-use vim_core::primitives::{Mode, NodeId, Offset, Position, SelectionRange};
+use vim_core::primitives::{
+    AutoPairs, Mode, NodeId, Offset, Pair, Position, SelectionRange, UndoCursorStrategy,
+};
 
 use crate::bridge::clipboard::MockClipboard;
 use crate::bridge::codec::{self, LineIndex};
@@ -25,6 +27,10 @@ use crate::state::ShellState;
 use crate::testing::MockTextEdit;
 
 const EDITOR_ID: i64 = 1;
+
+/// Godot's own CodeEdit pairs (`code_edit.cpp`, constructor).
+pub(crate) const GODOT_PAIRS: &[(&str, &str)] =
+    &[("(", ")"), ("{", "}"), ("[", "]"), ("\"", "\""), ("'", "'")];
 
 /// `GodotHost` with a `MockTextEdit` where the `Gd<CodeEdit>` was.
 struct MockHost {
@@ -77,6 +83,13 @@ impl MockHost {
             self.editor.get_caret_line(),
             self.editor.get_caret_column(),
         );
+    }
+
+    /// `GodotHost::invalidate_cache`.
+    fn invalidate_cache(&mut self) {
+        self.text_cache = self.editor.get_text();
+        self.line_index = LineIndex::new(&self.text_cache);
+        self.generation += 1;
     }
 
     fn auto_brace_snapshot(&self) -> AutoBraceSnapshot {
@@ -253,6 +266,38 @@ impl Harness {
         }
     }
 
+    /// Godot's Auto Brace Complete on with these pairs: vim-core gets the
+    /// single-character ones (`VimController::sync_auto_pairs`) and the host
+    /// keeps the rest.
+    pub(crate) fn with_auto_brace(text: &str, pairs: &[(&str, &str)]) -> Self {
+        let mut harness = Self::new(text);
+        let engine_pairs: Vec<Pair> = pairs
+            .iter()
+            .filter_map(|(open, close)| {
+                let mut o = open.chars();
+                let mut c = close.chars();
+                match (o.next(), o.next(), c.next(), c.next()) {
+                    (Some(open), None, Some(close), None) => Some(Pair { open, close }),
+                    _ => None,
+                }
+            })
+            .collect();
+        harness
+            .session
+            .engine_mut()
+            .options_mut()
+            .set_auto_pairs(Some(AutoPairs {
+                pairs: engine_pairs.into(),
+            }));
+        harness.session.host_mut().brace_pairs = Some(
+            pairs
+                .iter()
+                .map(|(o, c)| ((*o).to_owned(), (*c).to_owned()))
+                .collect(),
+        );
+        harness
+    }
+
     /// Feed keys in Vim notation, one engine pass per key.
     pub(crate) fn feed(&mut self, keys: &str) {
         for key in parse_keys_from_string(keys) {
@@ -290,6 +335,78 @@ impl Harness {
         let editor = &mut self.session.host_mut().editor;
         editor.set_caret_line(line);
         editor.set_caret_column(col);
+    }
+
+    /// A completion accepted through the overlay (Enter or Tab with the popup
+    /// open): `controller::completion::confirm_and_reconcile_completion`, with
+    /// `confirm` doing what `CodeEdit::confirm_code_completion` does.
+    pub(crate) fn accept_completion(&mut self, confirm: impl FnOnce(&mut MockTextEdit)) {
+        let before_text = self.session.host().editor.get_text();
+        let single_caret = self.session.host().editor.get_caret_count() == 1;
+        let caret_before = self.live_caret_byte(&before_text);
+        confirm(&mut self.session.host_mut().editor);
+        self.session.host_mut().invalidate_cache();
+        let after_text = self.session.host().editor.get_text();
+        let after_byte = self.live_caret_byte(&after_text);
+        if single_caret {
+            crate::controller::reconcile::reconcile_completion(
+                self.session.engine_mut(),
+                &before_text,
+                &after_text,
+                caret_before,
+                after_byte,
+            );
+        } else {
+            crate::controller::reconcile::reconcile_external_text_change(
+                self.session.engine_mut(),
+                &before_text,
+                &after_text,
+                after_byte,
+                ExternalEditKind::Completion,
+            );
+        }
+        self.sync_undo_nodes_after_external_edit(&before_text);
+    }
+
+    fn live_caret_byte(&self, text: &str) -> usize {
+        let editor = &self.session.host().editor;
+        LineIndex::new(text).line_col_to_byte(
+            text,
+            editor.get_caret_line(),
+            editor.get_caret_column(),
+        )
+    }
+
+    /// `controller::sync_undo_nodes_after_external_edit`, including its
+    /// debug check that the shadow matches the host.
+    fn sync_undo_nodes_after_external_edit(&mut self, pre_edit_text: &str) {
+        let session = &mut self.session;
+        let fc_node = session.engine_mut().take_last_force_committed_node();
+        let ext_node = session.engine_mut().take_last_external_edit_node();
+        if let Some(fc_id) = fc_node {
+            if session.host().has_pending_undo() {
+                session.host_mut().apply_effects(&[Effect::EndUndoGroup {
+                    node_id: Some(fc_id),
+                }]);
+            }
+        }
+        if let Some(ext_id) = ext_node {
+            session
+                .host_mut()
+                .record_internal_undo_node(ext_id, pre_edit_text);
+        }
+        if fc_node.is_some() && session.engine().mode().is_insert() {
+            session.host_mut().apply_effects(&[Effect::BeginUndoGroup {
+                cursor_strategy: UndoCursorStrategy::FirstEdit,
+            }]);
+        }
+        if let Some(shadow) = session.engine().shadow_text() {
+            assert_eq!(
+                shadow,
+                session.host().text(),
+                "shadow document out of sync after undo node sync"
+            );
+        }
     }
 
     pub(crate) fn text(&self) -> String {
