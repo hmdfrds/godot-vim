@@ -405,10 +405,9 @@ fn scenario_visual_select_delete_undo() {
 }
 
 // ── Conditional caret clear (multi-cursor preservation) ────────────────
-// The dispatch loop conditionally calls `remove_secondary_carets()`:
-// - When 0 or 1 SetCursor effects: secondaries are cleared (single-cursor mode).
-// - When 2+ SetCursor effects: secondaries are preserved (multi-cursor mode).
-// Suppressed SetCursor effects (from SelectionPairing) must NOT inflate the count.
+// `cursor_count` is Godot's caret count before the pass. At 1, dispatch
+// clears secondaries and moves the primary; above 1, it leaves every caret
+// to the post-pass multi-cursor sync.
 
 #[test]
 fn single_cursor_normal_op_clears_secondaries() {
@@ -465,8 +464,7 @@ fn single_cursor_dd_clears_secondaries() {
 
 #[test]
 fn multi_cursor_typing_preserves_secondaries() {
-    // Simulate: 3 cursors in insert mode, each receiving a SetCursor after insert.
-    // When 3 SetCursor effects are present, secondaries must be preserved.
+    // Simulate: 3 carets in insert mode, each receiving a SetCursor after insert.
     let mut mock = MockTextEdit::new("aaa\nbbb\nccc");
     // Add 2 secondary carets (total 3).
     mock.add_caret(1, 0);
@@ -485,46 +483,23 @@ fn multi_cursor_typing_preserves_secondaries() {
         set_cursor(11);
         end_undo(1)
     ];
-    ctx.dispatch(&mut mock, fx);
+    ctx.dispatch_multi(&mut mock, fx, 3);
 
-    // All 3 carets must be preserved (3 SetCursors -> multi-cursor mode).
     assert_editor!(mock, carets: 3, text: "Xaaa\nXbbb\nXccc");
 }
 
 #[test]
 fn two_cursors_preserves_secondaries() {
-    // Edge case: exactly 2 SetCursor effects should also preserve secondaries.
+    // Edge case: the smallest multi-caret pass.
     let mut mock = MockTextEdit::new("hello\nworld");
     mock.add_caret(1, 0);
     assert_eq!(mock.caret_count(), 2);
     let mut ctx = DispatchCtx::new();
 
     let fx = effects![set_cursor(2); set_cursor(8)];
-    ctx.dispatch(&mut mock, fx);
+    ctx.dispatch_multi(&mut mock, fx, 2);
 
-    // 2 SetCursors: multi-cursor mode, secondaries preserved.
     assert_editor!(mock, carets: 2);
-}
-
-#[test]
-fn transition_multi_to_single_clears_secondaries() {
-    // Simulate: Escape from multi-cursor returns to single cursor.
-    // After Escape, engine emits only 1 SetCursor — secondaries should be cleared.
-    let mut mock = MockTextEdit::new("hello\nworld\nfoo");
-    mock.add_caret(1, 0);
-    mock.add_caret(2, 0);
-    assert_eq!(mock.caret_count(), 3);
-    let mut ctx = DispatchCtx::new();
-
-    // First dispatch: multi-cursor mode (3 SetCursors), secondaries preserved.
-    let fx = effects![set_cursor(0); set_cursor(6); set_cursor(12)];
-    ctx.dispatch(&mut mock, fx);
-    assert_editor!(mock, carets: 3);
-
-    // Second dispatch: Escape — engine returns to single cursor (1 SetCursor).
-    let fx = effects![set_cursor(0)];
-    ctx.dispatch(&mut mock, fx);
-    assert_editor!(mock, carets: 1, cursor: (0, 0));
 }
 
 #[test]
@@ -543,10 +518,8 @@ fn zero_set_cursor_effects_clears_secondaries() {
 
 #[test]
 fn selection_paired_cursor_not_counted_for_multi_cursor() {
-    // SetSelection followed by its paired SetCursor — the paired SetCursor is
-    // suppressed by SelectionPairing and must NOT count toward set_cursor_count.
-    // A subsequent real SetCursor (after ClearSelection) counts as 1, so
-    // secondaries are still cleared.
+    // The SetCursor paired with a SetSelection is suppressed by SelectionPairing;
+    // only the one after ClearSelection moves the caret.
     use vim_core::primitives::SelectionShape;
 
     let mut mock = MockTextEdit::new("hello world");
@@ -562,14 +535,13 @@ fn selection_paired_cursor_not_counted_for_multi_cursor() {
     ];
     ctx.dispatch(&mut mock, fx);
 
-    // Only 1 real SetCursor counted -> single-cursor mode -> secondaries cleared.
+    // Single-caret pass: secondaries cleared, caret at the unsuppressed SetCursor.
     assert_editor!(mock, carets: 1, cursor: (0, 8));
 }
 
 #[test]
 fn multiple_selections_do_not_inflate_cursor_count() {
-    // Two SetSelection+SetCursor pairs (both suppressed), then one real SetCursor.
-    // Total real set_cursor_count = 1 -> secondaries cleared.
+    // Two suppressed SetSelection+SetCursor pairs, then one real SetCursor.
     use vim_core::primitives::SelectionShape;
 
     let mut mock = MockTextEdit::new("hello world foo");
@@ -590,82 +562,95 @@ fn multiple_selections_do_not_inflate_cursor_count() {
     assert_editor!(mock, carets: 1, cursor: (0, 3));
 }
 
-// ── Multi-cursor effect routing (SetCursor index routing) ─────────────
-// These tests validate that SetCursor effects are routed by index:
-// effect 0 → primary caret, effect 1 → secondary caret 1, etc.
+// ── Several SetCursor in one single-caret pass ────────────────────────
 
 #[test]
-fn multi_cursor_three_set_cursors_at_correct_offsets() {
-    // Dispatch 3 SetCursor effects at offsets 5, 15, 25 on a single line.
-    let mut mock = MockTextEdit::new("0123456789abcdefghijklmnopqrstuvwxyz");
+fn single_caret_pass_takes_the_last_set_cursor() {
+    // `.` emits a SetCursor before its text and another after it.
+    let mut mock = MockTextEdit::new("\tfoo\n\tbar");
     let mut ctx = DispatchCtx::new();
 
-    let fx = effects![set_cursor(5); set_cursor(15); set_cursor(25)];
+    let fx = effects![
+        begin_undo;
+        set_cursor(5);
+        insert(5, "hello");
+        set_cursor(9);
+        end_undo(1)
+    ];
     ctx.dispatch(&mut mock, fx);
 
-    // 3 SetCursor effects -> 3 carets preserved.
-    assert_editor!(mock, carets: 3);
-    // Primary caret (index 0) at offset 5 -> col 5
-    assert_eq!(mock.get_caret_line_for(0), 0);
-    assert_eq!(mock.get_caret_column_for(0), 5);
-    // Secondary caret 1 (index 1) at offset 15 -> col 15
-    assert_eq!(mock.get_caret_line_for(1), 0);
-    assert_eq!(mock.get_caret_column_for(1), 15);
-    // Secondary caret 2 (index 2) at offset 25 -> col 25
-    assert_eq!(mock.get_caret_line_for(2), 0);
-    assert_eq!(mock.get_caret_column_for(2), 25);
+    assert_editor!(mock, text: "\tfoo\nhello\tbar", carets: 1, cursor: (1, 4));
+}
+
+/// Feeds `keys` to a real engine and applies every effect through dispatch,
+/// as GodotHost does for one caret.
+fn type_into(mock: &mut MockTextEdit, keys: &str) {
+    use crate::bridge::codec::LineIndex;
+    use crate::bridge::document::GodotDocument;
+    use vim_core::execution::{InputContext, VimEngine};
+    use vim_core::keymap::KeyEvent;
+
+    let mut engine = VimEngine::new();
+    let mut ctx = DispatchCtx::new();
+    for ch in keys.chars() {
+        let key = match ch {
+            '\x1b' => KeyEvent::escape(),
+            _ => KeyEvent::char(ch),
+        };
+        let text = mock.get_text();
+        let cursor = LineIndex::new(&text).line_col_to_byte(
+            &text,
+            mock.get_caret_line(),
+            mock.get_caret_column(),
+        );
+        let doc = GodotDocument::new(&text);
+        let input = InputContext::new(&doc, cursor).validate_clamped();
+        let effects = engine.process(key, input).take_effects();
+        ctx.dispatch(mock, effects);
+    }
 }
 
 #[test]
-fn multi_cursor_three_set_cursors_multiline() {
-    // Multiline variant: offsets map to different lines.
-    // "hello\nworld\nfoobar" -> line 0: hello (0-4), \n at 5
-    //                           line 1: world (6-10), \n at 11
-    //                           line 2: foobar (12-17)
+fn dot_after_insert_leaves_the_caret_on_the_last_repeated_char() {
+    // Suite row V-dot-insert; Vim 9.1 ends on the `o` of the second hello.
+    let mut mock = MockTextEdit::new("\tfoo\n\tbar");
+    mock.set_caret_column(1);
+    type_into(&mut mock, "ihello\x1bj0.");
+    assert_editor!(mock, text: "\thellofoo\nhello\tbar", carets: 1, cursor: (1, 4));
+}
+
+#[test]
+fn dot_after_change_word_leaves_the_caret_on_the_last_repeated_char() {
+    // Suite row V-dot-cw.
+    let mut mock = MockTextEdit::new("\tone two three");
+    mock.set_caret_column(1);
+    type_into(&mut mock, "cwfoo\x1bw.");
+    assert_editor!(mock, text: "\tfoo foo three", carets: 1, cursor: (0, 7));
+}
+
+#[test]
+fn dot_after_replace_leaves_the_caret_on_the_last_replaced_char() {
+    // Suite row V-replace.
+    let mut mock = MockTextEdit::new("\t123456");
+    mock.set_caret_column(1);
+    type_into(&mut mock, "Rabc\x1b.");
+    assert_editor!(mock, text: "\tababc6", carets: 1, cursor: (0, 5));
+}
+
+#[test]
+fn single_caret_pass_never_adds_carets() {
+    // Engine secondaries reach Godot through the post-pass sync only.
+    // "hello\nworld\nfoobar": offset 2 -> (0, 2), 8 -> (1, 2), 14 -> (2, 2)
     let mut mock = MockTextEdit::new("hello\nworld\nfoobar");
     let mut ctx = DispatchCtx::new();
 
-    // offset 2 -> (0, 2), offset 8 -> (1, 2), offset 14 -> (2, 2)
     let fx = effects![set_cursor(2); set_cursor(8); set_cursor(14)];
     ctx.dispatch(&mut mock, fx);
 
-    assert_editor!(mock, carets: 3);
-    assert_eq!(mock.get_caret_line_for(0), 0);
-    assert_eq!(mock.get_caret_column_for(0), 2);
-    assert_eq!(mock.get_caret_line_for(1), 1);
-    assert_eq!(mock.get_caret_column_for(1), 2);
-    assert_eq!(mock.get_caret_line_for(2), 2);
-    assert_eq!(mock.get_caret_column_for(2), 2);
+    assert_editor!(mock, carets: 1, cursor: (2, 2));
 }
 
 // ── Excess caret removal ──────────────────────────────────────────────────
-// When fewer SetCursor effects are dispatched than Godot carets exist,
-// excess carets must be removed.
-
-#[test]
-fn excess_carets_removed_after_two_set_cursors_on_five_caret_editor() {
-    // Editor starts with 5 carets. Dispatch 2 SetCursor effects.
-    // Excess 3 carets (indices 2, 3, 4) must be removed.
-    let mut mock = MockTextEdit::new("hello\nworld\nfoo\nbar\nbaz");
-    // Add 4 secondary carets (total 5).
-    mock.add_caret(1, 0);
-    mock.add_caret(2, 0);
-    mock.add_caret(3, 0);
-    mock.add_caret(4, 0);
-    assert_eq!(mock.caret_count(), 5);
-    let mut ctx = DispatchCtx::new();
-
-    // 2 SetCursor effects: primary at offset 2 -> (0,2), secondary at offset 8 -> (1,2)
-    let fx = effects![set_cursor(2); set_cursor(8)];
-    ctx.dispatch(&mut mock, fx);
-
-    // Only 2 carets should remain.
-    assert_editor!(mock, carets: 2);
-    assert_eq!(mock.get_caret_line_for(0), 0);
-    assert_eq!(mock.get_caret_column_for(0), 2);
-    assert_eq!(mock.get_caret_line_for(1), 1);
-    assert_eq!(mock.get_caret_column_for(1), 2);
-}
 
 #[test]
 fn excess_carets_removed_three_to_one() {
@@ -708,30 +693,19 @@ fn save_restore_selections_round_trip_single_caret() {
 
 #[test]
 fn save_restore_selections_round_trip_multi_caret() {
-    // 3 carets: save all positions, move them, restore.
+    // 3 carets: save all positions, collapse to one caret, restore.
     let mut mock = MockTextEdit::new("aaa\nbbb\nccc");
+    mock.set_caret_column(1);
+    mock.add_caret(1, 1);
+    mock.add_caret(2, 1);
     let mut ctx = DispatchCtx::new();
 
-    // Place 3 carets and save in the same batch (engine always pairs
-    // SetCursor effects with SaveSelections in one effect list).
-    let fx = effects![set_cursor(1); set_cursor(5); set_cursor(9); save_selections];
-    ctx.dispatch(&mut mock, fx);
-    assert_editor!(mock, carets: 3);
-    assert_eq!(mock.get_caret_line_for(0), 0);
-    assert_eq!(mock.get_caret_column_for(0), 1);
-    assert_eq!(mock.get_caret_line_for(1), 1);
-    assert_eq!(mock.get_caret_column_for(1), 1);
-    assert_eq!(mock.get_caret_line_for(2), 2);
-    assert_eq!(mock.get_caret_column_for(2), 1);
+    ctx.dispatch_multi(&mut mock, effects![save_selections], 3);
 
-    // Move carets to different positions.
-    let fx = effects![set_cursor(0); set_cursor(4); set_cursor(8)];
-    ctx.dispatch(&mut mock, fx);
-    assert_eq!(mock.get_caret_column_for(0), 0);
-    assert_eq!(mock.get_caret_column_for(1), 0);
-    assert_eq!(mock.get_caret_column_for(2), 0);
+    mock.remove_secondary_carets();
+    mock.set_caret_column(0);
 
-    // Restore: should go back to original positions.
+    // A single-caret pass keeps the restored carets past the tail cleanup.
     let fx = effects![restore_selections];
     ctx.dispatch(&mut mock, fx);
     assert_editor!(mock, carets: 3);
@@ -748,21 +722,19 @@ fn save_restore_selections_removes_excess_carets() {
     // Start with 2 carets, save. Then add more carets.
     // Restore should trim back to the saved 2.
     let mut mock = MockTextEdit::new("aaa\nbbb\nccc\nddd\neee");
+    mock.set_caret_column(1);
+    mock.add_caret(1, 1);
     let mut ctx = DispatchCtx::new();
 
-    // Place 2 carets and save in same batch.
-    let fx = effects![set_cursor(1); set_cursor(5); save_selections];
-    ctx.dispatch(&mut mock, fx);
-    assert_editor!(mock, carets: 2);
+    ctx.dispatch_multi(&mut mock, effects![save_selections], 2);
 
-    // Add more carets (simulate 4 carets now).
-    let fx = effects![set_cursor(0); set_cursor(4); set_cursor(8); set_cursor(12)];
-    ctx.dispatch(&mut mock, fx);
+    mock.add_caret(2, 0);
+    mock.add_caret(3, 0);
     assert_editor!(mock, carets: 4);
 
     // Restore: should go back to 2 carets at the saved positions.
     let fx = effects![restore_selections];
-    ctx.dispatch(&mut mock, fx);
+    ctx.dispatch_multi(&mut mock, fx, 4);
     assert_editor!(mock, carets: 2);
     assert_eq!(mock.get_caret_line_for(0), 0);
     assert_eq!(mock.get_caret_column_for(0), 1);
@@ -848,25 +820,19 @@ fn primary_caret_enforces_scrolloff() {
 }
 
 // ── Multi-cursor real-use-case: `dw` replicated to 3 cursors ────────────
-// Simulates the engine replicating `dw` across 3 cursors. The engine emits
-// 3 Delete effects (pass 1) that mutate text, then 3 SetCursor effects
-// (pass 2) against the final post-mutation text.
+// The engine replicates an edit across every caret: several mutations in
+// pass 1, one SetCursor per caret in pass 2. Godot already holds the carets,
+// and the post-pass sync places them, so only the text is checked here.
 
 #[test]
 fn multi_cursor_dw_deletes_word_on_three_lines() {
-    // Document: "foo bar\nfoo bar\nfoo bar"
-    // 3 cursors at col 0 of each line. `dw` deletes "foo " from each.
-    //
-    // Pass 1 (text mutations applied in sequence against evolving text):
+    // 3 carets at col 0 of each line. `dw` deletes "foo " from each:
     //   delete(0, 4):  "foo bar\nfoo bar\nfoo bar" -> "bar\nfoo bar\nfoo bar"
     //   delete(4, 8):  "bar\nfoo bar\nfoo bar"     -> "bar\nbar\nfoo bar"
     //   delete(8, 12): "bar\nbar\nfoo bar"         -> "bar\nbar\nbar"
-    //
-    // Pass 2 (cursor positioning against final text "bar\nbar\nbar"):
-    //   SetCursor(0):  line 0, col 0
-    //   SetCursor(4):  line 1, col 0
-    //   SetCursor(8):  line 2, col 0
     let mut mock = MockTextEdit::new("foo bar\nfoo bar\nfoo bar");
+    mock.add_caret(1, 0);
+    mock.add_caret(2, 0);
     let mut ctx = DispatchCtx::new();
 
     let fx = effects![
@@ -879,29 +845,19 @@ fn multi_cursor_dw_deletes_word_on_three_lines() {
         set_cursor(8);
         end_undo(1)
     ];
-    ctx.dispatch(&mut mock, fx);
+    ctx.dispatch_multi(&mut mock, fx, 3);
 
     assert_editor!(mock, text: "bar\nbar\nbar", carets: 3);
-    assert_editor!(mock, cursor: (0, 0));
-    assert_eq!(mock.get_caret_line_for(1), 1);
-    assert_eq!(mock.get_caret_column_for(1), 0);
-    assert_eq!(mock.get_caret_line_for(2), 2);
-    assert_eq!(mock.get_caret_column_for(2), 0);
 }
 
 #[test]
 fn multi_cursor_dw_deletes_at_mid_word_positions() {
-    // Document: "hello world\nhello world"
-    // 2 cursors at col 6 ("w" of "world"). `dw` deletes "world" from each.
-    //
-    // Pass 1:
+    // 2 carets at col 6 ("w" of "world"). `dw` deletes "world" from each:
     //   delete(6, 11):  "hello world\nhello world" -> "hello \nhello world"
     //   delete(13, 18): "hello \nhello world"      -> "hello \nhello "
-    //
-    // Pass 2 against "hello \nhello ":
-    //   SetCursor(5):  line 0, col 5
-    //   SetCursor(12): line 1, col 5
     let mut mock = MockTextEdit::new("hello world\nhello world");
+    mock.set_caret_column(6);
+    mock.add_caret(1, 6);
     let mut ctx = DispatchCtx::new();
 
     let fx = effects![
@@ -912,71 +868,23 @@ fn multi_cursor_dw_deletes_at_mid_word_positions() {
         set_cursor(12);
         end_undo(1)
     ];
-    ctx.dispatch(&mut mock, fx);
+    ctx.dispatch_multi(&mut mock, fx, 2);
 
     assert_editor!(mock, text: "hello \nhello ", carets: 2);
-    assert_editor!(mock, cursor: (0, 5));
-    assert_eq!(mock.get_caret_line_for(1), 1);
-    assert_eq!(mock.get_caret_column_for(1), 5);
 }
 
-// ── Multi-cursor real-use-case: insert mode typing ─���────────────────────
-// Simulates multi-cursor insert mode: the engine replicates character
-// insertion across all cursors, then positions each caret past the insert.
-
-#[test]
-fn multi_cursor_insert_char_at_three_cursors() {
-    // Document: "aaa\nbbb\nccc"
-    // 3 cursors at col 0 of each line. User types "X".
-    //
-    // Pass 1 (inserts applied sequentially):
-    //   insert(0, "X"):  "aaa\nbbb\nccc" -> "Xaaa\nbbb\nccc"
-    //   insert(5, "X"):  "Xaaa\nbbb\nccc" -> "Xaaa\nXbbb\nccc"
-    //   insert(10, "X"): "Xaaa\nXbbb\nccc" -> "Xaaa\nXbbb\nXccc"
-    //
-    // Pass 2 against "Xaaa\nXbbb\nXccc":
-    //   SetCursor(1):  line 0, col 1
-    //   SetCursor(6):  line 1, col 1
-    //   SetCursor(11): line 2, col 1
-    let mut mock = MockTextEdit::new("aaa\nbbb\nccc");
-    let mut ctx = DispatchCtx::new();
-
-    let fx = effects![
-        begin_undo;
-        insert(0, "X");
-        insert(5, "X");
-        insert(10, "X");
-        set_cursor(1);
-        set_cursor(6);
-        set_cursor(11);
-        end_undo(1)
-    ];
-    ctx.dispatch(&mut mock, fx);
-
-    assert_editor!(mock, text: "Xaaa\nXbbb\nXccc", carets: 3);
-    assert_editor!(mock, cursor: (0, 1));
-    assert_eq!(mock.get_caret_line_for(1), 1);
-    assert_eq!(mock.get_caret_column_for(1), 1);
-    assert_eq!(mock.get_caret_line_for(2), 2);
-    assert_eq!(mock.get_caret_column_for(2), 1);
-}
+// ── Multi-cursor real-use-case: insert mode typing ──────────────────────
 
 #[test]
 fn multi_cursor_insert_multi_char_string() {
-    // 3 cursors typing "->>" (multi-char) at end of each line.
-    //   Document: "fn\nfn\nfn"
-    //   Cursors at col 2 (end) of each line.
-    //
-    // Pass 1:
+    // 3 carets typing "->>" at the end of each line:
     //   insert(2, "->>"):  "fn\nfn\nfn" -> "fn->>\nfn\nfn"
     //   insert(8, "->>"):  "fn->>\nfn\nfn" -> "fn->>\nfn->>\nfn"
     //   insert(14, "->>"): "fn->>\nfn->>\nfn" -> "fn->>\nfn->>\nfn->>"
-    //
-    // Pass 2 against "fn->>\nfn->>\nfn->>":
-    //   SetCursor(5):  line 0, col 5
-    //   SetCursor(11): line 1, col 5
-    //   SetCursor(17): line 2, col 5
     let mut mock = MockTextEdit::new("fn\nfn\nfn");
+    mock.set_caret_column(2);
+    mock.add_caret(1, 2);
+    mock.add_caret(2, 2);
     let mut ctx = DispatchCtx::new();
 
     let fx = effects![
@@ -989,75 +897,9 @@ fn multi_cursor_insert_multi_char_string() {
         set_cursor(17);
         end_undo(1)
     ];
-    ctx.dispatch(&mut mock, fx);
+    ctx.dispatch_multi(&mut mock, fx, 3);
 
     assert_editor!(mock, text: "fn->>\nfn->>\nfn->>", carets: 3);
-    assert_editor!(mock, cursor: (0, 5));
-    assert_eq!(mock.get_caret_line_for(1), 1);
-    assert_eq!(mock.get_caret_column_for(1), 5);
-    assert_eq!(mock.get_caret_line_for(2), 2);
-    assert_eq!(mock.get_caret_column_for(2), 5);
-}
-
-// ── Descending-order caret removal (index shift safety) ─────────────────
-// These tests specifically verify that when we remove excess carets, we do
-// so from highest index downward. If we removed from lowest first, each
-// removal would shift subsequent indices down, causing incorrect removals.
-
-#[test]
-fn descending_removal_from_six_to_two_preserves_correct_carets() {
-    // 6 carets. Engine sends 2 SetCursor effects.
-    // Removal must happen: idx 5, 4, 3, 2 (descending).
-    // If done ascending (2, 3, 4, 5), index 3 after removing index 2 would
-    // actually be the original index 4, causing corruption.
-    let mut mock = MockTextEdit::new("aa\nbb\ncc\ndd\nee\nff");
-    mock.add_caret(1, 0);
-    mock.add_caret(2, 0);
-    mock.add_caret(3, 0);
-    mock.add_caret(4, 0);
-    mock.add_caret(5, 0);
-    assert_eq!(mock.caret_count(), 6);
-    let mut ctx = DispatchCtx::new();
-
-    // 2 SetCursor effects: position at (0, 1) and (1, 1)
-    // "aa\nbb\ncc\ndd\nee\nff" offsets: a=0, a=1, \n=2, b=3, b=4, \n=5, ...
-    let fx = effects![set_cursor(1); set_cursor(4)];
-    ctx.dispatch(&mut mock, fx);
-
-    assert_editor!(mock, carets: 2);
-    assert_eq!(mock.get_caret_line_for(0), 0);
-    assert_eq!(mock.get_caret_column_for(0), 1);
-    assert_eq!(mock.get_caret_line_for(1), 1);
-    assert_eq!(mock.get_caret_column_for(1), 1);
-}
-
-#[test]
-fn descending_removal_after_multi_cursor_insert_then_escape() {
-    // Simulate: multi-cursor insert (3 cursors), then Escape (single cursor).
-    // First dispatch: 3 inserts + 3 SetCursors -> 3 carets.
-    // Second dispatch: 1 SetCursor -> excess 2 carets removed (descending).
-    let mut mock = MockTextEdit::new("aaa\nbbb\nccc");
-    let mut ctx = DispatchCtx::new();
-
-    // Multi-cursor insert.
-    let fx = effects![
-        begin_undo;
-        insert(0, "X");
-        insert(5, "X");
-        insert(10, "X");
-        set_cursor(1);
-        set_cursor(6);
-        set_cursor(11);
-        end_undo(1)
-    ];
-    ctx.dispatch(&mut mock, fx);
-    assert_editor!(mock, text: "Xaaa\nXbbb\nXccc", carets: 3);
-
-    // Escape: engine drops to single cursor. Single SetCursor -> secondaries removed.
-    let fx = effects![set_cursor(1)];
-    ctx.dispatch(&mut mock, fx);
-
-    assert_editor!(mock, carets: 1, cursor: (0, 1));
 }
 
 // ── Architecture B: multi-cursor dispatch guards ────────────────────────────
