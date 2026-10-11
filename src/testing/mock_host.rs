@@ -32,6 +32,16 @@ const EDITOR_ID: i64 = 1;
 pub(crate) const GODOT_PAIRS: &[(&str, &str)] =
     &[("(", ")"), ("{", "}"), ("[", "]"), ("\"", "\""), ("'", "'")];
 
+/// The Shader Editor adds a comment pair (`shader_text_editor.cpp`).
+pub(crate) const SHADER_PAIRS: &[(&str, &str)] = &[
+    ("(", ")"),
+    ("{", "}"),
+    ("[", "]"),
+    ("\"", "\""),
+    ("'", "'"),
+    ("/*", "*/"),
+];
+
 /// `GodotHost` with a `MockTextEdit` where the `Gd<CodeEdit>` was.
 struct MockHost {
     editor: MockTextEdit,
@@ -457,4 +467,31 @@ impl Harness {
     pub(crate) fn orphaned_undo_groups(&self) -> usize {
         self.orphaned_undo_groups
     }
+}
+
+/// One `dispatch` of `effects` to `editor` in Insert mode with this
+/// auto-brace snapshot, without an engine.
+pub(crate) fn dispatch_auto_brace(
+    editor: &mut MockTextEdit,
+    snapshot: AutoBraceSnapshot,
+    effects: Vec<Effect>,
+) {
+    let text = editor.get_text();
+    crate::effects::dispatch(
+        effects,
+        editor,
+        crate::effects::DispatchContext {
+            state: &mut ShellState::default(),
+            editor_id: MockHost::editor_id(),
+            auto_brace: AutoBraceMode::Eligible,
+            auto_brace_snapshot: snapshot,
+            line_index_hint: None,
+            scrolloff: 0,
+            highlight_yank_duration_ms: 0,
+            syntax_query: Box::new(|_, _| SyntaxRegion::code()),
+            clipboard: &mut MockClipboard::new(),
+            cursor_count: 1,
+        },
+        &text,
+    );
 }

@@ -2,10 +2,12 @@
 //! through the real engine and the real dispatch (`MockHost`), so each test
 //! fails if either side brings its bug back.
 
-use super::mock_host::{Harness, GODOT_PAIRS};
+use super::mock_host::{dispatch_auto_brace, Harness, GODOT_PAIRS, SHADER_PAIRS};
+use crate::bridge::codec::LineIndex;
 use crate::bridge::port::TextEditorPort;
 use crate::testing::MockTextEdit;
-use vim_core::primitives::{Mode, VisualType};
+use vim_core::effects::Effect;
+use vim_core::primitives::{Mode, Offset, VisualType};
 
 // ── #40: a Visual-block change is one undo step ─────────────────────────────
 // vim-core closed the undo group after the block delete (fixed in v0.7.0).
@@ -235,4 +237,91 @@ fn undo_takes_a_reported_completion_with_its_insert_session() {
         assert_eq!(h.line(1), "\tprint(x)", "{route:?}");
         assert_eq!(h.orphaned_undo_groups(), 0, "{route:?}");
     }
+}
+
+// ── #20: Enter between braces doubled the closer ────────────────────────────
+// vim-core and the auto-brace port both paired `{`; 7ef1d29 split the pairs.
+
+const SHADER_BUFFER: &str = "shader_type canvas_item;\n";
+
+#[test]
+fn issue_20_enter_between_braces_keeps_one_closer() {
+    for (editor, pairs) in [("script", GODOT_PAIRS), ("shader", SHADER_PAIRS)] {
+        let mut h = Harness::with_auto_brace(SHADER_BUFFER, pairs);
+        h.place_caret(1, 0);
+        h.feed("ivoid f() {");
+        assert_eq!(h.line(1), "void f() {}", "{editor}");
+
+        h.feed("<CR>");
+        let text = h.text();
+        assert_eq!(h.line(1), "void f() {", "{editor}");
+        assert_eq!(text.matches('}').count(), 1, "{editor}: {text:?}");
+        let (line, col) = h.caret();
+        let caret = LineIndex::new(&text).line_col_to_byte(&text, line, col);
+        assert!(
+            text[caret..].contains('}'),
+            "{editor}: no closer after the caret: {text:?}"
+        );
+    }
+}
+
+#[test]
+fn issue_20_replayed_enter_between_braces_keeps_one_closer() {
+    for (editor, pairs) in [("script", GODOT_PAIRS), ("shader", SHADER_PAIRS)] {
+        let mut h = Harness::with_auto_brace(SHADER_BUFFER, pairs);
+        h.place_caret(1, 0);
+        h.feed("qqovoid f() {<CR>x<Esc>q");
+        let recorded = [h.line(2), h.line(3)];
+        assert_eq!(h.text().matches('}').count(), 1, "{editor}: {:?}", h.text());
+
+        h.feed("G@q");
+        assert_eq!([h.line(4), h.line(5)], recorded, "{editor}: {:?}", h.text());
+        assert_eq!(h.text().matches('}').count(), 2, "{editor}: {:?}", h.text());
+    }
+}
+
+#[test]
+fn issue_20_the_port_keeps_only_multi_character_pairs_beside_engine_pairs() {
+    let mut snapshot = crate::bridge::AutoBraceSnapshot {
+        enabled: true,
+        pairs: std::rc::Rc::new(
+            SHADER_PAIRS
+                .iter()
+                .map(|(o, c)| ((*o).to_owned(), (*c).to_owned()))
+                .collect(),
+        ),
+        string_delimiters: Vec::new(),
+    };
+    snapshot.filter_engine_owned_pairs();
+    assert_eq!(*snapshot.pairs, vec![("/*".to_owned(), "*/".to_owned())]);
+}
+
+#[test]
+fn issue_20_the_port_never_pairs_a_typed_newline() {
+    // Unfiltered pairs: the guard must hold even if `{` reaches the port.
+    let snapshot = crate::bridge::AutoBraceSnapshot {
+        enabled: true,
+        pairs: std::rc::Rc::new(
+            GODOT_PAIRS
+                .iter()
+                .map(|(o, c)| ((*o).to_owned(), (*c).to_owned()))
+                .collect(),
+        ),
+        string_delimiters: vec!["\"".into(), "'".into()],
+    };
+    let mut mock = MockTextEdit::new("void f() {}");
+    dispatch_auto_brace(
+        &mut mock,
+        snapshot,
+        vec![
+            Effect::Insert {
+                offset: Offset::new(10),
+                text: "\n".into(),
+            },
+            Effect::SetCursor {
+                offset: Offset::new(11),
+            },
+        ],
+    );
+    assert_eq!(mock.get_text(), "void f() {\n}");
 }
