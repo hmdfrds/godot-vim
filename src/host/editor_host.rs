@@ -367,10 +367,9 @@ pub(super) mod mock {
         fn save_script(&mut self, explicit_path: Option<&str>) -> Result<String, HostError> {
             if let Some(ref result) = self.save_result {
                 let r = result.clone();
-                if r.is_ok() {
+                if let Ok(saved_path) = &r {
                     // Mirror real behavior: only tag saved when saving to the
                     // script's own path (not when `:w other.gd`).
-                    let saved_path = r.as_ref().unwrap();
                     let is_same_path = self.script_path.as_deref() == Some(saved_path.as_str());
                     if is_same_path || explicit_path.is_none() {
                         self.buffer_state = MockBufferState::Saved;
