@@ -57,6 +57,12 @@ Enable it in **Project Settings > Plugins** and restart the editor, the same as
 any other install. The `.debug` and `.release` entries in the `.gdextension`
 refer to the Godot build, not the Rust profile, so one artifact serves both.
 
+To check a build without opening your own project, run
+`./scripts/godot-smoke.sh --godot <path-to-godot>`. It installs the library in a
+throwaway project, starts a headless editor, opens a script, and fails if the
+plugin does not attach or anything prints an error or warning. CI runs it on
+Godot 4.5, the oldest version the plugin supports.
+
 **What to expect.** Roughly five minutes from a cold cache, about 700 MB in
 `target/` and 210 MB in `~/.cargo`. Peak memory during the link approaches 3 GB,
 because the release profile uses fat LTO with a single codegen unit. One warning,

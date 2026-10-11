@@ -280,6 +280,7 @@ Settings live under **Editor Settings > Plugins > GodotVim**.
 | The cursor does not render | The overlay uses a GLSL shader. Set **Cursor > Enabled** to `false` to fall back to Godot's native caret. |
 | macOS: held keys do not repeat | macOS's Press and Hold accent picker interferes. Run `defaults write org.godotengine.godot ApplePressAndHoldEnabled -bool false` in Terminal and restart Godot. GodotVim falls back to the physical key when macOS sends no character, but turning Press and Hold off is more reliable. |
 | Vim is active in the shader editor | Intentional. GodotVim attaches to every `CodeEdit` in the editor. `:w`, `:wq`, `:x`, `ZZ`, `:wqa` and `:save` stop there with `E382` instead of saving, because they save the script editor's current script; save a shader with the Shader Editor's own Save. |
+| A headless `godot --import` of a fresh checkout crashes on exit (signal 11, exit code 134) | A Godot bug that hits any GDExtension that registers classes ([godotengine/godot#111048](https://github.com/godotengine/godot/issues/111048)). When a project has no `.godot/` folder yet, the first scan loads the extension, and Godot crashes if it quits right after. The import has finished by then. Run it a second time: `.godot/extension_list.cfg` now lists the extension and Godot exits cleanly. |
 
 **Filing a bug.** Set **Log Level** to `Debug`, reproduce the problem, and paste
 the Output panel into the issue. Include your Godot version, your OS and your

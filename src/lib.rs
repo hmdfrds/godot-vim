@@ -101,3 +101,35 @@ unsafe impl ExtensionLibrary for GodotVimExt {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    /// gdext refuses to start on a Godot older than the API it was compiled
+    /// against (`godot-ffi/src/interface_init.rs`, whole version triple), so
+    /// that API must be exactly the oldest Godot the manifest admits.
+    #[test]
+    fn godot_api_matches_compatibility_minimum() {
+        let manifest = include_str!("../addons/godot_vim/godot_vim.gdextension");
+        let minimum = manifest
+            .lines()
+            .find_map(|line| {
+                let (key, value) = line.split_once('=')?;
+                (key.trim() == "compatibility_minimum").then(|| value.trim().trim_matches('"'))
+            })
+            .expect("compatibility_minimum missing from godot_vim.gdextension");
+        // Godot reads up to three dot-separated parts; a missing part is 0.
+        let mut parts = minimum.split('.').map(|p| {
+            p.parse::<u8>()
+                .expect("compatibility_minimum is not a version")
+        });
+        let mut next = || parts.next().unwrap_or(0);
+        let minimum = (next(), next(), next());
+
+        assert_eq!(
+            godot::init::GdextBuild::godot_static_version_triple(),
+            minimum,
+            "godot is built against a different API than compatibility_minimum; \
+             set the matching api-4-N feature on the godot dependency"
+        );
+    }
+}

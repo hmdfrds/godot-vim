@@ -1,0 +1,13 @@
+; scripts/godot-smoke.sh copies this project to a scratch directory and adds
+; the assembled addon. Do not open it in place.
+
+config_version=5
+
+[application]
+
+config/name="godot-vim smoke"
+config/features=PackedStringArray("4.5")
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/godot_vim/plugin.cfg", "res://addons/smoke_probe/plugin.cfg")

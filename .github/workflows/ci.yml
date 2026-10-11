@@ -52,3 +52,33 @@ jobs:
 
       - name: Rustfmt
         run: cargo fmt --all --check
+
+  godot-smoke:
+    name: load in Godot 4.5
+    # Same image as release.yml's Linux build.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GODOT_RELEASE: 4.5-stable
+      GODOT_ASSET: Godot_v4.5-stable_linux.x86_64
+      # From the release's SHA512-SUMS.txt; pinned so a replaced asset fails.
+      GODOT_SHA512: b5bd5d8a4dd3f44de1d123361beabaafa4825dd05b5e20fd2bfa540f32594f81d82e7c4e86fae420f4faee77d9def573b570f8b156e9c84a4dc2d5123d09e852
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --release --locked
+
+      - name: Download Godot
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/godot.zip" \
+            "https://github.com/godotengine/godot-builds/releases/download/$GODOT_RELEASE/$GODOT_ASSET.zip"
+          echo "$GODOT_SHA512  $RUNNER_TEMP/godot.zip" | sha512sum --check --strict
+          unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot"
+
+      - name: Smoke test
+        run: ./scripts/godot-smoke.sh --godot "$RUNNER_TEMP/godot/$GODOT_ASSET"
