@@ -1037,6 +1037,37 @@ mod tests {
         );
     }
 
+    /// `:q` is not refused outside the script editor; whether main.gd has
+    /// unsaved changes does not matter, only the attached editor's state.
+    #[test]
+    fn handle_quit_outside_script_editor_clean_closes() {
+        let mut editor = shader_over_main();
+        let result = handle_quit(test_id(), &mut editor, ForceOverride::Normal);
+        assert_success(&result);
+        assert_eq!(editor.buffer_state, MockBufferState::Closed);
+        assert!(!editor.save_called);
+    }
+
+    #[test]
+    fn handle_quit_outside_script_editor_modified_returns_e37() {
+        let mut editor = shader_over_main();
+        editor.buffer_state = MockBufferState::Modified;
+        let result = handle_quit(test_id(), &mut editor, ForceOverride::Normal);
+        assert_failure(&result);
+        assert!(failure_msg(&result).starts_with("E37"));
+        assert_eq!(editor.buffer_state, MockBufferState::Modified);
+    }
+
+    #[test]
+    fn handle_quit_force_outside_script_editor_discards_and_closes() {
+        let mut editor = shader_over_main();
+        editor.buffer_state = MockBufferState::Modified;
+        let result = handle_quit(test_id(), &mut editor, ForceOverride::Force);
+        assert_success(&result);
+        assert!(editor.save_called, "marked clean so Godot closes silently");
+        assert_eq!(editor.buffer_state, MockBufferState::Closed);
+    }
+
     #[test]
     fn handle_edit_file_same_path_shows_file_info() {
         let mut editor = MockEditorHost::new("line1\nline2\nline3", Some("res://script.gd"));

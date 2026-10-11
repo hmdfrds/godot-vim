@@ -19,6 +19,8 @@ pub(crate) trait EditorHost {
     /// Returns the current script's `res://` path, or `None` if no script is open.
     fn current_script_path(&self) -> Option<String>;
 
+    /// Whether the attached CodeEdit has unsaved changes: its version against
+    /// its saved version, the check Godot makes for script and shader tabs.
     fn is_modified(&self) -> bool;
 
     /// Marks the buffer clean (version == saved_version). After this call,
@@ -184,16 +186,7 @@ mod godot_impl {
         }
 
         fn is_modified(&self) -> bool {
-            let Some(base) = current_script_editor_base() else {
-                return false;
-            };
-            let Some(editor) = base.get_base_editor() else {
-                return false;
-            };
-            let Ok(text_edit) = editor.try_cast::<godot::classes::TextEdit>() else {
-                return true;
-            };
-            text_edit.get_version() != text_edit.get_saved_version()
+            self.0.get_version() != self.0.get_saved_version()
         }
 
         fn tag_saved_version(&mut self) {
