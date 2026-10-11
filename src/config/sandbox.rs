@@ -229,7 +229,8 @@ fn is_safe_command(trimmed: &str) -> bool {
         || (crate::config::panelmap::is_panel_line(trimmed) && panel_line_is_safe(trimmed))
 }
 
-/// Options that can execute shell commands or exfiltrate data.
+/// Options that can execute shell commands or exfiltrate data, and the
+/// `langmap` family, which turns a key a right-hand side types into `:`.
 /// Both long and short forms must be listed (Vim accepts either).
 const BLOCKED_SET_OPTIONS: &[&str] = &[
     "shell",
@@ -256,6 +257,12 @@ const BLOCKED_SET_OPTIONS: &[&str] = &[
     "fp",
     "keywordprg",
     "kp",
+    "langmap",
+    "lmap",
+    "langremap",
+    "lrm",
+    "langnoremap",
+    "lnr",
 ];
 
 /// Extract the option name from a `set` token, stripping value delimiters
@@ -1800,6 +1807,35 @@ imap jj <Esc>
                 line.trim()
             );
         }
+    }
+
+    /// `set langmap=q:` makes `q` type `:`, so `nnoremap x 0q!cmd<CR>` runs
+    /// `:!cmd` with no `:` in its right-hand side.
+    #[test]
+    fn strips_langmap_lines() {
+        assert_all_stripped(&[
+            "set langmap=q:",
+            "se lmap=q:",
+            "setlocal langmap+=q:",
+            "set so=5 langremap",
+            "set lrm",
+            "set nolangremap",
+            "set langnoremap",
+            "set nolnr",
+            "set so=5 | set langmap=q:",
+        ]);
+    }
+
+    #[test]
+    fn a_stripped_langmap_line_leaves_the_engine_langmap_empty() {
+        use vim_core::execution::VimEngine;
+        let text = "set langmap=q:\nnnoremap x 0q!echo hi<CR>\n";
+        let mut trusted = VimEngine::new();
+        let _ = trusted.source_config_text(text);
+        assert_eq!(trusted.options().langmap(), "q:");
+        let mut engine = VimEngine::new();
+        let _ = engine.source_config_text(&sandbox_config_text(text));
+        assert_eq!(engine.options().langmap(), "");
     }
 
     // ── panelmap trust tiers (P7) ────────────────────────────────────
