@@ -291,7 +291,7 @@ In addition to the [Godot-specific commands](#custom-commands), the following st
 | `:changes` | Show change list |
 | `:messages` | Show message history |
 | `:panelmap` | List every panel binding, and every vimrc line that was rejected ([details](#panel-key-bindings-panelmap)) |
-| `:panelmap {keys}` | Explain how one key resolves against the panel that has focus right now |
+| `:panelmap {keys}` | Explain how one key resolves in the script editor |
 
 ### Undo
 
@@ -581,7 +581,7 @@ frame, so it never trails the text it sits on.
 
 | Setting | Key | Type | Default | Description |
 |---------|-----|------|---------|-------------|
-| Passthrough Keys | `plugins/GodotVim/input/passthrough_keys` | `string` | `""` | Comma-separated keys bypassing Vim (e.g. `<C-v>,<C-a>`). |
+| Passthrough Keys | `plugins/GodotVim/input/passthrough_keys` | `string` | `""` | Comma-separated keys the script editor hands to Godot instead of Vim (e.g. `<C-v>,<C-a>`). Docks never check it. |
 
 Godot builds the settings tree from the key path, so this one renders under
 **Input**, not under **Key Mapping** where its two former neighbours sit.
@@ -640,7 +640,7 @@ Godot-specific ex-commands, in addition to standard Vim commands.
 | `:savescene` | | Save current scene |
 | `:mappings` | | Open key mapping dialog |
 | `:panelmap` | | List all panel bindings and rejected config lines |
-| `:panelmap {keys}` | | Explain how `{keys}` resolves where focus is now |
+| `:panelmap {keys}` | | Explain how `{keys}` resolves in the script editor |
 | `:perf` | | Show keystroke performance stats |
 | `:vimdebug` | | Toggle debug annotations |
 | `gd` | | Go to the definition of the symbol under the cursor |
@@ -780,11 +780,11 @@ There is no layering between files: if `res://.godot-vimrc` exists, `user://.god
 | Command | What it prints |
 |---------|----------------|
 | `:panelmap` | Every live binding, grouped by surface, in the exact syntax you would paste back into a vimrc, and every line of your config that was **rejected** and the reason |
-| `:panelmap {keys}` | One key, resolved against whatever has focus right now: the focus chain that was sampled, the surface stack, which rule won and on which surface, which gate stopped it if none did, and whether the key is consumed |
+| `:panelmap {keys}` | One key, resolved against the script editor in Normal mode, where you typed it: the focus chain that was sampled, the surface stack, which rule won and on which surface, which gate stopped it if none did, and whether the key is consumed |
 
 Both print to the **Output** panel, not the status bar, since a resolution trace is a dozen lines.
 
-Two things to know about `:panelmap {keys}`. It samples **the focus you have while typing the command**, which is the command line, so run it with the panel you care about in mind and read the focus chain it prints back at you, which is the chain it actually used; because the completion popup can never be open at that moment, the report also prints a clearly labelled **counterfactual** section showing how the key would resolve if the script editor were in Insert mode with the popup open, and names the Godot shortcuts that decide a key no rule there claims. And it answers for the key **as written**: a real keystroke on a non-QWERTY layout also carries a US-QWERTY position that a written left-hand side cannot reconstruct, so a `<physical>` rule may be reachable in practice without appearing in the trace.
+Two things to know about `:panelmap {keys}`. The command line belongs to the script editor: it is drawn in the editor's status bar and opens only while the editor has focus, so you cannot type `:` in a dock, and Vim is back in Normal mode by the time the command runs. `:panelmap {keys}` therefore answers for the script editor in Normal mode, and the focus chain it prints is the editor's. Because the completion popup can never be open at that moment, the report also prints a clearly labelled **counterfactual** section showing how the key would resolve if the script editor were in Insert mode with the popup open, and names the Godot shortcuts that decide a key no rule there claims. To check a key in a dock, a panel, the Inspector or a viewport, run bare `:panelmap` and look the key up under that place's surface (see [Surfaces](#surfaces-and-why-deeper-wins)). With the script editor floating in its own window, the report samples the main window's focus instead, which is not the editor. And it answers for the key **as written**: a real keystroke on a non-QWERTY layout also carries a US-QWERTY position that a written left-hand side cannot reconstruct, so a `<physical>` rule may be reachable in practice without appearing in the trace.
 
 A malformed line costs you that line and nothing else. The rest of your config still loads. `:panelmap` is the primary channel for those rejections and needs no setup at all.
 
@@ -824,7 +824,7 @@ A **surface** is a named place in the editor UI. Surfaces form a tree, and a key
 | Surface | Parent | What has focus there |
 |---------|--------|----------------------|
 | `panel` | (root) | The root of everything below. Reached by the upward walk and never claimed directly, this is where cross-panel keys belong. |
-| `dock` | `panel` | Any focusable `Tree`, `ItemList` or `RichTextLabel`: Scene tree, Inspector, Output log, built-in docs. |
+| `dock` | `panel` | Any focusable `Tree`, `ItemList` or `RichTextLabel`: Scene tree, Output log, built-in docs. |
 | `dock.filesystem` | `dock` | The FileSystem dock's tree or file list. |
 | `dock.debugger` | `dock` | The Debugger panel's Stack Frames / Breakpoints trees. |
 | `searchbox` | `panel` | A dock's filter `LineEdit`: it sits beside a list, tree or log and Godot gives its Enter no job of its own. Usually the box `/` jumps to. |
@@ -833,7 +833,7 @@ A **surface** is a named place in the editor UI. Surfaces form a tree, and a key
 | `editor.insert` |, (root) | The attached script editor in any *other* mode, Insert, Replace, Select. **Takes no bindings.** |
 | `editor.completion` |, (root) | An **overlay**: the script editor in an insert-like mode, joined per keystroke rather than by focus. Grants the `POPUP` capability while the completion popup is visible. |
 | `foreign` |, (root) | Somebody else's text input, a Project Settings field, an addon's editor, or a field beside a list whose Enter Godot handles: the Find and Replace bar, the docs page's Find bar, the FileSystem path field. **Takes no bindings.** |
-| `unknown` | `panel` | A focused control none of the above claimed, or no focus owner at all. |
+| `unknown` | `panel` | A focused control none of the above claimed, such as the Inspector's sliders and buttons, or no focus owner at all. The Inspector itself is not a list, so it is not a `dock`. |
 
 Because `dock.filesystem` is deeper than `dock`, `r` renames a file in the FileSystem dock and moves to the previous item everywhere else, same key, two rules, no conflict:
 
