@@ -80,6 +80,16 @@ mod tests {
         let production = src.split_once("\n#[cfg(test)]").map_or(src, |(h, _)| h);
         for (needle, why) in [
             (
+                "completion::continues_pending_mapping(session.engine(), key)",
+                "a popup key that continues a pending mapping must reach the \
+                 mapping, or `inoremap j<CR>` stops firing while the popup is open",
+            ),
+            (
+                "resolve_mapping_timeout_impl(session, ctx, editor);\n            let mode",
+                "a pending mapping prefix must flush before a popup key acts, or \
+                 `inoremap jk` + `Obj` + Enter accepts for \"Ob\" and then appends the j",
+            ),
+            (
                 "completion::dispatch_host_key(",
                 "a key no row claimed must reach Godot's own popup actions, or \
                  Enter and Tab stop accepting",

@@ -216,11 +216,16 @@ pub(crate) static PREV: ActionSpec = ActionSpec {
 // before the body runs, which is the only place a precondition can be
 // decided safely under `<void>`.
 //
-// There is no third path to a popup-less run, and no defence-in-depth guard
-// is kept: a verb bound on a surface that lends no port declines at
-// `let Some(ops) = ops(cx) else`, and a verb bound on the overlay is gated
-// by `POPUP`. A kept guard would be unreachable code that reads as a
-// decision.
+// One path reaches a gated verb with the popup gone: flushing a pending
+// Insert mapping prefix first (`controller::process`) can close it after
+// `POPUP` was sampled. So the gated verbs read the live popup and decline,
+// handing the key to the engine. A verb on a surface that lends no port
+// declines at `let Some(ops) = ops(cx) else`.
+
+/// The popup this verb acts on, if it is still up.
+fn live_popup<'c, 'a>(cx: &'c mut ActionCtx<'a>) -> Option<&'c mut (dyn CompletionOps + 'a)> {
+    ops(cx).filter(|ops| ops.popup_visible())
+}
 
 pub(crate) static CONFIRM: ActionSpec = ActionSpec {
     id: "godotvim.completion.confirm",
@@ -237,7 +242,7 @@ pub(crate) static CONFIRM: ActionSpec = ActionSpec {
     // `require_selection=` from an older vimrc is read by nothing.
     run: |cx| {
         let replace = cx.params.int("replace", 0) != 0;
-        let Some(ops) = ops(cx) else {
+        let Some(ops) = live_popup(cx) else {
             return Outcome::Declined;
         };
         ops.confirm(replace);
@@ -258,7 +263,7 @@ pub(crate) static DISMISS: ActionSpec = ActionSpec {
     // Escape is one unflagged vimrc line:
     // `panelmap editor.completion <Esc> godotvim.completion.dismiss`.
     run: |cx| {
-        let Some(ops) = ops(cx) else {
+        let Some(ops) = live_popup(cx) else {
             return Outcome::Declined;
         };
         ops.cancel();
@@ -279,7 +284,7 @@ pub(crate) static NAVIGATE: ActionSpec = ActionSpec {
     // declaration to a capability no classified path can satisfy.
     default_consume: Some(Consumption::Handoff),
     run: |cx| {
-        if ops(cx).is_none() {
+        if live_popup(cx).is_none() {
             return Outcome::Declined;
         }
         Outcome::Handled
@@ -521,6 +526,24 @@ mod tests {
         let mut popup = FakePopup::open(3, 0);
         assert_eq!(run(&CONFIRM, params, &mut popup), Outcome::Handled);
         assert_eq!(popup.log, vec!["replace"]);
+    }
+
+    #[test]
+    fn a_gated_verb_declines_when_a_flush_closed_the_popup_first() {
+        // Flushing a pending mapping prefix can close the popup after `POPUP`
+        // was sampled; consuming then would eat an Enter that must be a
+        // newline, or a Ctrl+E that must copy the character below.
+        for spec in [&CONFIRM, &DISMISS, &NAVIGATE] {
+            let mut popup = FakePopup::open(3, 0);
+            popup.visible = false;
+            assert_eq!(
+                run(spec, Params::new(), &mut popup),
+                Outcome::Declined,
+                "{}",
+                spec.id
+            );
+            assert!(popup.log.is_empty(), "{}", spec.id);
+        }
     }
 
     #[test]

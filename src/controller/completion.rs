@@ -30,7 +30,8 @@
 
 use godot::classes::CodeEdit;
 use godot::prelude::*;
-use vim_core::execution::VimSession;
+use vim_core::execution::{VimEngine, VimSession};
+use vim_core::keymap::{KeyEvent, MappingMode, TrieLookup};
 
 use crate::actions::action::{ActionCtx, CompletionOps};
 use crate::actions::outcome::Outcome;
@@ -110,6 +111,23 @@ pub(crate) fn host_key_disposition(ops: &mut dyn CompletionOps, key: HostKey) ->
             Disposition::Consume
         }
     }
+}
+
+/// Whether `key` extends or completes the pending mapping prefix, so the
+/// mapping owns it rather than the popup (`inoremap j<CR>` after `j`). A key
+/// that breaks the prefix is the popup's once the prefix is flushed.
+/// vim-core v0.8.0 shows the pending keys only as notation, so they are read
+/// back from it.
+pub(crate) fn continues_pending_mapping(engine: &VimEngine, key: KeyEvent) -> bool {
+    let Some(mode) = MappingMode::from_mode(engine.mode()) else {
+        return false;
+    };
+    let mut keys = vim_core::execution::parse_keys_from_string(&engine.pending_mapping_display());
+    if keys.is_empty() {
+        return false;
+    }
+    keys.push(key);
+    !matches!(engine.keymap().lookup(mode, &keys), TrieLookup::NoMatch)
 }
 
 pub(crate) fn dispatch_host_key(
@@ -261,6 +279,68 @@ mod tests {
         fn cancel(&mut self) {
             self.log.push("cancel");
             self.open = false;
+        }
+    }
+
+    /// An Insert session with `lhs` mapped to `<Esc>` and `typed` sent.
+    fn pending(lhs: &str, typed: &str) -> vim_core::execution::HostSession {
+        use vim_core::execution::{parse_keys_from_string, HostSession};
+        use vim_core::keymap::{Key, MappingFlags, MappingKind};
+        let mut s = HostSession::new("x\n");
+        s.set_shadow_text("x\n");
+        s.engine_mut().map(
+            MappingMode::Insert,
+            &parse_keys_from_string(lhs),
+            vec![KeyEvent::new(
+                Key::Escape,
+                vim_core::keymap::Modifiers::NONE,
+            )],
+            MappingKind::NonRecursive,
+            MappingFlags::default(),
+        );
+        for key in parse_keys_from_string(&format!("i{typed}")) {
+            s.process_key_host(key);
+        }
+        s
+    }
+
+    #[test]
+    fn a_popup_key_belongs_to_a_mapping_only_if_it_continues_it() {
+        use vim_core::execution::parse_keys_from_string;
+        let key = |k: &str| parse_keys_from_string(k)[0];
+        // (what, mapping, typed, key, continues)
+        let rows = [
+            ("inoremap jk: Enter breaks it", "jk", "j", "<CR>", false),
+            ("inoremap jk: Down breaks it", "jk", "j", "<Down>", false),
+            ("inoremap jk: k completes it", "jk", "j", "k", true),
+            (
+                "inoremap j<CR>: Enter completes it",
+                "j<CR>",
+                "j",
+                "<CR>",
+                true,
+            ),
+            (
+                "inoremap ;<Tab>x: Tab extends it",
+                ";<Tab>x",
+                ";",
+                "<Tab>",
+                true,
+            ),
+            ("nothing pending", "jk", "", "<CR>", false),
+        ];
+        for (what, lhs, typed, k, want) in rows {
+            let s = pending(lhs, typed);
+            assert_eq!(
+                s.engine().has_pending_mapping(),
+                !typed.is_empty(),
+                "{what}: pending state"
+            );
+            assert_eq!(
+                continues_pending_mapping(s.engine(), key(k)),
+                want,
+                "{what}"
+            );
         }
     }
 
