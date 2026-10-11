@@ -128,9 +128,11 @@ pattern is the right first thing to run.
 Include the Godot version, your OS, and your keyboard layout. Layout matters
 more than it sounds: several past defects reproduced only on Colemak, Dvorak
 or AZERTY, because a key's *position* and the character it produces differ
-there. If a keybinding misbehaves, `:panelmap {key}` prints exactly how that
-key resolved and is worth pasting too; for completion keys it prints a
-counterfactual section resolving the key as if the popup were open. For a
-popup key, also say what Editor Settings > Shortcuts has under Completion
-Accept, Completion Replace and Completion Query, since those decide Enter,
-Tab and Ctrl+Space.
+there. If a key in the script editor misbehaves, `:panelmap {key}` prints how
+it resolves there and is worth pasting too; for completion keys it prints a
+counterfactual section resolving the key as if the popup were open. It answers
+for the script editor, because `:` only works there. For a popup key, also say
+what Editor Settings > Shortcuts has under Completion Accept, Completion
+Replace and Completion Query, since those decide Enter, Tab and Ctrl+Space.
+For a key in a dock or panel, paste the output of bare `:panelmap`, which
+lists every binding by surface, and say which dock had focus.

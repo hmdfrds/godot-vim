@@ -1665,11 +1665,9 @@ impl GodotVimCore {
             );
             return;
         }
-        // Sampled against the CURRENT focus, which is the whole point: the
-        // answer to "why is my key dead" depends on where the keystroke would
-        // land, and by the time the user has typed `:panelmap d` the command
-        // line owns focus. That is a real caveat and the report prints the
-        // chain it used so the user can see it.
+        // `:` is only typed in the script editor, so the sampled chain is the
+        // editor's (the main window's focus if the editor is floating). The
+        // report prints the chain it used.
         let chain = EditorInterface::singleton()
             .get_base_control()
             .and_then(|c| c.get_viewport())
@@ -1689,11 +1687,9 @@ impl GodotVimCore {
             godot_warn!("panelmap: no surface claimed the current focus");
             return;
         };
-        // The live path can never be a completion path: the command line owns
-        // focus while `:panelmap` is typed, so the mode is CommandLine, and
-        // `handle_set_mode` (`effects/mode.rs`) has already cancelled the
-        // popup. The report answers anyway, through the same `Forest::overlay`
-        // and the same `resolve`, with one input flipped.
+        // The live path is never a completion path: the editor is in Normal
+        // mode and `handle_set_mode` (`effects/mode.rs`) has cancelled the
+        // popup. The overlay is built with the mode flipped to Insert.
         let hypothetical = crate::actions::surface::OverlayFacts {
             at_attached_editor: true,
             mode: Some(vim_core::primitives::Mode::Insert),
