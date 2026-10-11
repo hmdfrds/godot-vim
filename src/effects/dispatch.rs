@@ -60,8 +60,8 @@ pub(crate) struct DispatchContext<'a> {
     pub(crate) syntax_query: Box<dyn Fn(i32, i32) -> SyntaxRegion + 'a>,
     /// Clipboard abstraction for register sync and copy-to-clipboard effects.
     pub(crate) clipboard: &'a mut dyn crate::bridge::clipboard::ClipboardPort,
-    /// Number of active cursors in the engine (1 = single cursor).
-    /// Used to skip `remove_secondary_carets()` when multi-cursor is active.
+    /// Godot's caret count before the pass (1 = single cursor). Above 1,
+    /// carets are left to the multi-cursor sync in `finish_engine_pass`.
     pub(crate) cursor_count: usize,
 }
 
@@ -381,9 +381,8 @@ pub(crate) fn dispatch(
     log::trace!("dispatch: {} effects", effects.len());
     let mut pass2 = Vec::with_capacity(effects.len());
 
-    // Clear stale carets and selections. When multi-cursor is active,
-    // preserve secondary carets — they're managed by the indexed SetCursor
-    // routing in pass 2 and post-dispatch sync.
+    // Clear stale carets and selections. Secondaries of an active multi-cursor
+    // are kept for the sync in finish_engine_pass.
     if cursor_count <= 1 {
         editor.remove_secondary_carets();
     }
@@ -692,7 +691,7 @@ pub(crate) fn dispatch(
     };
 
     let mut pairing = SelectionPairing::Idle;
-    let mut cursor_effect_index: usize = 0;
+    let mut restored_carets: usize = 0;
 
     for effect in pass2 {
         match effect {
@@ -744,31 +743,11 @@ pub(crate) fn dispatch(
                 if cursor_count > 1 {
                     log::trace!("pass2: SetCursor skipped (multi-cursor, sync-only)");
                 } else {
-                    let pos = doc.line_index.byte_to_line_col(doc.text, offset.get());
-                    if cursor_effect_index == 0 {
-                        cursor::handle_set_cursor(editor, &doc, offset.get(), scrolloff);
-                    } else {
-                        let idx = cursor_effect_index as i32;
-                        let caret_count = editor.get_caret_count();
-                        if idx >= caret_count {
-                            let added = editor.add_caret(pos.line, pos.col);
-                            if added < 0 {
-                                log::error!(
-                                    "multi-cursor: add_caret({}, {}) failed for index {}",
-                                    pos.line,
-                                    pos.col,
-                                    cursor_effect_index
-                                );
-                                cursor_effect_index += 1;
-                                continue;
-                            }
-                        } else {
-                            editor.set_caret_line_for(pos.line, idx);
-                            editor.set_caret_column_for(pos.col, idx);
-                        }
-                    }
+                    // The last SetCursor is the caret (`.` emits one before its
+                    // text and one after). Engine secondaries reach Godot in
+                    // finish_engine_pass, never through effect order.
+                    cursor::handle_set_cursor(editor, &doc, offset.get(), scrolloff);
                 }
-                cursor_effect_index += 1;
             }
             Effect::SaveSelections { tag } => {
                 // Snapshot current cursor positions from the editor into buffer state.
@@ -818,9 +797,8 @@ pub(crate) fn dispatch(
                     for idx in (target..current).rev() {
                         editor.remove_caret(idx);
                     }
-                    // Update cursor_effect_index so the tail cleanup preserves
-                    // the restored carets instead of clearing them.
-                    cursor_effect_index = positions.len();
+                    // Keeps the tail cleanup from clearing the restored carets.
+                    restored_carets = positions.len();
                     // Update last_caret_count so the import logic sees the
                     // correct count after RestoreSelections.
                     state
@@ -850,15 +828,8 @@ pub(crate) fn dispatch(
         );
     }
 
-    if cursor_count > 1 {
-        // Multi-cursor: post-sync owns all caret lifecycle. No cleanup here.
-    } else if cursor_effect_index >= 2 {
-        let target_count = cursor_effect_index as i32;
-        let current_count = editor.get_caret_count();
-        for idx in (target_count..current_count).rev() {
-            editor.remove_caret(idx);
-        }
-    } else {
+    // Multi-cursor: post-sync owns all caret lifecycle.
+    if cursor_count <= 1 && restored_carets < 2 {
         editor.remove_secondary_carets();
     }
 
@@ -1170,8 +1141,8 @@ pub(crate) fn dispatch_pass2_effect(
 
         // ── Multi-selection / block selection state ───────────────────────
         // SaveSelections and RestoreSelections are handled in the main pass 2
-        // loop (alongside SetCursor) so they can update cursor_effect_index.
-        // They should never reach here.
+        // loop, where RestoreSelections can keep its carets past the tail
+        // cleanup. They should never reach here.
         Effect::SelectNextMatch {
             ref pattern,
             skip_current,

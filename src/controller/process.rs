@@ -786,9 +786,8 @@ pub(crate) fn finish_engine_pass(session: &mut vim_core::execution::VimSession<G
 fn sync_multi_cursors_to_godot(session: &mut vim_core::execution::VimSession<GodotHost>) {
     let cursor_count = session.engine().state().multi_cursor().selections().len();
 
-    // Single cursor: let the normal path handle it.
-    // Multi-cursor→single-cursor cleanup is handled by the dispatch layer
-    // (dispatch.rs caret cleanup), not here. See dispatch.rs cursor_effect_index logic.
+    // Single cursor: dispatch placed the primary, except on the pass that
+    // leaves multi-cursor, where it skipped SetCursor (handled below).
     if cursor_count <= 1 {
         let editor_id = session.host().editor().instance_id();
         let was_multi = session
