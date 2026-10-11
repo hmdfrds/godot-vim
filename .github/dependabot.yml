@@ -9,3 +9,12 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    ignore:
+      # vim-core exports compact_str 0.7 types across its public API, so this
+      # crate must match. Bumping it produces 28 type-mismatch errors; PR #62
+      # did exactly that and main did not compile until #67 pinned it back.
+      - dependency-name: "compact_str"
+      # gdext upgrades change the bridge API surface and are deliberate
+      # migration projects on their own branch, never a bot bump. PR #68 is
+      # the standing example: 0.4.5 to 0.5.5 fails CI outright.
+      - dependency-name: "godot"
