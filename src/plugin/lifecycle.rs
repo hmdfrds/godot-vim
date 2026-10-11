@@ -5,7 +5,7 @@
 //! pairing is visually verifiable. Floating window lifecycle lives in
 //! [`super::floating`].
 
-use godot::classes::{EditorInterface, Timer};
+use godot::classes::{EditorInterface, ProjectSettings, Timer};
 use godot::prelude::*;
 
 use super::signals::{
@@ -39,6 +39,14 @@ impl GodotVimCore {
 
         let callable = self.base().callable("on_settings_changed");
         connect_immediate(&mut editor_settings, SIG_SETTINGS_CHANGED, &callable);
+
+        self.report_user_only_overrides();
+        let callable = self.base().callable("on_project_settings_changed");
+        connect_immediate(
+            &mut ProjectSettings::singleton(),
+            SIG_SETTINGS_CHANGED,
+            &callable,
+        );
     }
 
     /// Symmetric teardown for `init_settings`.
@@ -46,6 +54,22 @@ impl GodotVimCore {
         if let Some(mut editor_settings) = EditorInterface::singleton().get_editor_settings() {
             let callable = self.base().callable("on_settings_changed");
             safe_disconnect(&mut editor_settings, SIG_SETTINGS_CHANGED, &callable);
+        }
+        let callable = self.base().callable("on_project_settings_changed");
+        safe_disconnect(
+            &mut ProjectSettings::singleton(),
+            SIG_SETTINGS_CHANGED,
+            &callable,
+        );
+    }
+
+    /// Warns once per project override of a user-only setting, which the
+    /// reader ignores. `godot_warn!` because Log Level defaults to Off.
+    pub(super) fn report_user_only_overrides(&mut self) {
+        let project = ProjectSettings::singleton();
+        let current = crate::settings::overrides::overridden(|name| project.has_setting(name));
+        if let Some(message) = self.override_notice.update(&current) {
+            godot_warn!("{message}");
         }
     }
 

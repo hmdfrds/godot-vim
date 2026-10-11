@@ -131,6 +131,17 @@ and returns to the script, and `Ctrl-h/j/k/l` there do what Godot does
 instead of moving focus. Filter boxes such as the Scene and Filter Scripts
 boxes work as before.
 
+**A project can no longer change GodotVim's security settings.** Godot lets
+a project override Editor Settings (`[editor_overrides]` in `project.godot`,
+which **Override for Project** in the Editor Settings dialog writes).
+GodotVim used to honour such an override for Shell Execution, File Access
+Scope, Project Vimrc and Config File Path, so a committed `project.godot`
+could turn on `:!` or have its own vimrc trusted. These four now always come
+from your own Editor Settings, and Output shows one warning when a project
+overrides one of them. If you set such an override on purpose, for example
+Project Vimrc `Trusted` for one project, set it in Editor Settings instead;
+the override is ignored.
+
 ## From v1.8.0
 
 **Textwidth now defaults to `0`, as in Vim.** With the old default of 80,
