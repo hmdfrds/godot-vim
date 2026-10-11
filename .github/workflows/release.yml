@@ -30,7 +30,7 @@ jobs:
           cp target/x86_64-unknown-linux-gnu/release/libgodot_vim.so staging/
           sha256sum staging/libgodot_vim.so | awk '{print $1 "  libgodot_vim.so"}' > staging/libgodot_vim.so.sha256
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: libgodot_vim.so
           path: staging/*
@@ -57,7 +57,7 @@ jobs:
           cp target/x86_64-pc-windows-msvc/release/godot_vim.dll staging/
           sha256sum staging/godot_vim.dll | awk '{print $1 "  godot_vim.dll"}' > staging/godot_vim.dll.sha256
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: godot_vim.dll
           path: staging/*
@@ -94,7 +94,7 @@ jobs:
           cp libgodot_vim.dylib staging/
           shasum -a 256 staging/libgodot_vim.dylib > staging/libgodot_vim.dylib.sha256
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         with:
           name: libgodot_vim.dylib
           path: staging/*
