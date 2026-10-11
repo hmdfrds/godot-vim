@@ -13,6 +13,14 @@ is commented out with the usual `" [sandbox] stripped` reason. Write a bar
 meant for a mapping's right-hand side as `\|` or `<Bar>`, as Vim needs too;
 those stay part of the mapping.
 
+**The project vimrc sandbox strips more.** A mapping whose command line
+defines a mapping, an abbreviation, a handler or the leader, or sets a
+blocked option such as `shell`, is now commented out, and so are
+`langmap` and `langremap` lines. Blanks other than space and tab, such as
+a non-breaking space, are read as the engine reads them, and colons before
+a command are skipped as in Vim, so a command hidden behind either is
+caught. Put such lines in your own `user://.godot-vimrc` if you need them.
+
 ## From v1.8.2
 
 **The completion popup follows Godot again.** Six notes:

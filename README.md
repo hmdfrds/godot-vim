@@ -192,14 +192,16 @@ GodotVim is a native extension, so it ships restrictive:
 - Shell execution is **Disabled**. `:!` is blocked until you turn it on.
 - File access is **ProjectOnly**. `:w`, `:r` and `:e` stay inside `res://` and `user://`.
 - A `.godot-vimrc` committed to the project is **Sandboxed**. Only known-safe
-  constructs pass: comments, most `set` and `setlocal` options, `filetype`
-  lines, `let mapleader`, the `noremap`
-  forms, `panelunmap`, and `panelmap` lines targeting a registered `godotvim.*`
-  action. A line holding several commands separated by `|` passes only when
-  every one of them does. Everything else, including the recursive `map`
-  forms and raw ex-commands, is commented out with a reason rather than
-  deleted, so nothing changes silently. A `user://.godot-vimrc` is trusted in
-  full.
+  constructs pass: comments, most `set` and `setlocal` options (not the
+  `shell*` and `*prg` options, `langmap` or `langremap`), `filetype` lines,
+  `let mapleader`, the `noremap` forms, `panelunmap`, and `panelmap` lines
+  targeting a registered `godotvim.*` action. A line holding several commands
+  separated by `|` passes only when every one of them does, and a mapping does
+  not pass when its command line defines a mapping, an abbreviation, a handler
+  or the leader, or sets one of those options. Everything else, including the
+  recursive `map` forms and raw ex-commands, is commented out with a reason
+  rather than deleted, so nothing changes silently. A `user://.godot-vimrc` is
+  trusted in full.
 
 All three are settings, and a project cannot change them through its Editor
 Settings overrides. [Security](docs/REFERENCE.md#security)
