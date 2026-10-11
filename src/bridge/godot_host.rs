@@ -24,7 +24,7 @@ use super::port_impl::{AutoBraceSnapshot, CodeEditPort, SyntaxRegion};
 use crate::effects::completion::{Caret, Edit};
 use crate::effects::dispatch::{AutoBraceMode, DispatchContext};
 use crate::host::SecurityPolicy;
-use crate::settings::{FileAccessScope, ProjectVimrc, ShellExecution};
+use crate::settings::{FileAccessScope, ShellExecution};
 use crate::state::ShellState;
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -39,7 +39,8 @@ use crate::state::ShellState;
 #[derive(Debug, Clone)]
 pub(crate) enum PendingUiAction {
     OpenMappingDialog,
-    SourceConfigFile,
+    /// `:source`, with the file as typed, `None` when bare.
+    Source(Option<compact_str::CompactString>),
     ShowUndoTree,
     Vimdebug(compact_str::CompactString),
     /// Run a shell-side action by NAME.
@@ -370,14 +371,6 @@ impl GodotHost {
                         message: None,
                     };
                 }
-                "source" => {
-                    self.pending_ui_actions
-                        .push(PendingUiAction::SourceConfigFile);
-                    return HostResult::Success {
-                        id: request.id(),
-                        message: None,
-                    };
-                }
                 "undotree" => {
                     self.pending_ui_actions.push(PendingUiAction::ShowUndoTree);
                     return HostResult::Success {
@@ -427,30 +420,14 @@ impl GodotHost {
         }
 
         let mode_str = mode_to_vim_string(self.current_mode);
-        let result = crate::host::execute(
+        crate::host::execute(
             request,
             &mut self.editor,
             &self.security_policy,
             mode_str,
             &self.clipboard,
             &mut self.pending_ui_actions,
-        );
-
-        // Sandbox ReadConfigFile results to filter dangerous commands.
-        if self.security_policy.project_vimrc == ProjectVimrc::Sandbox {
-            if let HostRequest::ReadConfigFile { .. } = request {
-                if let HostResult::Data { id, data, offset } = result {
-                    let sandboxed = crate::config::sandbox::sandbox_config_text(data.as_str());
-                    return HostResult::Data {
-                        id,
-                        data: compact_str::CompactString::from(sandboxed),
-                        offset,
-                    };
-                }
-            }
-        }
-
-        result
+        )
     }
 }
 
@@ -487,7 +464,6 @@ impl GodotHost {
             security_policy: SecurityPolicy {
                 shell_execution: ShellExecution::Disabled,
                 file_access_scope: FileAccessScope::ProjectOnly,
-                project_vimrc: ProjectVimrc::Sandbox,
             },
             clipboard: GodotClipboard,
             host_request_depth: 0,

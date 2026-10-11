@@ -752,11 +752,7 @@ impl GodotVimCore {
             }
         }
 
-        if let Some(controller) = &mut self.controller {
-            for action in controller.take_pending_ui_actions() {
-                self.handle_pending_ui_action(action);
-            }
-        }
+        self.run_pending_ui_actions();
         self.recheck_completion_delay();
 
         // Start/restart the mapping timer if keys are buffered, stop if not.
@@ -823,11 +819,7 @@ impl GodotVimCore {
             );
         }
 
-        if let Some(controller) = &mut self.controller {
-            for action in controller.take_pending_ui_actions() {
-                self.handle_pending_ui_action(action);
-            }
-        }
+        self.run_pending_ui_actions();
         self.recheck_completion_delay();
 
         // Timeout resolution may produce new pending keys (e.g. partial
@@ -841,6 +833,45 @@ impl GodotVimCore {
                 }
             }
         }
+    }
+
+    /// Run the UI actions the last engine pass deferred, then draw what they
+    /// changed: the pass's own UI update ran before them.
+    fn run_pending_ui_actions(&mut self) {
+        let Some(controller) = &mut self.controller else {
+            return;
+        };
+        let actions = controller.take_pending_ui_actions();
+        if actions.is_empty() {
+            return;
+        }
+        for action in actions {
+            self.handle_pending_ui_action(action);
+        }
+        self.refresh_ui();
+    }
+
+    /// Draw the engine's state on the attached editor after work done outside
+    /// a key's UI update, so a message set there reaches the status bar
+    /// before the next key clears it.
+    pub(super) fn refresh_ui(&mut self) {
+        let Some(mut editor) = self.attached_editor.clone() else {
+            return;
+        };
+        if !editor.is_instance_valid() {
+            return;
+        }
+        let Some(controller) = &mut self.controller else {
+            return;
+        };
+        if !controller.is_attached() {
+            return;
+        }
+        let snap = controller.ui_snapshot(editor.instance_id());
+        // Passthrough: no caret expectation, so a caret the work moved is
+        // still read back as an external move.
+        EngineOutcome::with_snapshot(snap, crate::controller::PipelineOutcome::Passthrough)
+            .apply_ui_update(&mut self.ui, &mut editor, &mut self.caret_reconciler);
     }
 
     /// Route a mouse-wheel event through the vim engine.

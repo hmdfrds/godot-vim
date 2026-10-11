@@ -40,7 +40,7 @@ pub(super) fn is_godot_path(path: &str) -> bool {
 }
 
 /// Enforce file access scope: `ProjectOnly` restricts to `res://`/`user://` paths.
-pub(super) fn validate_path_scope(path: &str, scope: FileAccessScope) -> Result<(), HostError> {
+pub(crate) fn validate_path_scope(path: &str, scope: FileAccessScope) -> Result<(), HostError> {
     if scope == FileAccessScope::Unrestricted {
         return Ok(());
     }

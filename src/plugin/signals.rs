@@ -154,6 +154,7 @@ mod deferred_delivery_contract {
         ),
         // The definition of the helper itself.
         ("signals.rs", include_str!("signals.rs"), 1),
+        ("source_cmd.rs", include_str!("source_cmd.rs"), 0),
     ];
 
     /// Production source only, cut at the first column-0 `#[cfg(test)]`.

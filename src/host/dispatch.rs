@@ -10,7 +10,7 @@ use vim_core::execution::{
 };
 
 use super::{host_failure, host_success};
-use crate::settings::{FileAccessScope, ProjectVimrc, ShellExecution};
+use crate::settings::{FileAccessScope, ShellExecution};
 use crate::types::ForceOverride;
 
 /// Security policy governing dangerous host operations.
@@ -22,13 +22,6 @@ use crate::types::ForceOverride;
 pub(crate) struct SecurityPolicy {
     pub(crate) shell_execution: ShellExecution,
     pub(crate) file_access_scope: FileAccessScope,
-    /// Controls how project-level vimrc files are treated when sourced.
-    ///
-    /// `ProjectVimrc::Sandbox` strips dangerous patterns (`:!` commands);
-    /// `ProjectVimrc::Disabled` prevents sourcing entirely. Consumed by
-    /// `controller/host_bridge.rs` after `ReadConfigFile` returns — dispatch
-    /// returns raw file text and the controller owns sandboxing responsibility.
-    pub(crate) project_vimrc: ProjectVimrc,
 }
 
 /// Gate for shell execution — enforced before `:!cmd` and `:{range}!cmd`.
@@ -219,30 +212,14 @@ pub(crate) fn execute(
 
         HostRequest::BufferList { meta: _ } => super::buffer::handle_buffer_list(request.id()),
 
+        // The plugin owns the config path, the settings and the trust
+        // policy, so it reads and sources the file once the key is done
+        // (`plugin/source_cmd.rs`). Success tells the engine it is handled.
         HostRequest::ReadConfigFile { meta: _, path } => {
-            if let Err(e) =
-                super::file::validate_path_scope(path.as_str(), policy.file_access_scope)
-            {
-                return host_failure(request.id(), e.to_string());
-            }
-            let gpath = GString::from(path.as_str());
-            match godot::classes::FileAccess::open(
-                &gpath,
-                godot::classes::file_access::ModeFlags::READ,
-            ) {
-                Some(fa) => {
-                    // Raw text returned here. Sandbox filtering (stripping
-                    // dangerous :! commands etc.) is applied by host_bridge
-                    // before the result reaches the engine.
-                    let text = fa.get_as_text().to_string();
-                    HostResult::Data {
-                        id: request.id(),
-                        data: CompactString::from(text),
-                        offset: None,
-                    }
-                }
-                None => host_failure(request.id(), format!("E484: Can't open file {}", path)),
-            }
+            pending_ui_actions.push(crate::bridge::godot_host::PendingUiAction::Source(
+                path.clone(),
+            ));
+            host_success(request.id())
         }
 
         HostRequest::EvaluateExpression {
@@ -456,10 +433,8 @@ pub(crate) fn execute(
             //
             // Execution hops to the plugin: an ActionSpec needs `&mut
             // GodotVimCore`, and this runs inside a `&mut controller` borrow.
-            // The hop costs zero frames but is ordered AFTER apply_ui_update
-            // and set_input_as_handled, so a registry action must not publish
-            // text through handle_show_message — it would surface one
-            // keystroke late.
+            // The hop costs zero frames and runs after apply_ui_update and
+            // set_input_as_handled; the plugin draws the UI again after it.
             if name.contains('.') && !name.contains('/') {
                 pending_ui_actions.push(
                     crate::bridge::godot_host::PendingUiAction::RunRegistryAction {

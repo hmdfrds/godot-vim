@@ -21,6 +21,7 @@ mod lifecycle;
 mod outcome;
 mod processing_guard;
 mod signals;
+mod source_cmd;
 
 use godot::classes::notify::{EditorSettingsNotification, NodeNotification};
 use godot::classes::{
@@ -30,6 +31,7 @@ use godot::classes::{
 use godot::global::Key;
 use godot::prelude::*;
 
+use crate::config::source::Loaded;
 use crate::controller::VimController;
 use crate::safety::{install_panic_hook, panic_guard};
 
@@ -992,7 +994,12 @@ impl GodotVimCore {
         let ok = panic_guard(
             "on_config_saved",
             || {
-                self.source_config_from_disk("on_config_saved");
+                let loaded = self.source_config_from_disk("on_config_saved");
+                let path = self.resolve_config_path().path;
+                if let Some(controller) = &mut self.controller {
+                    controller.show_status(crate::config::source::status(&path, loaded));
+                }
+                self.refresh_ui();
                 true
             },
             false,
@@ -1181,10 +1188,9 @@ impl GodotVimCore {
     /// Execute a pending UI action that requires plugin-level access (scene tree,
     /// settings snapshot) which the controller cannot reach directly.
     ///
-    /// `OpenMappingDialog`, `SourceConfigFile`, `ShowTooltip` and the
-    /// completion delay reach the plugin layer; the controller handles all
-    /// other variants inline before storing. The catch-all arm is
-    /// defense-in-depth.
+    /// `OpenMappingDialog`, `Source`, `ShowTooltip` and the completion delay
+    /// reach the plugin layer; the controller handles all other variants inline
+    /// before storing. The catch-all arm is defense-in-depth.
     pub(super) fn handle_pending_ui_action(
         &mut self,
         action: crate::bridge::godot_host::PendingUiAction,
@@ -1219,11 +1225,8 @@ impl GodotVimCore {
             PendingUiAction::DisarmCompletion => {
                 self.disarm_completion_delay();
             }
-            PendingUiAction::SourceConfigFile => {
-                if !self.source_config_from_disk("pending_ui_action") {
-                    let path = self.resolve_config_path().path;
-                    log::warn!("pending_ui_action: SourceConfigFile — file not found at '{path}'",);
-                }
+            PendingUiAction::Source(raw) => {
+                self.source_command(raw.as_deref());
             }
             PendingUiAction::ShowTooltip {
                 symbol,
@@ -1521,9 +1524,6 @@ impl GodotVimCore {
         crate::config::path::resolve(override_path)
     }
 
-    /// Load config from disk, apply the project-vimrc security policy, and
-    /// reload into the engine. Returns `true` if the file existed (regardless
-    /// of whether the policy allowed sourcing it).
     /// Push every Editor Setting into the engine, then source the vimrc on
     /// top, exactly as at startup. The push record is forgotten first, so
     /// no field is skipped. For an engine that may hold neither: the
@@ -1539,35 +1539,43 @@ impl GodotVimCore {
         self.source_config_from_disk(caller);
     }
 
-    fn source_config_from_disk(&mut self, caller: &str) -> bool {
+    /// Load the active vimrc from disk, apply the project-vimrc security
+    /// policy, and reload it into the engine.
+    fn source_config_from_disk(&mut self, caller: &str) -> Loaded {
         let resolved = self.resolve_config_path();
-        let Some(text) = crate::config::writer::read_file(&resolved.path) else {
-            // No file: the engine keeps whatever options it has, so the cache
-            // must be reconciled here too. Returning early without this leaves
-            // a stale table after a vimrc is deleted.
-            self.rebuild_langmap();
-            self.rebuild_bindings();
-            return false;
+        let loaded = match crate::config::writer::read_file(&resolved.path) {
+            // No file: the engine keeps whatever options it has, so the caches
+            // below must be reconciled too, or a deleted vimrc leaves a stale
+            // table.
+            None => Loaded::Missing,
+            Some(text) => match crate::config::sandbox::apply_vimrc_policy(
+                &text,
+                resolved.is_project_level,
+                self.project_vimrc(),
+            ) {
+                None => Loaded::Disabled,
+                Some(policed) => {
+                    if let Some(controller) = &mut self.controller {
+                        controller.reload_config(&policed.text);
+                        log::info!("{caller}: sourced config from '{}'", resolved.path);
+                    }
+                    self.refresh_filetype_setup();
+                    Loaded::Sourced {
+                        stripped: policed.stripped,
+                        ignored_panel_lines: 0,
+                    }
+                }
+            },
         };
-        let project_vimrc = self
-            .settings
-            .as_ref()
-            .map_or(crate::settings::ProjectVimrc::Sandbox, |s| s.project_vimrc);
-        let text = crate::config::sandbox::apply_vimrc_policy(
-            &text,
-            resolved.is_project_level,
-            project_vimrc,
-        );
-        if let Some(text) = text {
-            if let Some(controller) = &mut self.controller {
-                controller.reload_config(&text);
-                log::info!("{caller}: sourced config from '{}'", resolved.path);
-            }
-            self.refresh_filetype_setup();
-        }
         self.rebuild_langmap();
         self.rebuild_bindings();
-        true
+        loaded
+    }
+
+    fn project_vimrc(&self) -> crate::settings::ProjectVimrc {
+        self.settings
+            .as_ref()
+            .map_or(crate::settings::ProjectVimrc::Sandbox, |s| s.project_vimrc)
     }
 
     /// Rebuild the panel binding index, atomically.
@@ -1615,11 +1623,12 @@ impl GodotVimCore {
     fn read_sandboxed_config(&self) -> Option<String> {
         let resolved = self.resolve_config_path();
         let text = crate::config::writer::read_file(&resolved.path)?;
-        let project_vimrc = self
-            .settings
-            .as_ref()
-            .map_or(crate::settings::ProjectVimrc::Sandbox, |s| s.project_vimrc);
-        crate::config::sandbox::apply_vimrc_policy(&text, resolved.is_project_level, project_vimrc)
+        crate::config::sandbox::apply_vimrc_policy(
+            &text,
+            resolved.is_project_level,
+            self.project_vimrc(),
+        )
+        .map(|policed| policed.text)
     }
 
     /// `:panelmap` and `:panelmap <lhs>` — the introspector.

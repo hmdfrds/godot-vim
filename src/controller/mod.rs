@@ -161,7 +161,6 @@ impl VimController {
                 security_policy: SecurityPolicy {
                     shell_execution: ShellExecution::Disabled,
                     file_access_scope: FileAccessScope::ProjectOnly,
-                    project_vimrc: crate::settings::ProjectVimrc::Sandbox,
                 },
                 perf: perf::PerfTracker::new(PERF_RING_CAPACITY, PERF_BUDGET_US),
                 highlight_yank_duration_ms: u32::try_from(
@@ -365,7 +364,6 @@ impl VimController {
         self.set_security_policy(crate::host::SecurityPolicy {
             shell_execution: snapshot.shell_execution,
             file_access_scope: snapshot.file_access_scope,
-            project_vimrc: snapshot.project_vimrc,
         });
         self.set_highlight_yank_duration(snapshot.highlight_yank_duration);
         self.ctx.code_complete_enabled = snapshot.code_complete_enabled;
@@ -969,10 +967,6 @@ impl VimController {
 
     /// Clear all user mappings and re-source config text. Clears first so
     /// that removed lines don't leave stale mapping entries.
-    ///
-    /// The engine currently produces only `ShowMessage`, `ShowError`, and
-    /// `ClearHighlights` from config sourcing. The catch-all arm trips a
-    /// debug assertion if a new effect type appears.
     pub(crate) fn reload_config(&mut self, text: &str) {
         self.engine_mut().clear_mappings();
 
@@ -996,6 +990,16 @@ impl VimController {
              nmap <leader>mF :cursorfilter! ",
         );
 
+        self.source_config(text);
+    }
+
+    /// Source config text on top of the current state, as Vim's `:source`
+    /// does: nothing is cleared first.
+    ///
+    /// The engine currently produces only `ShowMessage`, `ShowError`, and
+    /// `ClearHighlights` from config sourcing. The catch-all arm trips a
+    /// debug assertion if a new effect type appears.
+    pub(crate) fn source_config(&mut self, text: &str) {
         // The engine skips `:filetype`, which is the host's to handle.
         for line in text.lines() {
             if let Some(cmd) = crate::ftplugin::parse_filetype_command(line) {
@@ -1043,6 +1047,22 @@ impl VimController {
                     );
                 }
             }
+        }
+    }
+
+    /// Put `message` in the status bar; while detached, in the log.
+    pub(crate) fn show_status(&mut self, message: crate::types::StatusMessage) {
+        use crate::types::StatusMessage;
+        let Some(state) = self.host_state_mut() else {
+            if let Some(text) = message.text() {
+                log::info!("{text}");
+            }
+            return;
+        };
+        match message {
+            StatusMessage::None => {}
+            StatusMessage::Info(text) => state.globals_mut().set_message(text),
+            StatusMessage::Error(text) => state.globals_mut().set_error(text),
         }
     }
 
@@ -1683,6 +1703,21 @@ mod tests {
         c.setup_filetype(InstanceId::from_i64(1), &json_signals());
         let out = type_keys(&mut c, "", "i\"key\": \"one two three four five six\"\x1b");
         assert!(!out.contains('\n'), "{out:?}");
+    }
+
+    /// Re-reading the active config mirrors the file, so a mapping it no
+    /// longer has goes away; sourcing another file only adds, as in Vim.
+    #[test]
+    fn reload_mirrors_the_file_and_source_config_adds() {
+        let q = vim_core::keymap::KeyEvent::char('Q');
+        let mut c = VimController::new();
+        c.reload_config("nnoremap Q x");
+        c.source_config("set tw=40");
+        assert!(c.could_start_mapping(q));
+        assert_eq!(c.engine().options().textwidth(), 40);
+        c.reload_config("");
+        assert!(!c.could_start_mapping(q));
+        assert_eq!(c.engine().options().textwidth(), 40);
     }
 
     /// The old sync wrote the global commentstring from Godot's delimiters

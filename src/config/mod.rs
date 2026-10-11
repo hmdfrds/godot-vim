@@ -13,8 +13,8 @@
 //! On `enter_tree`, the plugin resolves the config path (via [`path`]), reads the
 //! file, applies security policy (via [`sandbox`]), and calls
 //! `controller.reload_config()`. On `:mappings` dialog save, the dialog emits
-//! `config_saved` which triggers re-sourcing. On `:source`, the same pipeline
-//! runs with the sandboxing policy from [`SecurityPolicy`].
+//! `config_saved` which triggers re-sourcing. `:source` re-reads the active
+//! file the same way, or sources another file on top (see [`source`]).
 
 pub(crate) mod mapping_service;
 pub(crate) mod panelmap;
@@ -22,5 +22,6 @@ pub(crate) mod parser;
 pub(crate) mod path;
 pub(crate) mod presets;
 pub(crate) mod sandbox;
+pub(crate) mod source;
 pub(crate) mod types;
 pub(crate) mod writer;

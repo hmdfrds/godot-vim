@@ -63,6 +63,15 @@ fn is_attached_owner(owner: Option<InstanceId>, attached: InstanceId) -> bool {
     owner == Some(attached)
 }
 
+/// The path of the script editor's current script, when `editor` is its editor.
+pub(crate) fn attached_script_path(
+    editor: &godot::obj::Gd<godot::classes::CodeEdit>,
+) -> Option<String> {
+    godot_impl::attached_script(editor)
+        .ok()
+        .map(|script| script.get_path().to_string())
+}
+
 mod godot_impl {
     use compact_str::CompactString;
     use godot::classes::file_access::ModeFlags;
@@ -97,7 +106,7 @@ mod godot_impl {
     /// The script editor's current script, only when `editor` is its editor.
     /// godot-vim attaches to any CodeEdit (#6, #20); the Shader Editor's or an
     /// addon's text must never be written into the current script.
-    fn attached_script(editor: &Gd<CodeEdit>) -> Result<Gd<Script>, HostError> {
+    pub(super) fn attached_script(editor: &Gd<CodeEdit>) -> Result<Gd<Script>, HostError> {
         let owner = current_script_editor_base().and_then(|base| base.get_base_editor());
         if !super::is_attached_owner(owner.map(|o| o.instance_id()), editor.instance_id()) {
             return Err(HostError::NotCurrentScript);

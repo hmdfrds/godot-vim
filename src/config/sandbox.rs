@@ -40,15 +40,72 @@ const FUNCTION_PATTERNS: &[&str] = &[
 
 /// Ex-command patterns checked via abbreviation + case-insensitive matching,
 /// mirroring the engine's `matches_abbrev` logic.
-/// Format: `(min_prefix, full_command, required_suffix)`.
-const EX_COMMAND_PATTERNS: &[(&str, &str, &str)] = &[
+/// Format: `(min_prefix, full_command, what_follows)`.
+const EX_COMMAND_PATTERNS: &[(&str, &str, Tail)] = &[
     // `:!` — shell execution (no abbreviation, just literal)
-    ("!", "!", ""),
+    ("!", "!", Tail::Any),
     // `:read !` — shell via read (abbreviation: r[ead])
-    ("r", "read", " !"),
-    // `:source ` — config chain-loading (abbreviation: so[urce])
-    ("so", "source", " "),
+    ("r", "read", Tail::Bang),
+    // `:source` in every form: config chain-loading (abbreviation: so[urce])
+    ("so", "source", Tail::Any),
 ];
+
+/// What must follow a command name for [`EX_COMMAND_PATTERNS`] to match.
+#[derive(Clone, Copy)]
+enum Tail {
+    Any,
+    /// A `!` after optional blanks: `:r !cmd`, not `:r file`.
+    Bang,
+}
+
+/// Command modifiers and the commands that run another command, as
+/// `(min_prefix, full_command)`: `:silent so x` and `:windo so x` run
+/// `:so x`. Vim's list, a superset of the engine's.
+const COMMAND_PREFIXES: &[(&str, &str)] = &[
+    ("abo", "aboveleft"),
+    ("bel", "belowright"),
+    ("bo", "botright"),
+    ("bro", "browse"),
+    ("conf", "confirm"),
+    ("hid", "hide"),
+    ("hor", "horizontal"),
+    ("keepa", "keepalt"),
+    ("keepj", "keepjumps"),
+    ("kee", "keepmarks"),
+    ("keepp", "keeppatterns"),
+    ("lefta", "leftabove"),
+    ("leg", "legacy"),
+    ("loc", "lockmarks"),
+    ("noa", "noautocmd"),
+    ("nos", "noswapfile"),
+    ("rightb", "rightbelow"),
+    ("san", "sandbox"),
+    ("sil", "silent"),
+    ("tab", "tab"),
+    ("to", "topleft"),
+    ("uns", "unsilent"),
+    ("verb", "verbose"),
+    ("vert", "vertical"),
+    ("vim9", "vim9cmd"),
+    ("argdo", "argdo"),
+    ("bufdo", "bufdo"),
+    ("cdo", "cdo"),
+    ("cfdo", "cfdo"),
+    ("foldd", "folddoopen"),
+    ("folddoc", "folddoclosed"),
+    ("ldo", "ldo"),
+    ("lfdo", "lfdo"),
+    ("tabdo", "tabdo"),
+    ("windo", "windo"),
+];
+
+/// A vimrc after the Project Vimrc policy.
+#[derive(Debug, Default)]
+pub(crate) struct PolicyText {
+    pub(crate) text: String,
+    /// Lines the Sandbox policy disabled.
+    pub(crate) stripped: usize,
+}
 
 /// Filter config text for sandbox mode using a **whitelist** approach.
 ///
@@ -58,8 +115,9 @@ const EX_COMMAND_PATTERNS: &[(&str, &str, &str)] = &[
 /// -- including raw ex-commands like `:source` or `:!` -- is replaced with
 /// a diagnostic comment. This prevents a malicious `res://.godot-vimrc`
 /// from executing arbitrary commands.
-pub(crate) fn sandbox_config_text(text: &str) -> String {
+fn sandbox(text: &str) -> PolicyText {
     let mut output = String::with_capacity(text.len());
+    let mut stripped = 0;
     for line in text.lines() {
         let trimmed = line.trim();
         if is_safe_non_mapping_line(trimmed) {
@@ -78,6 +136,7 @@ pub(crate) fn sandbox_config_text(text: &str) -> String {
                 output.push_str(
                     "\" [sandbox] stripped recursive map (use noremap in project vimrc): ",
                 );
+                stripped += 1;
                 output.push_str(trimmed);
                 output.push('\n');
             } else if contains_shell_pattern(trimmed) {
@@ -86,6 +145,7 @@ pub(crate) fn sandbox_config_text(text: &str) -> String {
                     trimmed
                 );
                 output.push_str("\" [sandbox] stripped: ");
+                stripped += 1;
                 output.push_str(trimmed);
                 output.push('\n');
             } else {
@@ -102,6 +162,7 @@ pub(crate) fn sandbox_config_text(text: &str) -> String {
                     trimmed
                 );
                 output.push_str("\" [sandbox] stripped: ");
+                stripped += 1;
                 output.push_str(trimmed);
                 output.push('\n');
             }
@@ -111,11 +172,15 @@ pub(crate) fn sandbox_config_text(text: &str) -> String {
                 trimmed
             );
             output.push_str("\" [sandbox] stripped: ");
+            stripped += 1;
             output.push_str(trimmed);
             output.push('\n');
         }
     }
-    output
+    PolicyText {
+        text: output,
+        stripped,
+    }
 }
 
 /// Options that can execute shell commands or exfiltrate data.
@@ -397,57 +462,326 @@ fn is_map_or_noremap_abbrev(name: &str) -> bool {
 }
 
 /// Scan a mapping line for dangerous patterns: case-sensitive function names
-/// (Vim functions are case-sensitive) and abbreviation-aware, case-insensitive
-/// ex-commands after each `:`.
+/// (Vim functions are case-sensitive) anywhere in the line, and
+/// abbreviation-aware, case-insensitive ex-commands the right-hand side runs.
+///
+/// A blacklist, so not complete: register execution (`@a`, `:@a`), the `!`
+/// filter operator, `<expr>` mappings and keys fed through `:normal` /
+/// `:global` are not analysed (see the module docs).
 fn contains_shell_pattern(line: &str) -> bool {
     if FUNCTION_PATTERNS.iter().any(|pat| line.contains(pat)) {
         return true;
     }
-    for (i, _) in line.match_indices(':') {
-        let after_colon = &line[i + 1..];
-        // Skip range chars so `:%!sort` and `:'<,'>!cmd` are caught.
-        let after_range = after_colon.trim_start_matches(|c: char| {
+    let (cmd, rhs) = split_mapping(line);
+    simulate_command_line(rhs, starts_in_command_line(cmd))
+}
+
+/// The map command and its right-hand side, split as the engine's
+/// `parse_map_command` splits them: the `<nowait>`, `<expr>` and `<silent>`
+/// flags, then the left-hand side up to the first blank.
+fn split_mapping(line: &str) -> (&str, &str) {
+    let (cmd, mut rest) = line
+        .split_once(|c: char| c.is_ascii_whitespace())
+        .unwrap_or((line, ""));
+    loop {
+        rest = rest.trim_start();
+        let flag = rest.find('>').map(|end| &rest[..=end]);
+        match flag {
+            Some(flag)
+                if ["<nowait>", "<expr>", "<silent>"]
+                    .iter()
+                    .any(|f| flag.eq_ignore_ascii_case(f)) =>
+            {
+                rest = &rest[flag.len()..];
+            }
+            _ => break,
+        }
+    }
+    let rhs = rest
+        .split_once(char::is_whitespace)
+        .map_or("", |(_, rhs)| rhs);
+    (cmd, rhs.trim_start())
+}
+
+/// `cmap`, `cnoremap` and the `!` forms (`map!`, `noremap!`) type their
+/// right-hand side into the command line.
+fn starts_in_command_line(cmd: &str) -> bool {
+    cmd.ends_with('!') || cmd.starts_with(['c', 'C'])
+}
+
+/// Whether the right-hand side, run as keys, reaches a dangerous command.
+///
+/// Models the two ways a key sequence builds a command the engine executes:
+/// a `:` command line (with its editing keys and cursor) and a `<Cmd>…<CR>`
+/// sequence. Keys whose effect on the final text is not modelled (Tab,
+/// `<C-R>`, history recall, word motions, …) strip the mapping, because the
+/// text cannot be known. Keys are read as the engine reads a mapping, so
+/// `<Bar>`, `<Space>` and `<S-Space>` are the characters `|` and ` `.
+fn simulate_command_line(rhs: &str, starts_in_command_line: bool) -> bool {
+    use vim_core::keymap::{Key, Modifiers};
+    let mut ex: Option<(String, usize)> = starts_in_command_line.then(|| (String::new(), 0));
+    let mut cmd: Option<String> = None;
+
+    for key in mapping_keys(rhs) {
+        // `<Cmd>` starts (and restarts) a `<Cmd>…<CR>` sequence from any mode,
+        // ahead of the current command line (vim-core engine.rs).
+        if key.key() == Key::Cmd {
+            cmd = Some(String::new());
+            continue;
+        }
+        if let Some(buf) = cmd.as_mut() {
+            match key.key() {
+                Key::Enter => {
+                    if line_runs_dangerous(buf) {
+                        return true;
+                    }
+                    cmd = None;
+                }
+                Key::Escape => cmd = None,
+                // Only characters reach the `<Cmd>` buffer; the engine drops
+                // everything else, so modifiers on a character fall away too.
+                Key::Char(c) => buf.push(c),
+                _ => {}
+            }
+            continue;
+        }
+        match ex.as_mut() {
+            None => {
+                if matches!(key.key(), Key::Char(':'))
+                    && (key.modifiers() - Modifiers::SHIFT).is_empty()
+                {
+                    ex = Some((String::new(), 0));
+                }
+            }
+            Some((buf, cursor)) => match apply_cmdline_key(buf, cursor, key) {
+                CmdStep::Continue => {}
+                CmdStep::Commit => {
+                    if line_runs_dangerous(buf) {
+                        return true;
+                    }
+                    ex = None;
+                }
+                CmdStep::Cancel => ex = None,
+                CmdStep::Unmodelled => return true,
+            },
+        }
+    }
+    // A command line left open still strips: the branch strips bare and open
+    // `:source` too, and a `<Cmd>` left open runs on the next key.
+    cmd.as_deref().is_some_and(line_runs_dangerous)
+        || ex.is_some_and(|(buf, _)| line_runs_dangerous(&buf))
+}
+
+/// One committed command line, split on `|` into its commands. Splitting is an
+/// over-approximation (a `|` inside a pattern or string makes extra pieces),
+/// which can only strip more, never less.
+fn line_runs_dangerous(line: &str) -> bool {
+    line.split('|').any(starts_dangerous_command)
+}
+
+/// How a key acts on a `:` command line.
+enum CmdStep {
+    /// Edit applied; keep collecting.
+    Continue,
+    /// Enter: run the line.
+    Commit,
+    /// Esc / `<C-c>`: discard the line.
+    Cancel,
+    /// A key whose effect on the final text is not modelled: strip, since the
+    /// text cannot be known.
+    Unmodelled,
+}
+
+/// Apply one key to a `:` command line (`buf` plus a byte `cursor`), mirroring
+/// vim-core's command-line handler and edit state (`mode/command_line.rs`,
+/// `state/command_line.rs`). Only the editing keys that have a definite effect
+/// on the text are modelled; any other key returns [`CmdStep::Unmodelled`].
+fn apply_cmdline_key(
+    buf: &mut String,
+    cursor: &mut usize,
+    key: vim_core::keymap::KeyEvent,
+) -> CmdStep {
+    use vim_core::keymap::{Key, Modifiers};
+    match key.key() {
+        Key::Enter => return CmdStep::Commit,
+        Key::Escape => return CmdStep::Cancel,
+        Key::Backspace => return backspace(buf, cursor),
+        Key::Delete if *cursor < buf.len() => {
+            buf.remove(*cursor);
+        }
+        Key::Delete => {}
+        Key::Left if key.modifiers().is_empty() => {
+            if *cursor > 0 {
+                *cursor = buf[..*cursor].char_indices().last().map_or(0, |(i, _)| i);
+            }
+        }
+        Key::Right if key.modifiers().is_empty() => {
+            if *cursor < buf.len() {
+                *cursor += buf[*cursor..].chars().next().map_or(0, char::len_utf8);
+            }
+        }
+        Key::Home if key.modifiers().is_empty() => *cursor = 0,
+        Key::End if key.modifiers().is_empty() => *cursor = buf.len(),
+        Key::Char(c) if (key.modifiers() - Modifiers::SHIFT).is_empty() => {
+            buf.insert(*cursor, c);
+            *cursor += c.len_utf8();
+        }
+        Key::Char(c) if key.modifiers() == Modifiers::CTRL => match c {
+            'h' => return backspace(buf, cursor),
+            'u' => {
+                buf.replace_range(..*cursor, "");
+                *cursor = 0;
+            }
+            'k' => buf.truncate(*cursor),
+            'c' | '[' => return CmdStep::Cancel,
+            _ => return CmdStep::Unmodelled,
+        },
+        _ => return CmdStep::Unmodelled,
+    }
+    CmdStep::Continue
+}
+
+/// Delete the character before the cursor. An empty command line cancels
+/// instead, as in Vim.
+fn backspace(buf: &mut String, cursor: &mut usize) -> CmdStep {
+    if buf.is_empty() {
+        return CmdStep::Cancel;
+    }
+    if *cursor > 0 {
+        let prev = buf[..*cursor].char_indices().last().map_or(0, |(i, _)| i);
+        buf.remove(prev);
+        *cursor = prev;
+    }
+    CmdStep::Continue
+}
+
+/// Mirrors vim-core's `key_notation::parse_impl`, the parser of mapping
+/// right-hand sides.
+fn mapping_keys(rhs: &str) -> Vec<vim_core::keymap::KeyEvent> {
+    use vim_core::keymap::{Key, KeyEvent};
+    let mut keys = Vec::new();
+    let mut rest = rhs;
+    while let Some(ch) = rest.chars().next() {
+        if ch == '<' {
+            if let Some(end) = rest.find('>') {
+                if let Some(key) = KeyEvent::from_vim_notation(&rest[..=end]) {
+                    rest = &rest[end + 1..];
+                    // `<Action>(name)` and `<Plug>(name)` take their name.
+                    if matches!(key.key(), Key::Action(_) | Key::Plug(_)) && rest.starts_with('(') {
+                        if let Some(close) = rest.find(')').filter(|&close| close > 1) {
+                            rest = &rest[close + 1..];
+                        }
+                    }
+                    keys.push(key);
+                    continue;
+                }
+            }
+        }
+        keys.push(KeyEvent::char(ch));
+        rest = &rest[ch.len_utf8()..];
+    }
+    keys
+}
+
+/// Whether `text`, typed where a command starts, runs one of
+/// [`EX_COMMAND_PATTERNS`], also behind a range and [`COMMAND_PREFIXES`].
+fn starts_dangerous_command(text: &str) -> bool {
+    let mut text = skip_range(text);
+    loop {
+        if EX_COMMAND_PATTERNS
+            .iter()
+            .any(|&(min, full, tail)| matches_ex_pattern(text, min, full, tail))
+        {
+            return true;
+        }
+        match strip_command_prefix(text) {
+            Some(rest) => text = skip_range(rest),
+            None => return false,
+        }
+    }
+}
+
+/// Skips blanks and a range: line numbers, `%`, `*`, `$`, `.`, marks (`'a`,
+/// `'<`), patterns (`/pat/`, `?pat?`, `\/`) and the `,;+-` between them.
+fn skip_range(mut text: &str) -> &str {
+    loop {
+        text = text.trim_start_matches(|c: char| {
             c.is_ascii_digit()
                 || matches!(
                     c,
-                    '%' | '$' | '.' | '\'' | ',' | '+' | '-' | '<' | '>' | ' '
+                    ' ' | '\t' | '%' | '*' | '$' | '.' | ',' | ';' | '+' | '-'
                 )
         });
-        for &(min, full, suffix) in EX_COMMAND_PATTERNS {
-            if matches_ex_pattern(after_range, min, full, suffix) {
-                return true;
+        let mut chars = text.chars();
+        text = match chars.next() {
+            Some('\'' | '\\') => {
+                chars.next();
+                chars.as_str()
             }
-        }
+            Some(delim @ ('/' | '?')) => {
+                let pattern = chars.as_str();
+                pattern
+                    .find(delim)
+                    .map_or("", |end| &pattern[end + delim.len_utf8()..])
+            }
+            _ => return text,
+        };
     }
-    false
 }
 
-fn matches_ex_pattern(text: &str, min: &str, full: &str, suffix: &str) -> bool {
-    for len in min.len()..=full.len() {
-        if text.len() < len + suffix.len() {
-            continue;
-        }
+/// The text after a leading command modifier, such as `silent` in
+/// `silent so x`, or `None` when `text` starts with none.
+fn strip_command_prefix(text: &str) -> Option<&str> {
+    let end = text
+        .find(|c: char| !c.is_ascii_alphabetic())
+        .unwrap_or(text.len());
+    let (word, rest) = text.split_at(end);
+    let rest = match rest.strip_prefix('!') {
+        Some(after_bang) => after_bang,
+        None if rest.starts_with([' ', '\t']) => rest,
+        None => return None,
+    };
+    COMMAND_PREFIXES
+        .iter()
+        .any(|&(min, full)| matches_abbrev(word, min, full))
+        .then_some(rest)
+}
+
+fn matches_ex_pattern(text: &str, min: &str, full: &str, tail: Tail) -> bool {
+    let is_word = full.bytes().all(|b| b.is_ascii_alphabetic());
+    (min.len()..=full.len()).any(|len| {
         // .get() avoids panic on multi-byte UTF-8 character boundaries.
-        let Some(prefix) = text.get(..len) else {
-            continue;
+        let (Some(name), Some(rest)) = (text.get(..len), text.get(len..)) else {
+            return false;
         };
-        if prefix.eq_ignore_ascii_case(&full[..len]) && text[len..].starts_with(suffix) {
-            return true;
+        // A command name ends at the first non-letter, so `:sort` is not
+        // `:so` and `:source<Tab>x` is `:source`.
+        if !name.eq_ignore_ascii_case(&full[..len])
+            || (is_word && rest.starts_with(|c: char| c.is_ascii_alphabetic()))
+        {
+            return false;
         }
-    }
-    false
+        match tail {
+            Tail::Any => true,
+            Tail::Bang => rest.trim_start_matches([' ', '\t']).starts_with('!'),
+        }
+    })
 }
 
 /// Apply the project vimrc security policy. Returns `None` to block loading
-/// entirely (Disabled), or `Some(text)` with sanitized content (Sandbox)
-/// or unchanged text (Trusted / user-level).
+/// entirely (Disabled), or the sanitized content (Sandbox) or unchanged text
+/// (Trusted / user-level).
 pub(crate) fn apply_vimrc_policy(
     text: &str,
     is_project_level: bool,
     policy: crate::settings::ProjectVimrc,
-) -> Option<String> {
+) -> Option<PolicyText> {
+    let unchanged = || PolicyText {
+        text: text.to_string(),
+        stripped: 0,
+    };
     if !is_project_level {
-        return Some(text.to_string());
+        return Some(unchanged());
     }
     match policy {
         crate::settings::ProjectVimrc::Disabled => {
@@ -456,15 +790,19 @@ pub(crate) fn apply_vimrc_policy(
         }
         crate::settings::ProjectVimrc::Sandbox => {
             log::info!("project vimrc loaded in sandbox mode");
-            Some(sandbox_config_text(text))
+            Some(sandbox(text))
         }
-        crate::settings::ProjectVimrc::Trusted => Some(text.to_string()),
+        crate::settings::ProjectVimrc::Trusted => Some(unchanged()),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sandbox_config_text(text: &str) -> String {
+        sandbox(text).text
+    }
 
     #[test]
     fn preserves_safe_mappings() {
@@ -641,30 +979,35 @@ inoremap jk <Esc>
         assert!(output.contains("[sandbox] stripped"));
     }
 
+    // A `!`-suffix map and a cmap type their RHS into the command line, so a
+    // shell command in it (no leading `:`, which in an open command line is a
+    // literal colon, not a fresh prompt) is checked and stripped.
     #[test]
     fn strips_bang_suffix_map_command() {
-        let input = "nnoremap! <Leader>x :!rm -rf /<CR>\n";
+        let input = "nnoremap! <Leader>x !ls<CR>\n";
         let output = sandbox_config_text(input);
         assert!(output.contains("[sandbox] stripped"));
     }
 
     #[test]
     fn strips_abbreviated_bang_suffix() {
-        let input = "nn! <Leader>x :!rm -rf /<CR>\n";
+        let input = "nn! <Leader>x !ls<CR>\n";
         let output = sandbox_config_text(input);
         assert!(output.contains("[sandbox] stripped"));
     }
 
     #[test]
     fn strips_map_bang_suffix() {
-        let input = "map! <Leader>x :!rm -rf /<CR>\n";
+        let input = "map! <Leader>x !ls<CR>\n";
         let output = sandbox_config_text(input);
         assert!(output.contains("[sandbox] stripped"));
     }
 
+    /// A normal-mode map opens the command line with `:`, so its RHS runs the
+    /// shell even though a cmap's leading `:` would be a literal colon.
     #[test]
     fn strips_case_insensitive_map_command() {
-        let input = "NNOREMAP <Leader>x :!rm -rf /<CR>\n";
+        let input = "NNOREMAP <Leader>x :!ls<CR>\n";
         let output = sandbox_config_text(input);
         assert!(output.contains("[sandbox] stripped"));
     }
@@ -678,9 +1021,17 @@ inoremap jk <Esc>
 
     #[test]
     fn strips_cnoremap_shell_mapping() {
-        let input = "cnoremap <Leader>x :!rm -rf /<CR>\n";
+        let input = "cnoremap <Leader>x !ls<CR>\n";
         let output = sandbox_config_text(input);
         assert!(output.contains("[sandbox] stripped"));
+    }
+
+    /// In an already-open command line (a cmap) the RHS's leading `:` is a
+    /// literal colon, so `:!ls` is the inert text `:!ls`, not a shell command;
+    /// the engine does not run it, so the mapping is left in place.
+    #[test]
+    fn keeps_cmap_whose_leading_colon_is_literal() {
+        assert_all_kept(&["cnoremap <C-x> :!ls<CR>"]);
     }
 
     #[test]
@@ -773,6 +1124,125 @@ inoremap jk <Esc>
                 abbrev
             );
         }
+    }
+
+    const STRIPPED: &str = "\" [sandbox] stripped";
+
+    fn assert_all_stripped(lines: &[&str]) {
+        for line in lines {
+            let out = sandbox_config_text(line);
+            assert!(out.starts_with(STRIPPED), "kept: {line}");
+        }
+    }
+
+    fn assert_all_kept(lines: &[&str]) {
+        for line in lines {
+            let out = sandbox_config_text(line);
+            assert_eq!(out.trim_end(), *line, "stripped: {line}");
+        }
+    }
+
+    /// The engine ends a command name at the first non-letter, so `so`
+    /// followed by any blank, key or digit is `:source`.
+    #[test]
+    fn strips_source_however_its_name_ends() {
+        assert_all_stripped(&[
+            "nnoremap x :source<Tab>user://a.vim<CR>",
+            "nnoremap x :source<Space>user://a.vim<CR>",
+            "nnoremap x :so<S-Space>user://a.vim<CR>",
+            "nnoremap x :sou\tuser://a.vim<CR>",
+            "nnoremap x :so<C-I>user://a.vim<CR>",
+            "nnoremap x :so1<CR>",
+            "nnoremap x :source!<Space>user://a.vim<CR>",
+            "nnoremap x :so<CR>",
+            "nnoremap x :source",
+        ]);
+    }
+
+    #[test]
+    fn strips_source_wherever_a_command_starts() {
+        assert_all_stripped(&[
+            "nnoremap x :noh<Bar>so user://a.vim<CR>",
+            "nnoremap x :noh\\|so user://a.vim<CR>",
+            "nnoremap x :silent so user://a.vim<CR>",
+            "nnoremap x :silent!so user://a.vim<CR>",
+            "nnoremap x :sil so user://a.vim<CR>",
+            "nnoremap x :keepjumps so user://a.vim<CR>",
+            "nnoremap x :2verbose so user://a.vim<CR>",
+            "nnoremap x :windo so user://a.vim<CR>",
+            "nnoremap x :<Space>so<Space>user://a.vim<CR>",
+            "nnoremap x :<Tab>so user://a.vim<CR>",
+            "nnoremap x :\tso user://a.vim<CR>",
+            "nnoremap <silent> x :so user://a.vim<CR>",
+            "cnoremap <C-x> <Home>so<Space>user://a.vim",
+        ]);
+    }
+
+    /// `<Cmd>…<CR>` runs its text as an ex line without a command line, so it
+    /// reaches `:source` and `:!` the same way a typed `:` does.
+    #[test]
+    fn strips_source_and_shell_reached_through_cmd() {
+        assert_all_stripped(&[
+            "nnoremap x <Cmd>source user://a.vim<CR>",
+            "nnoremap x <cmd>silent so user://a.vim<CR>",
+            "nnoremap x <Cmd>so<Space>user://a.vim<CR>",
+            "nnoremap x <Cmd>noh<Bar>so user://a.vim<CR>",
+            "nnoremap x <Cmd>!ls<CR>",
+        ]);
+    }
+
+    /// Editing keys move the cursor and delete, so a command word can be
+    /// assembled from pieces. The command line is modelled as a buffer and a
+    /// cursor, not cut at the editing keys.
+    #[test]
+    fn strips_source_assembled_by_editing_the_command_line() {
+        assert_all_stripped(&[
+            "nnoremap x :urce user://a.vim<Home>so<CR>",
+            "nnoremap x :o user://a.vim<Home>s<CR>",
+            "nnoremap x :soX<BS> user://a.vim<CR>",
+            "nnoremap x :sox<C-h> user://a.vim<CR>",
+        ]);
+    }
+
+    #[test]
+    fn strips_shell_behind_a_modifier_a_bar_or_any_range() {
+        assert_all_stripped(&[
+            "nnoremap x :silent !ls<CR>",
+            "nnoremap x :noh<Bar>!ls<CR>",
+            "nnoremap x :r\t!ls<CR>",
+            "nnoremap x :'a,'b!sort<CR>",
+            "nnoremap x :/foo/!sort<CR>",
+        ]);
+    }
+
+    #[test]
+    fn keeps_mappings_that_only_resemble_a_dangerous_command() {
+        assert_all_kept(&[
+            "nnoremap x :sort<CR>",
+            "nnoremap x :set so=5<CR>",
+            "nnoremap x :echo 'so far'<CR>",
+            "nnoremap x :tabnew so.gd<CR>",
+            "nnoremap x :retab<CR>",
+            "nnoremap <Leader>so :w<CR>",
+            "nnoremap x <C-w>so",
+            "nnoremap x :w<CR><C-w>so",
+            "nnoremap x :%s/a/so/g<Left><Left>",
+            "nnoremap x <Cmd>noh<CR>",
+            "nnoremap x <Cmd>w<CR>",
+        ]);
+    }
+
+    /// A command-line key whose effect on the final text is not modelled
+    /// (`<Tab>`, `<C-r>`, history recall, …) strips the mapping, since the
+    /// text that would run cannot be known.
+    #[test]
+    fn strips_command_line_with_an_unmodelled_key() {
+        assert_all_stripped(&[
+            "nnoremap x :echo<C-r>a<CR>",
+            "nnoremap x :echo<Up><CR>",
+            "nnoremap x :echo<C-f>",
+            "cnoremap <C-x> <C-r>a",
+        ]);
     }
 
     #[test]
@@ -1240,7 +1710,9 @@ imap jj <Esc>
     // ── panelmap trust tiers (P7) ────────────────────────────────────
 
     fn sandboxed(text: &str) -> String {
-        apply_vimrc_policy(text, true, crate::settings::ProjectVimrc::Sandbox).unwrap_or_default()
+        apply_vimrc_policy(text, true, crate::settings::ProjectVimrc::Sandbox)
+            .unwrap_or_default()
+            .text
     }
 
     /// Assert that `line` came through **live**, not commented out.
@@ -1351,6 +1823,25 @@ imap jj <Esc>
         assert_survives(&out, "panelunmap editor.completion <Tab>");
     }
 
+    /// A comment that already reads like a stripped line is not counted.
+    #[test]
+    fn the_policy_counts_the_lines_it_disables() {
+        use crate::settings::ProjectVimrc;
+        let text = "nnoremap j gj\nnmap Q iBAD<Esc>\nnnoremap K :!ls<CR>\nset tw=10\n\
+                    \" [sandbox] stripped: nmap Q x\n";
+        let sandboxed = apply_vimrc_policy(text, true, ProjectVimrc::Sandbox).unwrap();
+        assert_eq!(sandboxed.stripped, 2, "{}", sandboxed.text);
+        for (is_project_level, policy) in [
+            (true, ProjectVimrc::Trusted),
+            (false, ProjectVimrc::Sandbox),
+            (false, ProjectVimrc::Disabled),
+        ] {
+            let out = apply_vimrc_policy(text, is_project_level, policy).unwrap();
+            assert_eq!((out.text.as_str(), out.stripped), (text, 0));
+        }
+        assert!(apply_vimrc_policy(text, true, ProjectVimrc::Disabled).is_none());
+    }
+
     #[test]
     fn a_trusted_vimrc_keeps_editor_surface_bindings() {
         let out = apply_vimrc_policy(
@@ -1358,7 +1849,8 @@ imap jj <Esc>
             true,
             crate::settings::ProjectVimrc::Trusted,
         )
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .text;
         assert!(out.contains("editor.completion <Esc>"), "{out}");
         assert!(!out.contains("[sandbox] stripped"), "{out}");
     }
@@ -1370,7 +1862,8 @@ imap jj <Esc>
             true,
             crate::settings::ProjectVimrc::Trusted,
         )
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .text;
         assert!(out.contains("<Shortcut>"), "{out}");
     }
 
@@ -1382,7 +1875,8 @@ imap jj <Esc>
             false,
             crate::settings::ProjectVimrc::Sandbox,
         )
-        .unwrap_or_default();
+        .unwrap_or_default()
+        .text;
         assert!(out.contains("<Shortcut>"), "{out}");
     }
 

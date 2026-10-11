@@ -84,6 +84,9 @@ grep 'file::save refused' output.log
 
 # Completion popup: who took a key, and when the delay opened or stopped
 grep 'overlay claimed\|godot completion key\|completion_delay' output.log
+
+# Config loading (startup, :source, the :mappings dialog) and what the Sandbox stripped
+grep 'sourced config\|sandbox:' output.log
 ```
 
 ### Trace level: pipeline internals
