@@ -337,6 +337,33 @@ impl Harness {
         editor.set_caret_column(col);
     }
 
+    /// An edit Godot makes on its own (a completion it accepts itself, a
+    /// paste, a refactor) that nothing reports before the next key.
+    pub(crate) fn godot_edit(&mut self, edit: impl FnOnce(&mut MockTextEdit)) {
+        edit(&mut self.session.host_mut().editor);
+    }
+
+    /// The same edit, then the deferred `text_changed` signal:
+    /// `GodotVimCore::on_text_changed` and `VimController::reconcile_external_edit`.
+    pub(crate) fn godot_edit_notified(&mut self, edit: impl FnOnce(&mut MockTextEdit)) {
+        self.godot_edit(edit);
+        let old_text = self.session.host().text().to_owned();
+        let new_text = self.session.host().editor.get_text();
+        if old_text == new_text {
+            return;
+        }
+        let cursor_byte = self.live_caret_byte(&new_text);
+        crate::controller::reconcile::reconcile_external_text_change(
+            self.session.engine_mut(),
+            &old_text,
+            &new_text,
+            cursor_byte,
+            ExternalEditKind::HostNotified,
+        );
+        self.session.host_mut().invalidate_cache();
+        self.sync_undo_nodes_after_external_edit(&old_text);
+    }
+
     /// A completion accepted through the overlay (Enter or Tab with the popup
     /// open): `controller::completion::confirm_and_reconcile_completion`, with
     /// `confirm` doing what `CodeEdit::confirm_code_completion` does.

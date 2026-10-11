@@ -175,3 +175,64 @@ fn issue_13_typing_after_an_auto_closed_bracket_stays_inside_it() {
     assert_eq!(h.line(1), "\tpass(x)\"y\"");
     assert_eq!(h.caret(), (1, 11));
 }
+
+// ── #34: typing after an accepted completion went to the old caret ───────────
+// 1.4.1 dropped reconciling Godot's own edits; 1.4.2 (c73fd0a) restored it.
+
+/// Godot accepting `print` for `pri`: `print(`, then its auto-brace closer.
+fn accept_print(editor: &mut MockTextEdit) {
+    editor.remove_text(1, 1, 1, 4);
+    editor.insert_text("print()", 1, 1);
+    editor.set_caret_line(1);
+    editor.set_caret_column(7);
+}
+
+/// How Godot's completion edit reaches the engine.
+#[derive(Clone, Copy, Debug)]
+enum Route {
+    /// Tab or Enter on a chosen row, through the completion overlay.
+    Overlay,
+    /// Godot accepted it (a click on a row); `text_changed` reports it.
+    TextChanged,
+    /// The next key arrives before the deferred `text_changed`.
+    NextKey,
+}
+
+fn pri_accepted(route: Route) -> Harness {
+    let mut h = Harness::new("func _ready() -> void:\n\t");
+    h.place_caret(1, 1);
+    h.feed("apri");
+    assert_eq!(h.line(1), "\tpri");
+    match route {
+        Route::Overlay => h.accept_completion(accept_print),
+        Route::TextChanged => h.godot_edit_notified(accept_print),
+        Route::NextKey => h.godot_edit(accept_print),
+    }
+    h
+}
+
+#[test]
+fn issue_34_typing_after_an_accepted_completion_lands_at_godots_caret() {
+    for route in [Route::Overlay, Route::TextChanged, Route::NextKey] {
+        let mut h = pri_accepted(route);
+        h.feed("x");
+        assert_eq!(h.line(1), "\tprint(x)", "{route:?}");
+        assert_eq!(h.caret(), (1, 8), "{route:?}");
+        h.feed("y<Esc>");
+        assert_eq!(h.line(1), "\tprint(xy)", "{route:?}");
+        assert_eq!(h.caret(), (1, 8), "{route:?}");
+        assert_eq!(h.mode(), Mode::Normal, "{route:?}");
+    }
+}
+
+#[test]
+fn undo_takes_a_reported_completion_with_its_insert_session() {
+    for route in [Route::Overlay, Route::TextChanged] {
+        let mut h = pri_accepted(route);
+        h.feed("x<Esc>u");
+        assert_eq!(h.line(1), "\t", "{route:?}");
+        h.feed("<C-r>");
+        assert_eq!(h.line(1), "\tprint(x)", "{route:?}");
+        assert_eq!(h.orphaned_undo_groups(), 0, "{route:?}");
+    }
+}
