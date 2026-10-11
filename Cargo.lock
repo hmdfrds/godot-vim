@@ -245,7 +245,7 @@ dependencies = [
 
 [[package]]
 name = "godot-vim"
-version = "1.9.0"
+version = "1.9.1"
 dependencies = [
  "bitflags",
  "compact_str 0.7.1",
@@ -643,8 +643,8 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vim-core"
-version = "0.9.0"
-source = "git+https://github.com/hmdfrds/vim-core.git?tag=v0.9.0#d0da940307ebaddfbaf925c20badc06b947e6bce"
+version = "0.9.1"
+source = "git+https://github.com/hmdfrds/vim-core.git?tag=v0.9.1#bec806f44494cde804b7323e55f54a337ca73309"
 dependencies = [
  "ahash",
  "arrayvec",
@@ -668,7 +668,7 @@ dependencies = [
 [[package]]
 name = "vim-regex"
 version = "0.1.0"
-source = "git+https://github.com/hmdfrds/vim-core.git?tag=v0.9.0#d0da940307ebaddfbaf925c20badc06b947e6bce"
+source = "git+https://github.com/hmdfrds/vim-core.git?tag=v0.9.1#bec806f44494cde804b7323e55f54a337ca73309"
 dependencies = [
  "ahash",
  "aho-corasick",
@@ -680,7 +680,7 @@ dependencies = [
 [[package]]
 name = "vim-text"
 version = "0.1.0"
-source = "git+https://github.com/hmdfrds/vim-core.git?tag=v0.9.0#d0da940307ebaddfbaf925c20badc06b947e6bce"
+source = "git+https://github.com/hmdfrds/vim-core.git?tag=v0.9.1#bec806f44494cde804b7323e55f54a337ca73309"
 dependencies = [
  "arrayvec",
  "bitflags",
