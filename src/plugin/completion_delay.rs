@@ -60,6 +60,7 @@ impl GodotVimCore {
     pub(super) fn recheck_completion_delay(&mut self) {
         if let Some(arm) = self.completion_arm {
             if !arm.still_wanted(self.completion_delay_facts()) {
+                log::debug!("completion_delay: stopped, the caret left the line or Insert");
                 self.disarm_completion_delay();
             }
         }
@@ -87,6 +88,7 @@ impl GodotVimCore {
             return;
         };
         if editor.is_visible_in_tree() && !editor.has_ime_text() {
+            log::debug!("completion_delay: fired, asking Godot for the popup");
             editor.request_code_completion();
         }
     }
