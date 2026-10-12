@@ -21,6 +21,23 @@ a non-breaking space, are read as the engine reads them, and colons before
 a command are skipped as in Vim, so a command hidden behind either is
 caught. Put such lines in your own `user://.godot-vimrc` if you need them.
 
+**`:q!` discards your changes.** It used to mark them saved and close the
+tab while Godot kept them in its in-memory copy of the script, so opening
+the file again showed the discarded text as if it had been saved. Now `:q!`
+loads the file's text from disk into the script, then closes the tab. In a
+built-in script it refuses and keeps the tab open, because the text is part
+of the scene; Scene > Reload Saved Scene discards it. A shader, a text file
+or a script with no file yet is refused too while it has unsaved changes,
+because GodotVim cannot put the file's text back there: undo the changes,
+then `:q`.
+
+**`:q`, `:wq` and the other close commands work on Godot 4.5.** `:q`, `:wq`,
+`:x`, `ZZ`, `:close`, `<C-w>c`, `:tabclose` and `:bd` reported success there
+and closed nothing. They now use Close from the editor's File menu, in the
+script editor and in the Shader Editor alike, as on 4.6 and later. Where no
+File menu of Godot's can close the editor you typed them in, they stop with
+a message instead.
+
 ## From v1.8.2
 
 **The completion popup follows Godot again.** Six notes:
