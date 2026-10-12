@@ -306,7 +306,7 @@ In addition to the [Godot-specific commands](#custom-commands), the following st
 | Command | Description |
 |---------|-------------|
 | `:w` / `:write` | Save the current file. `:w {path}` writes elsewhere, subject to File Access Scope. |
-| `:q` / `:quit` | Close the current tab. Refuses on unsaved changes; `:q!` discards them. |
+| `:q` / `:quit` | Close the current tab. Refuses on unsaved changes. `:q!` discards them, loading the file's text from disk; it refuses in a built-in script, and in a shader, a text file or a script with no file that has unsaved changes. |
 | `:wq` / `:x` | Save the current file, then close the tab. |
 | `:e {path}` / `:edit` | Open a file. `:e!` on the file already open reloads it from disk, discarding changes. |
 | `:qa` / `:qall` | Close the current tab. It runs the same handler as `:q` and does not close every tab. |
@@ -327,9 +327,8 @@ current script. Typed anywhere else they stop with `E382: Cannot write` and
 change no file; save a shader with the Shader Editor's own Save. `:w {path}`
 with a filesystem path (not `res://` or `user://`) still writes that editor's
 text there. `:q` and `:e` look at the editor you typed them in: `:q` checks
-its own unsaved changes and closes its tab on Godot 4.6 and later, and
-`:e! {file}` typed in a shader opens that file instead of loading it into the
-shader.
+its own unsaved changes and closes its tab, and `:e! {file}` typed in a
+shader opens that file instead of loading it into the shader.
 
 ### Configuration and Misc
 

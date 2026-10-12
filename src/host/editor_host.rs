@@ -17,7 +17,9 @@ pub(crate) trait EditorHost {
     fn get_text(&self) -> String;
 
     /// The `res://` path of the script the attached CodeEdit edits: `None`
-    /// when no script is open or the CodeEdit is outside the script editor.
+    /// when no script is open, the script has no path, or the CodeEdit is
+    /// outside the script editor. A built-in script's path names its scene
+    /// (`res://main.tscn::GDScript_x1y2z`).
     fn current_script_path(&self) -> Option<String>;
 
     /// Whether the attached CodeEdit has unsaved changes: its version against
@@ -30,8 +32,13 @@ pub(crate) trait EditorHost {
 
     fn set_text(&mut self, text: &str);
 
-    /// Closes the current script tab via ScriptEditor's own close pipeline.
-    fn close_tab(&mut self);
+    /// Closes the attached CodeEdit's tab through Godot's own File > Close,
+    /// at the end of the frame. Refuses with `HostError::NotClosed`, closing
+    /// nothing, when no File menu of Godot's would close this editor.
+    fn close_tab(&mut self) -> Result<(), HostError>;
+
+    /// The refusal `close_tab` would give now, without closing anything.
+    fn can_close(&self) -> Result<(), HostError>;
 
     /// Emits `name_changed` on the ScriptEditorBase to refresh the tab title.
     fn notify_name_changed(&self);
@@ -51,8 +58,8 @@ pub(crate) trait EditorHost {
     /// paths (`res://`, `user://`) and `std::fs` for filesystem paths.
     fn read_file(&self, path: &str) -> Result<String, HostError>;
 
-    /// Update the in-memory Script resource without saving to disk. Used by
-    /// `reload_from_disk` to keep the Script resource in sync after a reload.
+    /// Update the in-memory Script resource without saving to disk, so that
+    /// a reload or a discard also reaches the Script Godot shows on reopen.
     /// Like `save_script`, it touches only the attached CodeEdit's script.
     fn update_script_source(&mut self, text: &str);
 }
@@ -76,12 +83,13 @@ mod godot_impl {
     use compact_str::CompactString;
     use godot::classes::file_access::ModeFlags;
     use godot::classes::{
-        CodeEdit, EditorInterface, FileAccess, InputEventShortcut, ResourceLoader, ResourceSaver,
-        Script, ScriptEditorBase,
+        CodeEdit, EditorInterface, FileAccess, InputEventShortcut, MenuButton, ResourceLoader,
+        ResourceSaver, Script, ScriptEditorBase, Shortcut, Viewport,
     };
     use godot::prelude::*;
 
     use super::EditorHost;
+    use crate::bridge::godot_calls::{self, SHORTCUT_CLOSE_FILE};
     use crate::host::error::HostError;
 
     /// Production `EditorHost` wrapping a live `Gd<CodeEdit>`.
@@ -114,45 +122,80 @@ mod godot_impl {
         current_script().ok_or(HostError::NoFileName)
     }
 
-    /// Trigger ScriptEditor's native "File → Close" action.
+    /// Names of Godot's Close shortcuts, for 4.5, where
+    /// `EditorSettings.get_shortcut` is unbound: `script_editor/close_file`
+    /// and the 4.5 Shader Editor's `shader_editor/close_file`. A Shortcut
+    /// keeps its English name in every editor language.
+    const CLOSE_SHORTCUT_NAMES: [&str; 2] = ["Close", "Close File"];
+
+    /// The Close shortcut of the File menu that Godot hands a shortcut to
+    /// from `editor`, with the viewport to push it into.
     ///
-    /// `_close_tab()` is private, so we synthesize an `InputEventShortcut`
-    /// for `"script_editor/close_file"` and push it into the editor viewport
-    /// (same mechanism as Godot's Command Palette). Deferred to end-of-frame
-    /// because `_close_tab()` calls `memdelete()` synchronously.
-    fn trigger_script_editor_close() {
-        let editor_iface = EditorInterface::singleton();
-        let Some(mut settings) = editor_iface.get_editor_settings() else {
-            log::warn!("close_tab: no editor settings available");
-            return;
-        };
+    /// Godot gives a shortcut to a visible menu only when the focus owner is
+    /// inside the menu's shortcut context, and that menu's Close closes its
+    /// current tab: `editor`'s, when the context holds `editor` too.
+    fn close_route(editor: &Gd<CodeEdit>) -> Option<(Gd<Viewport>, Gd<Shortcut>)> {
+        let viewport = editor.get_viewport()?;
+        let focus = viewport.gui_get_focus_owner()?;
+        if !editor.is_visible_in_tree() {
+            return None;
+        }
+        // The very Shortcut object on 4.6+, a name match on 4.5.
+        let wanted = EditorInterface::singleton()
+            .get_editor_settings()
+            .and_then(|mut settings| {
+                godot_calls::get_shortcut_quiet(&mut settings, SHORTCUT_CLOSE_FILE)
+            });
+        let menus = viewport
+            .find_children_ex("*")
+            .type_("MenuButton")
+            .recursive(true)
+            .owned(false)
+            .done();
+        let shortcut = menus
+            .iter_shared()
+            .filter_map(|node| node.try_cast::<MenuButton>().ok())
+            .filter(|menu| {
+                menu.get_viewport().as_ref() == Some(&viewport)
+                    && menu.is_visible_in_tree()
+                    && !menu.is_disabled()
+                    && menu
+                        .get_shortcut_context()
+                        .is_some_and(|ctx| holds(&ctx, editor) && holds(&ctx, &focus))
+            })
+            .find_map(|menu| {
+                let popup = menu.get_popup()?;
+                (0..popup.get_item_count())
+                    .filter(|&i| !popup.is_item_disabled(i))
+                    .filter_map(|i| popup.get_item_shortcut(i))
+                    .find(|shortcut| match &wanted {
+                        Some(wanted) => shortcut == wanted,
+                        None => {
+                            CLOSE_SHORTCUT_NAMES.contains(&shortcut.get_name().to_string().as_str())
+                        }
+                    })
+            })?;
+        Some((viewport, shortcut))
+    }
 
-        // Look up the shortcut by its stable string path — registered by
-        // Godot's ScriptEditor via ED_SHORTCUT("script_editor/close_file", ...).
-        let Some(shortcut) = crate::bridge::godot_calls::get_shortcut(
-            &mut settings,
-            crate::bridge::godot_calls::SHORTCUT_CLOSE_FILE,
-        ) else {
-            log::warn!("close_tab: shortcut 'script_editor/close_file' not found");
-            return;
-        };
+    fn holds<T: Inherits<Node>>(ctx: &Gd<Node>, node: &Gd<T>) -> bool {
+        ctx.instance_id() == node.instance_id() || ctx.is_ancestor_of(node)
+    }
 
-        // Synthesize an InputEventShortcut. Godot's Shortcut::matches_event()
-        // does a pointer-identity check for this event type, so it matches
-        // regardless of what keycode the user has bound.
-        let mut event: Gd<InputEventShortcut> = InputEventShortcut::new_gd();
+    /// Pushes the File menu's Close for `editor`'s tab at the end of the
+    /// frame: Close frees `editor` at once, and the push runs this plugin's
+    /// own `_input`, so neither may happen inside the key that asked for it.
+    fn close_editor_tab(editor: &Gd<CodeEdit>) -> Result<(), HostError> {
+        let Some((mut viewport, shortcut)) = close_route(editor) else {
+            log::debug!("file::close refused: no File menu closes this editor");
+            return Err(HostError::NotClosed);
+        };
+        // Shortcut::matches_event takes an InputEventShortcut carrying the
+        // same object, whatever keys the user bound.
+        let mut event = InputEventShortcut::new_gd();
         event.set_shortcut(&shortcut);
-
-        // Push into the editor viewport's input pipeline at end-of-frame.
-        let Some(mut viewport) = editor_iface
-            .get_base_control()
-            .and_then(|ctrl| ctrl.get_viewport())
-        else {
-            log::warn!("close_tab: no editor viewport available");
-            return;
-        };
-
         viewport.call_deferred("push_input", &[event.to_variant(), false.to_variant()]);
+        Ok(())
     }
 
     fn emit_name_changed() {
@@ -210,8 +253,12 @@ mod godot_impl {
             self.0.set_text(&GString::from(text));
         }
 
-        fn close_tab(&mut self) {
-            trigger_script_editor_close();
+        fn close_tab(&mut self) -> Result<(), HostError> {
+            close_editor_tab(self.0)
+        }
+
+        fn can_close(&self) -> Result<(), HostError> {
+            close_route(self.0).map(|_| ()).ok_or(HostError::NotClosed)
         }
 
         fn notify_name_changed(&self) {
@@ -354,6 +401,8 @@ pub(super) mod mock {
         pub opened_path: Option<String>,
         /// Records the text passed to `update_script_source()`.
         pub script_source_updated: Option<String>,
+        /// No File menu of Godot's would close this editor.
+        pub close_refused: bool,
     }
 
     impl MockEditorHost {
@@ -369,6 +418,7 @@ pub(super) mod mock {
                 files: HashMap::new(),
                 opened_path: None,
                 script_source_updated: None,
+                close_refused: false,
             }
         }
 
@@ -408,8 +458,17 @@ pub(super) mod mock {
             self.text = text.to_string();
         }
 
-        fn close_tab(&mut self) {
+        fn close_tab(&mut self) -> Result<(), HostError> {
+            self.can_close()?;
             self.buffer_state = MockBufferState::Closed;
+            Ok(())
+        }
+
+        fn can_close(&self) -> Result<(), HostError> {
+            if self.close_refused {
+                return Err(HostError::NotClosed);
+            }
+            Ok(())
         }
 
         fn notify_name_changed(&self) {
