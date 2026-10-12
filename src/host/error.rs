@@ -9,9 +9,9 @@ use std::fmt;
 
 /// Typed errors for `EditorHost` operations.
 ///
-/// Each variant corresponds to a canonical Vim error code. The `Display` impl
-/// produces the `E{N}: {message}` format that `host_failure()` forwards to the
-/// engine as a `CompactString`.
+/// A variant with a Vim counterpart displays as `E{N}: {message}`; the
+/// Godot-only refusals carry no number. `host_failure()` forwards the text to
+/// the engine as a `CompactString`.
 #[derive(Debug, Clone)]
 pub(crate) enum HostError {
     /// E32: No file name — buffer has no associated path.
@@ -40,6 +40,9 @@ pub(crate) enum HostError {
         path: CompactString,
         detail: Option<CompactString>,
     },
+
+    /// No File menu of Godot's would close the attached editor's tab.
+    NotClosed,
 }
 
 impl fmt::Display for HostError {
@@ -70,6 +73,11 @@ impl fmt::Display for HostError {
                 Some(d) => write!(f, "E514: Failed to write \"{}\": {}", path, d),
                 None => write!(f, "E514: Failed to write \"{}\"", path),
             },
+
+            HostError::NotClosed => write!(
+                f,
+                "Cannot close this editor: no File menu of Godot's closes it from here"
+            ),
         }
     }
 }

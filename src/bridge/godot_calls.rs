@@ -93,6 +93,9 @@ pub(crate) fn dismiss_code_hint(editor: &mut Gd<CodeEdit>) {
 
 // ── Section 3: the Godot 4.6 shortcut-API gate ──────────────────────────
 
+/// Bound to ClassDB from Godot 4.6 only; see [`has_shortcut_api`].
+const GET_SHORTCUT: &str = "get_shortcut";
+
 thread_local! {
     /// Memoized answer to "does this build expose the shortcut API at all?".
     ///
@@ -147,13 +150,13 @@ fn memoized(cell: &Cell<Option<bool>>, probe: impl FnOnce() -> bool) -> bool {
 pub(crate) fn has_shortcut_api(settings: &Gd<EditorSettings>) -> bool {
     SHORTCUT_API.with(|cached| {
         let first_ask = cached.get().is_none();
-        let available = memoized(cached, || settings.has_method("get_shortcut"));
+        let available = memoized(cached, || settings.has_method(GET_SHORTCUT));
         if first_ask && !available {
             godot_warn!(
                 "GodotVim: EditorSettings.get_shortcut is unavailable on this Godot build \
                  (it requires 4.6+). Shortcut delegation is disabled: FileSystem d/r fall \
-                 back to Godot's own Delete/F2 accelerators, <C-w>c and the documentation \
-                 tooltip decline, and :actionlist omits editor shortcuts."
+                 back to Godot's own Delete/F2 accelerators, the documentation tooltip \
+                 declines, and :actionlist omits editor shortcuts."
             );
         }
         available
@@ -182,10 +185,25 @@ pub(crate) fn get_shortcut(
     // with `has_method` true, a future signature change must never panic the
     // input handler.
     let variant = settings
-        .try_call("get_shortcut", &[path.to_variant()])
+        .try_call(GET_SHORTCUT, &[path.to_variant()])
         .map_err(|err| log::warn!("get_shortcut('{path}') failed: {err}"))
         .ok()?;
     variant.try_to::<Gd<godot::classes::Shortcut>>().ok()
+}
+
+/// [`get_shortcut`] for a caller with its own way on 4.5, so that asking
+/// does not raise the 4.5 warning about features that have none.
+pub(crate) fn get_shortcut_quiet(
+    settings: &mut Gd<EditorSettings>,
+    path: &str,
+) -> Option<Gd<godot::classes::Shortcut>> {
+    let bound = SHORTCUT_API
+        .with(Cell::get)
+        .unwrap_or_else(|| settings.has_method(GET_SHORTCUT));
+    if !bound {
+        return None;
+    }
+    get_shortcut(settings, path)
 }
 
 /// Every registered editor shortcut path, as Godot returns it.

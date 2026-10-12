@@ -188,19 +188,21 @@ pub(super) fn handle_quit(
     force: ForceOverride,
 ) -> HostResult {
     log::debug!("file::quit: force={}", force.is_force());
-    if !force.is_force() && editor.is_modified() {
-        return host_failure(id, "E37: No write since last change (add ! to override)");
-    }
-
     if force.is_force() {
+        if let Err(e) = editor.can_close() {
+            return host_failure(id, e.to_string());
+        }
         // Mark clean so Godot's ScriptEditor close pipeline skips its
         // "unsaved changes" dialog.
         editor.tag_saved_version();
+    } else if editor.is_modified() {
+        return host_failure(id, "E37: No write since last change (add ! to override)");
     }
 
-    editor.close_tab();
-
-    host_success(id)
+    match editor.close_tab() {
+        Ok(()) => host_success(id),
+        Err(e) => host_failure(id, e.to_string()),
+    }
 }
 
 /// `:wq[!]`
@@ -210,10 +212,10 @@ pub(super) fn handle_write_quit(
     force: ForceOverride,
 ) -> HostResult {
     match editor.save_script(None) {
-        Ok(_) => {
-            editor.close_tab();
-            host_success(id)
-        }
+        Ok(path) => match editor.close_tab() {
+            Ok(()) => host_success(id),
+            Err(e) => host_failure(id, format!("\"{path}\" written. {e}")),
+        },
         // No `:q!` hint: the editor's own Save can still keep this text.
         Err(e @ HostError::NotCurrentScript) => host_failure(id, e.to_string()),
         Err(e) if force.is_force() => {
@@ -850,6 +852,45 @@ mod tests {
             "tag_saved_version should be called with force"
         );
         assert!(matches!(editor.buffer_state, MockBufferState::Closed));
+    }
+
+    /// Checked before the buffer is tagged saved, or a refused close would
+    /// leave the edited text marked as saved.
+    #[test]
+    fn handle_quit_force_without_a_close_changes_nothing() {
+        let mut editor = MockEditorHost::new("unsaved", Some("res://script.gd"));
+        editor.buffer_state = MockBufferState::Modified;
+        editor.close_refused = true;
+        let result = handle_quit(test_id(), &mut editor, ForceOverride::Force);
+        assert!(
+            failure_msg(&result).starts_with("Cannot close this editor"),
+            "{result:?}"
+        );
+        assert!(!editor.save_called, "nothing may be tagged saved");
+        assert_eq!(editor.buffer_state, MockBufferState::Modified);
+    }
+
+    #[test]
+    fn handle_quit_without_a_close_reports_failure() {
+        let mut editor = MockEditorHost::new("clean", Some("res://script.gd"));
+        editor.close_refused = true;
+        let result = handle_quit(test_id(), &mut editor, ForceOverride::Normal);
+        assert!(
+            failure_msg(&result).starts_with("Cannot close this editor"),
+            "{result:?}"
+        );
+        assert_eq!(editor.buffer_state, MockBufferState::Unmodified);
+    }
+
+    #[test]
+    fn handle_write_quit_without_a_close_says_written_and_not_closed() {
+        let mut editor = MockEditorHost::new("content", Some("res://script.gd"));
+        editor.close_refused = true;
+        let result = handle_write_quit(test_id(), &mut editor, ForceOverride::Normal);
+        let msg = failure_msg(&result);
+        assert!(msg.starts_with("\"res://script.gd\" written."), "msg={msg}");
+        assert!(msg.contains("Cannot close this editor"), "msg={msg}");
+        assert_eq!(editor.buffer_state, MockBufferState::Saved);
     }
 
     #[test]
