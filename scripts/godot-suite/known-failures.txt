@@ -1,0 +1,15 @@
+# Cases that fail today: <godot>::<case> <digest> (behaviour) or
+# <godot>::<case>:log (problem lines), each with a reason after #.
+# scripts/godot-suite.sh fails when the failing set of the running Godot
+# changes in either direction. Rewrite one version's lines with --bless.
+4.5-stable::doc-k:log   # CanvasItem RID and ObjectDB instances leak at exit after K on 4.5; cause unknown
+4.5-stable::issue34-race 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
+4.5-stable::issue34-race-fast 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
+4.6.1-stable::issue34-race 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
+4.6.1-stable::issue34-race-fast 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
+4.6.3-stable::issue34-race 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
+4.6.3-stable::issue34-race-fast 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
+4.7.2-stable::issue34-race 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
+4.7.2-stable::issue34-race-fast 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
+4.8-dev7::issue34-race 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
+4.8-dev7::issue34-race-fast 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line

@@ -1,0 +1,94 @@
+[gd_resource type="EditorSettings" load_steps=2 format=3]
+
+[sub_resource type="InputEventKey" id="InputEventKey_ukksy"]
+keycode = 4194326
+
+[resource]
+interface/theme/base_color = Color(0.21, 0.24, 0.29, 1)
+interface/theme/accent_color = Color(0.44, 0.73, 0.98, 1)
+interface/theme/contrast = 0.3
+text_editor/theme/highlighting/symbol_color = Color(0.67, 0.79, 1, 1)
+text_editor/theme/highlighting/keyword_color = Color(1, 0.44, 0.52, 1)
+text_editor/theme/highlighting/control_flow_keyword_color = Color(1, 0.55, 0.8, 1)
+text_editor/theme/highlighting/base_type_color = Color(0.26, 1, 0.76, 1)
+text_editor/theme/highlighting/engine_type_color = Color(0.56, 1, 0.86, 1)
+text_editor/theme/highlighting/user_type_color = Color(0.78, 1, 0.93, 1)
+text_editor/theme/highlighting/comment_color = Color(0.8025, 0.81, 0.8225, 0.5)
+text_editor/theme/highlighting/doc_comment_color = Color(0.6, 0.7, 0.8, 0.8)
+text_editor/theme/highlighting/string_color = Color(1, 0.93, 0.63, 1)
+text_editor/theme/highlighting/background_color = Color(0.115499996, 0.132, 0.15949999, 1)
+text_editor/theme/highlighting/completion_background_color = Color(0.21, 0.24, 0.29, 1)
+text_editor/theme/highlighting/completion_selected_color = Color(1, 1, 1, 0.07)
+text_editor/theme/highlighting/completion_existing_color = Color(1, 1, 1, 0.14)
+text_editor/theme/highlighting/completion_font_color = Color(0.8025, 0.81, 0.8225, 1)
+text_editor/theme/highlighting/text_color = Color(0.8025, 0.81, 0.8225, 1)
+text_editor/theme/highlighting/line_number_color = Color(0.8025, 0.81, 0.8225, 0.5)
+text_editor/theme/highlighting/safe_line_number_color = Color(0.8025, 0.97200006, 0.8225, 0.75)
+text_editor/theme/highlighting/caret_color = Color(1, 1, 1, 1)
+text_editor/theme/highlighting/selection_color = Color(0.44, 0.73, 0.98, 0.4)
+text_editor/theme/highlighting/brace_mismatch_color = Color(1, 0.47, 0.42, 1)
+text_editor/theme/highlighting/current_line_color = Color(1, 1, 1, 0.07)
+text_editor/theme/highlighting/line_length_guideline_color = Color(0.21, 0.24, 0.29, 1)
+text_editor/theme/highlighting/word_highlighted_color = Color(1, 1, 1, 0.07)
+text_editor/theme/highlighting/number_color = Color(0.63, 1, 0.88, 1)
+text_editor/theme/highlighting/function_color = Color(0.34, 0.7, 1, 1)
+text_editor/theme/highlighting/member_variable_color = Color(0.736, 0.88, 1, 1)
+text_editor/theme/highlighting/mark_color = Color(1, 0.47, 0.42, 0.3)
+text_editor/theme/highlighting/warning_color = Color(1, 0.87, 0.4, 0.15)
+text_editor/theme/highlighting/breakpoint_color = Color(1, 0.47, 0.42, 1)
+text_editor/theme/highlighting/code_folding_color = Color(1, 1, 1, 0.27)
+text_editor/theme/highlighting/search_result_color = Color(1, 1, 1, 0.07)
+export/android/debug_keystore_pass = "android"
+export/android/java_sdk_path = ""
+export/macos/rcodesign = ""
+export/web/http_port = 8060
+export/web/tls_key = ""
+export/web/tls_certificate = ""
+export/windows/osslsigncode = ""
+_editor_settings_advanced_mode = false
+_project_settings_advanced_mode = false
+_export_template_download_directory = ""
+_default_feature_profile = ""
+_script_setup_templates_dictionary = {}
+_use_favorites_root_selection = false
+_script_setup_use_script_templates = false
+plugins/GodotVim/log_level = "Off"
+plugins/GodotVim/enabled = true
+plugins/GodotVim/editor/scrolloff = 5
+plugins/GodotVim/editor/textwidth = 80
+plugins/GodotVim/editor/clipboard_enabled = false
+plugins/GodotVim/editor/ignorecase = false
+plugins/GodotVim/editor/smartcase = false
+plugins/GodotVim/editor/line_number_mode = "Hybrid"
+plugins/GodotVim/editor/inccommand = "nosplit"
+plugins/GodotVim/editor/highlight_yank_duration = 150
+plugins/GodotVim/cursor/normal_mode_color = Color(1, 1, 1, 1)
+plugins/GodotVim/cursor/insert_mode_color = Color(0.33, 1, 0.5, 1)
+plugins/GodotVim/cursor/visual_mode_color = Color(1, 0.72, 0.33, 1)
+plugins/GodotVim/cursor/replace_mode_color = Color(1, 0.2, 0.2, 0.6)
+plugins/GodotVim/cursor/operator_mode_color = Color(1, 0.72, 0.33, 1)
+plugins/GodotVim/cursor/command_mode_color = Color(1, 1, 1, 1)
+plugins/GodotVim/cursor/enabled = true
+plugins/GodotVim/cursor/lerp_speed = 25.0
+plugins/GodotVim/cursor/underline_height = 4.0
+plugins/GodotVim/mapping/timeoutlen = 1000
+plugins/GodotVim/mapping/config_file_path = ""
+plugins/GodotVim/input/passthrough_keys = ""
+plugins/GodotVim/security/shell_execution = "Disabled"
+plugins/GodotVim/security/file_access_scope = "ProjectOnly"
+plugins/GodotVim/security/project_vimrc = "Sandbox"
+plugins/GodotVim/status_bar/normal_bg = Color(0.5, 0.6, 0.8, 1)
+plugins/GodotVim/status_bar/insert_bg = Color(0.6, 0.8, 0.5, 1)
+plugins/GodotVim/status_bar/visual_bg = Color(0.8, 0.5, 0.5, 1)
+plugins/GodotVim/status_bar/replace_bg = Color(0.9, 0.6, 0.3, 1)
+plugins/GodotVim/status_bar/command_bg = Color(0.157, 0.173, 0.204, 1)
+plugins/GodotVim/status_bar/recording_bg = Color(0.9, 0.2, 0.2, 1)
+plugins/GodotVim/status_bar/text_fg = Color(1, 1, 1, 1)
+plugins/GodotVim/status_bar/error_fg = Color(1, 0.3, 0.3, 1)
+shortcuts = [{
+"name": "spatial_editor/viewport_zoom_modifier_1",
+"shortcuts": [SubResource("InputEventKey_ukksy")]
+}, {
+"name": "spatial_editor/viewport_zoom_modifier_2",
+"shortcuts": []
+}]
