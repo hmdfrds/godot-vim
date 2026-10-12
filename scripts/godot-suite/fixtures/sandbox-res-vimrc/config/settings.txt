@@ -1,0 +1,1 @@
+plugins/GodotVim/security/project_vimrc = "Sandbox"

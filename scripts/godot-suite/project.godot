@@ -1,0 +1,10 @@
+; scripts/godot-suite.sh copies this project to a scratch directory, adds the
+; addons and enables them. Do not open it in place.
+
+config_version=5
+
+[application]
+
+config/name="godot-vim-suite"
+config/features=PackedStringArray("4.5")
+run/main_scene="res://main.tscn"

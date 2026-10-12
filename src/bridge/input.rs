@@ -2579,4 +2579,51 @@ mod tests {
             "Ctrl+Shift+6 with unicode=0 should produce Ctrl+'^' via Step 5 shift handling"
         );
     }
+
+    /// `scripts/godot-suite/keys.tsv` is how the behaviour suite types keys.
+    /// Each row must decode to what its Vim notation names, and a Ctrl chord
+    /// the same with or without the character X11 may send along.
+    #[test]
+    fn suite_key_table_decodes_as_its_notation() {
+        use godot::obj::EngineEnum;
+        use vim_core::execution::parse_keys_from_string;
+
+        let table = include_str!("../../scripts/godot-suite/keys.tsv");
+        let key = |s: &str| {
+            GodotKey::try_from_ord(s.parse().expect("keycode"))
+                .unwrap_or_else(|| panic!("no Godot key {s}"))
+        };
+        let mut rows = 0;
+        for line in table
+            .lines()
+            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        {
+            let cols: Vec<&str> = line.split('\t').collect();
+            assert_eq!(cols.len(), 5, "keys.tsv row {line:?}");
+            let (token, keycode, physical) = (cols[0], key(cols[1]), key(cols[2]));
+            let unicode: u32 = cols[3].parse().expect("unicode");
+            let shift = cols[4].contains('S');
+            // vim-core has no keypad names; godot-vim reads keypad Enter as Enter.
+            let notation = if token == "<kEnter>" { "<CR>" } else { token };
+            let want = parse_keys_from_string(notation);
+            assert_eq!(want.len(), 1, "{token} is not one key");
+            assert_eq!(
+                translate_key(keycode, physical, unicode, false, false, shift, false),
+                Some(want[0]),
+                "row {line:?}"
+            );
+            if token.len() == 1 && token.chars().all(|c| c.is_ascii_lowercase()) {
+                let chord = parse_keys_from_string(&format!("<C-{token}>"));
+                for u in [0, unicode] {
+                    assert_eq!(
+                        translate_key(keycode, physical, u, true, false, false, false),
+                        Some(chord[0]),
+                        "<C-{token}> with unicode {u}"
+                    );
+                }
+            }
+            rows += 1;
+        }
+        assert!(rows > 100, "keys.tsv has only {rows} rows");
+    }
 }

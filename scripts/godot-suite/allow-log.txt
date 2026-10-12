@@ -1,0 +1,6 @@
+# Problem lines a case may print: <godot-prefix> <case or *> <regex>.
+# The prefix matches the start of the version, so 4.5 covers 4.5.2 too.
+
+# godot-vim's notice that 4.5 has no EditorSettings.get_shortcut, printed
+# once per editor by whichever case first needs a shortcut.
+4.5 * ^WARNING: GodotVim: EditorSettings\.get_shortcut is unavailable
