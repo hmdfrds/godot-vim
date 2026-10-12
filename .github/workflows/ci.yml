@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  # Weekly, to record vanilla Godot again and compare it with the tree.
+  schedule:
+    - cron: "23 5 * * 1"
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -53,16 +56,10 @@ jobs:
       - name: Rustfmt
         run: cargo fmt --all --check
 
-  godot-smoke:
-    name: load in Godot 4.5
+  build:
+    name: release build
     # Same image as release.yml's Linux build.
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    env:
-      GODOT_RELEASE: 4.5-stable
-      GODOT_ASSET: Godot_v4.5-stable_linux.x86_64
-      # From the release's SHA512-SUMS.txt; pinned so a replaced asset fails.
-      GODOT_SHA512: b5bd5d8a4dd3f44de1d123361beabaafa4825dd05b5e20fd2bfa540f32594f81d82e7c4e86fae420f4faee77d9def573b570f8b156e9c84a4dc2d5123d09e852
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -70,8 +67,63 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
+      # Built once, so every Godot row loads the same bytes.
       - name: Build
         run: cargo build --release --locked
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: libgodot_vim
+          path: target/release/libgodot_vim.so
+          retention-days: 3
+
+  godot:
+    name: Godot ${{ matrix.godot }}
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    continue-on-error: ${{ matrix.dev }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # SHA-512 from each release's SHA512-SUMS.txt; pinned so a replaced asset fails.
+        include:
+          - godot: 4.5-stable
+            sha512: b5bd5d8a4dd3f44de1d123361beabaafa4825dd05b5e20fd2bfa540f32594f81d82e7c4e86fae420f4faee77d9def573b570f8b156e9c84a4dc2d5123d09e852
+            suite: true
+            dev: false
+          - godot: 4.5.2-stable
+            sha512: e3ce6194b6d4d2dcef5e5b5136752c084d9d8b9071c10bc2d2011b947ec7439a257c8d23c541cb30699f16d9edea6dff36e6e84d2bec14a8fe9b4e9aacbe5a8d
+            suite: false
+            dev: false
+          - godot: 4.6.1-stable
+            sha512: a76fd0fe1d44a2dd6c065b6f7b434ad75f5593c07bda3d3017f8304f2d069acbcf0f39cb5d0976f0434b56e9ea852032ddbcbdb7e0ce1c75a47e1dacb6794bd7
+            suite: true
+            dev: false
+          - godot: 4.6.3-stable
+            sha512: a035258da32b77f966a5376f9fa29c30a6adde826a85ba918e1605bd1fc9823eba7d85f1dd5e748956bd2ba72827c0025ffa11bb82aec91128c407a2e723c99c
+            suite: true
+            dev: false
+          - godot: 4.7.2-stable
+            sha512: 9aa00f7a605200940bce3027a567b782f49bd8e940dd06ae9e987bd65aee1b1467edd56ed84fcdcbdd44354bf613bdbb4e5d2913e925850368e150c59ed54c65
+            suite: true
+            dev: false
+          - godot: 4.8-dev7
+            sha512: 6444078c4984699069e81f4c9fb83b88119a89d6f4dd39790acf9c2e2b1e4d0fb435a0c101aa48d24a81662d2ff50d648bd3475086d2d2ca37ce90374b97ef38
+            suite: true
+            dev: true
+    env:
+      GODOT_RELEASE: ${{ matrix.godot }}
+      GODOT_ASSET: Godot_v${{ matrix.godot }}_linux.x86_64
+      GODOT_SHA512: ${{ matrix.sha512 }}
+      RECORD: ${{ matrix.suite && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: libgodot_vim
+          path: ${{ runner.temp }}/lib
 
       - name: Download Godot
         run: |
@@ -81,4 +133,69 @@ jobs:
           unzip -q "$RUNNER_TEMP/godot.zip" -d "$RUNNER_TEMP/godot"
 
       - name: Smoke test
-        run: ./scripts/godot-smoke.sh --godot "$RUNNER_TEMP/godot/$GODOT_ASSET"
+        run: ./scripts/godot-smoke.sh --godot "$RUNNER_TEMP/godot/$GODOT_ASSET" --lib "$RUNNER_TEMP/lib/libgodot_vim.so"
+
+      - name: Behaviour suite
+        if: matrix.suite
+        run: |
+          ./scripts/godot-suite.sh --godot "$RUNNER_TEMP/godot/$GODOT_ASSET" \
+            --lib "$RUNNER_TEMP/lib/libgodot_vim.so" --keep "$RUNNER_TEMP/suite"
+
+      - name: Upload suite logs
+        if: failure() && matrix.suite
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: suite-${{ matrix.godot }}
+          path: |
+            ${{ runner.temp }}/suite/logs/
+            ${{ runner.temp }}/suite/cases/*/log
+            ${{ runner.temp }}/suite/*.txt
+            ${{ runner.temp }}/suite/obs.jsonl
+          if-no-files-found: ignore
+
+      # The recording CI makes is the one to commit: download the artifact
+      # and replace scripts/godot-suite/vanilla/ with it.
+      - name: Record vanilla Godot
+        if: ${{ !cancelled() && env.RECORD == 'true' }}
+        run: |
+          ./scripts/godot-suite.sh --godot "$RUNNER_TEMP/godot/$GODOT_ASSET" --record \
+            --out "$RUNNER_TEMP/vanilla" --keep "$RUNNER_TEMP/record"
+
+      - name: Upload the recording
+        if: ${{ !cancelled() && env.RECORD == 'true' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vanilla-${{ matrix.godot }}
+          path: ${{ runner.temp }}/vanilla/
+
+      - name: Compare the recording with the tree
+        if: ${{ !cancelled() && env.RECORD == 'true' && github.event_name == 'schedule' }}
+        run: |
+          for ext in jsonl log; do
+            tree="scripts/godot-suite/vanilla/$GODOT_RELEASE.$ext"
+            new="$RUNNER_TEMP/vanilla/$GODOT_RELEASE.$ext"
+            [ -e "$tree" ] || [ -e "$new" ] || continue
+            diff -u "$tree" "$new"
+          done
+
+  pins:
+    name: pin changes
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      # Every pin a change adds or alters is shown on the diff for review.
+      - name: Annotate pin changes
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          f=scripts/godot-suite/known-failures.txt
+          git diff --unified=0 "$BASE" HEAD -- "$f" | awk -v f="$f" '
+            /^(\+\+\+|---)/ { next }
+            /^@@/ { split($3, a, ","); n = substr(a[1], 2); next }
+            /^\+/ { if ($0 !~ /^\+#/) printf "::warning file=%s,line=%d::pin added or changed: %s\n", f, n, substr($0, 2); n++; next }
+            /^-/ { if ($0 !~ /^-#/) printf "::notice file=%s::pin removed: %s\n", f, substr($0, 2) }
+          '
