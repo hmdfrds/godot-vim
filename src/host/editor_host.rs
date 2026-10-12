@@ -17,7 +17,9 @@ pub(crate) trait EditorHost {
     fn get_text(&self) -> String;
 
     /// The `res://` path of the script the attached CodeEdit edits: `None`
-    /// when no script is open or the CodeEdit is outside the script editor.
+    /// when no script is open, the script has no path, or the CodeEdit is
+    /// outside the script editor. A built-in script's path names its scene
+    /// (`res://main.tscn::GDScript_x1y2z`).
     fn current_script_path(&self) -> Option<String>;
 
     /// Whether the attached CodeEdit has unsaved changes: its version against
@@ -56,8 +58,8 @@ pub(crate) trait EditorHost {
     /// paths (`res://`, `user://`) and `std::fs` for filesystem paths.
     fn read_file(&self, path: &str) -> Result<String, HostError>;
 
-    /// Update the in-memory Script resource without saving to disk. Used by
-    /// `reload_from_disk` to keep the Script resource in sync after a reload.
+    /// Update the in-memory Script resource without saving to disk, so that
+    /// a reload or a discard also reaches the Script Godot shows on reopen.
     /// Like `save_script`, it touches only the attached CodeEdit's script.
     fn update_script_source(&mut self, text: &str);
 }

@@ -43,6 +43,13 @@ pub(crate) enum HostError {
 
     /// No File menu of Godot's would close the attached editor's tab.
     NotClosed,
+
+    /// `:q!` in a built-in script: its text lives in the scene.
+    BuiltInDiscard,
+
+    /// `:q!` where nothing on disk can replace the edited text: a shader, a
+    /// text file, a script with no file.
+    NoDiscard,
 }
 
 impl fmt::Display for HostError {
@@ -77,6 +84,18 @@ impl fmt::Display for HostError {
             HostError::NotClosed => write!(
                 f,
                 "Cannot close this editor: no File menu of Godot's closes it from here"
+            ),
+
+            HostError::BuiltInDiscard => write!(
+                f,
+                "Cannot discard a built-in script's changes: its text is part of the scene \
+                 (Scene > Reload Saved Scene)"
+            ),
+
+            HostError::NoDiscard => write!(
+                f,
+                "Cannot discard changes here: only a script saved in its own file is \
+                 restored from disk"
             ),
         }
     }

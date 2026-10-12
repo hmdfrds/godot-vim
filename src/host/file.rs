@@ -182,6 +182,11 @@ pub(super) fn handle_write_file(
 }
 
 /// `:q[!]`
+///
+/// Godot keeps an open script's edits in its Script resource and shows them
+/// again when the file is reopened, so `:q!` puts the file's text back into
+/// the Script before closing. Changes it cannot undo that way are refused,
+/// never reported as discarded.
 pub(super) fn handle_quit(
     id: HostRequestId,
     editor: &mut impl EditorHost,
@@ -189,12 +194,9 @@ pub(super) fn handle_quit(
 ) -> HostResult {
     log::debug!("file::quit: force={}", force.is_force());
     if force.is_force() {
-        if let Err(e) = editor.can_close() {
+        if let Err(e) = editor.can_close().and_then(|()| discard_changes(editor)) {
             return host_failure(id, e.to_string());
         }
-        // Mark clean so Godot's ScriptEditor close pipeline skips its
-        // "unsaved changes" dialog.
-        editor.tag_saved_version();
     } else if editor.is_modified() {
         return host_failure(id, "E37: No write since last change (add ! to override)");
     }
@@ -203,6 +205,28 @@ pub(super) fn handle_quit(
         Ok(()) => host_success(id),
         Err(e) => host_failure(id, e.to_string()),
     }
+}
+
+/// Puts the disk text into the attached script and tags the buffer saved, so
+/// Godot closes it without asking. A clean buffer that is not a script file
+/// has nothing to discard.
+fn discard_changes(editor: &mut impl EditorHost) -> Result<(), HostError> {
+    match editor.current_script_path() {
+        Some(path) if !is_built_in(&path) => {
+            let text = editor.read_file(&path)?;
+            editor.update_script_source(&text);
+            editor.tag_saved_version();
+            Ok(())
+        }
+        _ if !editor.is_modified() => Ok(()),
+        Some(_) => Err(HostError::BuiltInDiscard),
+        None => Err(HostError::NoDiscard),
+    }
+}
+
+/// Godot's `Resource::is_built_in` for a path that is not empty.
+fn is_built_in(path: &str) -> bool {
+    path.contains("::") || path.starts_with("local://")
 }
 
 /// `:wq[!]`
@@ -814,17 +838,95 @@ mod tests {
         );
     }
 
-    #[test]
-    fn handle_quit_unsaved_with_force_closes() {
-        let mut editor = MockEditorHost::new("unsaved", Some("res://script.gd"));
+    /// A script file on disk, opened and edited: the Script Godot keeps in
+    /// memory may already hold the edit.
+    fn edited_script(path: &str) -> MockEditorHost {
+        let mut editor = MockEditorHost::new("extends Node\n# edit\n", Some(path));
         editor.buffer_state = MockBufferState::Modified;
+        editor
+            .files
+            .insert(path.to_string(), "extends Node\n".to_string());
+        editor
+    }
+
+    fn assert_kept_open(editor: &MockEditorHost, state: MockBufferState) {
+        assert_eq!(editor.buffer_state, state, "the tab must stay as it was");
+        assert!(!editor.save_called, "nothing may be tagged saved");
+        assert_eq!(
+            editor.script_source_updated, None,
+            "the Script is untouched"
+        );
+    }
+
+    #[test]
+    fn handle_quit_force_puts_the_disk_text_into_the_script_then_closes() {
+        let mut editor = edited_script("res://script.gd");
         let result = handle_quit(test_id(), &mut editor, ForceOverride::Force);
         assert_success(&result);
-        assert!(editor.save_called, "tag_saved_version should be called");
-        assert!(
-            matches!(editor.buffer_state, MockBufferState::Closed),
-            "tab should be closed"
+        assert_eq!(
+            editor.script_source_updated.as_deref(),
+            Some("extends Node\n"),
+            "reopening must show the file, not the discarded text"
         );
+        assert!(
+            editor.save_called,
+            "tagged saved so Godot closes without asking"
+        );
+        assert_eq!(editor.buffer_state, MockBufferState::Closed);
+    }
+
+    #[test]
+    fn handle_quit_force_unreadable_file_refuses_and_keeps_tab() {
+        let mut editor = edited_script("res://script.gd");
+        editor.files.clear();
+        let result = handle_quit(test_id(), &mut editor, ForceOverride::Force);
+        assert!(failure_msg(&result).starts_with("E484"), "{result:?}");
+        assert_kept_open(&editor, MockBufferState::Modified);
+    }
+
+    #[test]
+    fn handle_quit_force_built_in_script_refuses_and_keeps_tab() {
+        let mut editor = MockEditorHost::new(
+            "extends Node\n# edit\n",
+            Some("res://main.tscn::GDScript_ab12c"),
+        );
+        editor.buffer_state = MockBufferState::Modified;
+        let result = handle_quit(test_id(), &mut editor, ForceOverride::Force);
+        let msg = failure_msg(&result);
+        assert!(msg.contains("built-in script"), "msg={msg}");
+        assert!(msg.contains("Reload Saved Scene"), "msg={msg}");
+        assert_kept_open(&editor, MockBufferState::Modified);
+    }
+
+    #[test]
+    fn handle_quit_force_clean_built_in_script_closes() {
+        let mut editor =
+            MockEditorHost::new("extends Node\n", Some("res://main.tscn::GDScript_ab12c"));
+        let result = handle_quit(test_id(), &mut editor, ForceOverride::Force);
+        assert_success(&result);
+        assert_eq!(editor.buffer_state, MockBufferState::Closed);
+        assert_eq!(editor.script_source_updated, None);
+    }
+
+    /// A script tab whose script has no file yet: nothing on disk to restore.
+    #[test]
+    fn handle_quit_force_script_without_file_refuses_and_keeps_tab() {
+        let mut editor = MockEditorHost::new("extends Node\n# edit\n", None);
+        editor.buffer_state = MockBufferState::Modified;
+        let result = handle_quit(test_id(), &mut editor, ForceOverride::Force);
+        assert!(
+            failure_msg(&result).starts_with("Cannot discard changes here"),
+            "{result:?}"
+        );
+        assert_kept_open(&editor, MockBufferState::Modified);
+    }
+
+    #[test]
+    fn built_in_paths_name_their_scene() {
+        assert!(is_built_in("res://main.tscn::GDScript_ab12c"));
+        assert!(is_built_in("local://1"));
+        assert!(!is_built_in("res://player.gd"));
+        assert!(!is_built_in("res://dir.with.dots/a.gd"));
     }
 
     #[test]
@@ -842,32 +944,34 @@ mod tests {
         );
     }
 
+    /// Clean by version, but the Script may still hold an edit that was
+    /// undone, so the file's text goes back in all the same.
     #[test]
-    fn handle_quit_force_on_clean_buffer_tags_and_closes() {
-        let mut editor = MockEditorHost::new("clean", Some("res://script.gd"));
+    fn handle_quit_force_on_clean_buffer_restores_and_closes() {
+        let mut editor = edited_script("res://script.gd");
+        editor.buffer_state = MockBufferState::Unmodified;
         let result = handle_quit(test_id(), &mut editor, ForceOverride::Force);
         assert_success(&result);
-        assert!(
-            editor.save_called,
-            "tag_saved_version should be called with force"
+        assert_eq!(
+            editor.script_source_updated.as_deref(),
+            Some("extends Node\n")
         );
+        assert!(editor.save_called);
         assert!(matches!(editor.buffer_state, MockBufferState::Closed));
     }
 
-    /// Checked before the buffer is tagged saved, or a refused close would
-    /// leave the edited text marked as saved.
+    /// The close is checked before the discard touches the Script, or a
+    /// refused close would leave the edited text tagged as saved.
     #[test]
     fn handle_quit_force_without_a_close_changes_nothing() {
-        let mut editor = MockEditorHost::new("unsaved", Some("res://script.gd"));
-        editor.buffer_state = MockBufferState::Modified;
+        let mut editor = edited_script("res://script.gd");
         editor.close_refused = true;
         let result = handle_quit(test_id(), &mut editor, ForceOverride::Force);
         assert!(
             failure_msg(&result).starts_with("Cannot close this editor"),
             "{result:?}"
         );
-        assert!(!editor.save_called, "nothing may be tagged saved");
-        assert_eq!(editor.buffer_state, MockBufferState::Modified);
+        assert_kept_open(&editor, MockBufferState::Modified);
     }
 
     #[test]
@@ -1099,14 +1203,30 @@ mod tests {
         assert_eq!(editor.buffer_state, MockBufferState::Modified);
     }
 
+    /// Godot keeps a shader's edits in the Shader, and nothing names the
+    /// file to restore it from, so `:q!` refuses instead of closing.
     #[test]
-    fn handle_quit_force_outside_script_editor_discards_and_closes() {
+    fn handle_quit_force_outside_script_editor_refuses_and_keeps_tab() {
         let mut editor = shader_over_main();
         editor.buffer_state = MockBufferState::Modified;
+        editor
+            .files
+            .insert("res://main.gd".to_string(), "extends Node\n".to_string());
+        let result = handle_quit(test_id(), &mut editor, ForceOverride::Force);
+        assert!(
+            failure_msg(&result).starts_with("Cannot discard changes here"),
+            "{result:?}"
+        );
+        assert_kept_open(&editor, MockBufferState::Modified);
+    }
+
+    #[test]
+    fn handle_quit_force_outside_script_editor_clean_closes() {
+        let mut editor = shader_over_main();
         let result = handle_quit(test_id(), &mut editor, ForceOverride::Force);
         assert_success(&result);
-        assert!(editor.save_called, "marked clean so Godot closes silently");
         assert_eq!(editor.buffer_state, MockBufferState::Closed);
+        assert_eq!(editor.script_source_updated, None, "main.gd is not touched");
     }
 
     #[test]
