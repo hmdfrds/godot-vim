@@ -1,7 +1,7 @@
 //! Scroll tests: vertical/horizontal scroll state, viewport adjustment, and
 //! scroll effect handlers (center, top, bottom, left/right).
 
-use super::macros::apply_set_selection;
+use super::macros::{apply_set_selection, DispatchCtx};
 use crate::bridge::codec::{DocumentView, LineIndex};
 use crate::bridge::port::{FoldCapable, TextEditorPort, ViewportAdjust};
 use crate::testing::MockTextEdit;
@@ -351,3 +351,105 @@ fn effect_center_cursor_precise() {
 
 // half_left / half_right are #[cfg(test)] private in effects::scroll,
 // so they are tested there, not here.
+
+// ── zt, zz, zb and ScrollTo in screen rows ──────────────────────────────
+
+fn two_folds() -> MockTextEdit {
+    let mut mock = MockTextEdit::new(&numbered(80));
+    mock.set_visible_line_count(20);
+    mock.add_fold_region(2, 5);
+    mock.add_fold_region(10, 22);
+    mock.fold_all_lines();
+    mock
+}
+
+fn scroll_to(mock: &mut MockTextEdit, line: i32) {
+    let offset = offset_of(mock, line);
+    DispatchCtx::new().dispatch(mock, effects![scroll_to(offset)]);
+}
+
+#[test]
+fn zt_zz_zb_count_folded_rows() {
+    let mut mock = two_folds();
+    // Line 60 is row 45.
+    mock.set_caret_line(60);
+    crate::effects::scroll::handle_cursor_to_top(&mut mock);
+    assert_editor!(mock, scroll: 60);
+    crate::effects::scroll::handle_center_cursor(&mut mock);
+    assert_editor!(mock, scroll: 50);
+    crate::effects::scroll::handle_cursor_to_bottom(&mut mock);
+    assert_editor!(mock, scroll: 41);
+}
+
+#[test]
+fn zt_zz_zb_count_wrapped_rows() {
+    let mut mock = MockTextEdit::new(&numbered(80));
+    mock.remove_text(5, 0, 5, 6);
+    mock.insert_text(&"x".repeat(45), 5, 0);
+    mock.set_visible_line_count(20);
+    mock.set_wrap_width(10);
+    // Line 5 takes rows 5 to 9, so line 40 is row 44.
+    mock.set_caret_line(40);
+    crate::effects::scroll::handle_cursor_to_top(&mut mock);
+    assert_editor!(mock, scroll: 40);
+    crate::effects::scroll::handle_center_cursor(&mut mock);
+    assert_editor!(mock, scroll: 30);
+    crate::effects::scroll::handle_cursor_to_bottom(&mut mock);
+    assert_editor!(mock, scroll: 21);
+    // Line 12 is row 16, ten rows under line 5's second row.
+    mock.set_caret_line(12);
+    crate::effects::scroll::handle_center_cursor(&mut mock);
+    assert_editor!(mock, scroll: 5);
+    assert_eq!(mock.get_v_scroll(), 6.0);
+}
+
+#[test]
+fn scroll_to_moves_one_row_over_a_fold_header() {
+    let mut mock = two_folds();
+    scroll_to(&mut mock, 10);
+    assert_editor!(mock, scroll: 10);
+    // Ctrl-E from the header asks for its first hidden line.
+    scroll_to(&mut mock, 11);
+    assert_editor!(mock, scroll: 23);
+    // Ctrl-Y asks for the last hidden line.
+    scroll_to(&mut mock, 22);
+    assert_editor!(mock, scroll: 10);
+    // Ctrl-D from above the header asks for a hidden line.
+    scroll_to(&mut mock, 7);
+    scroll_to(&mut mock, 14);
+    assert_editor!(mock, scroll: 10);
+}
+
+#[test]
+fn scroll_to_goes_up_from_the_top_before_the_caret_moved() {
+    let mut mock = two_folds();
+    scroll_to(&mut mock, 23);
+    // Ctrl-U moves the caret first, and the view with it.
+    let (caret, top) = (offset_of(&mock, 7), offset_of(&mock, 15));
+    DispatchCtx::new().dispatch(&mut mock, effects![set_cursor(caret); scroll_to(top)]);
+    assert_editor!(mock, scroll: 10);
+}
+
+#[test]
+fn scroll_to_judges_the_direction_before_scrolloff_moves_the_view() {
+    let mut ctx = DispatchCtx::new().with_scrolloff(1);
+    let mut mock = two_folds();
+    scroll_to(&mut mock, 10);
+    // Ctrl-D from the header: scrolloff takes the view off the header.
+    let (caret, top) = (offset_of(&mock, 41), offset_of(&mock, 20));
+    ctx.dispatch(&mut mock, effects![set_cursor(caret); scroll_to(top)]);
+    assert_editor!(mock, scroll: 23);
+    // Ctrl-U from below the fold: scrolloff puts the view on the header.
+    let (caret, top) = (offset_of(&mock, 23), offset_of(&mock, 13));
+    ctx.dispatch(&mut mock, effects![set_cursor(caret); scroll_to(top)]);
+    assert_editor!(mock, scroll: 10);
+}
+
+#[test]
+fn scroll_to_puts_the_line_on_top_below_a_fold() {
+    let mut mock = two_folds();
+    scroll_to(&mut mock, 7);
+    assert_editor!(mock, scroll: 7);
+    scroll_to(&mut mock, 30);
+    assert_editor!(mock, scroll: 30);
+}

@@ -2,7 +2,7 @@
 //!
 //! Trait hierarchy:
 //!
-//! - **`TextEditorPort`** (39 methods): core text editing (required).
+//! - **`TextEditorPort`** (38 methods): core text editing (required).
 //! - **`FoldCapable`** (5 methods, default no-ops) — code folding.
 //! - **`IdeCapable`** (7 methods, default no-ops): autocomplete/hints.
 //! - **`NavigationCapable`** (2 methods, default no-ops) — go-to-definition, hover docs.
@@ -82,7 +82,6 @@ pub(crate) trait TextEditorPort {
 
     // Vertical scrolling counts screen rows: a closed fold is one row, a
     // wrapped line one per wrap. Lines and carets count document lines.
-    fn set_v_scroll(&mut self, value: f64);
     fn get_v_scroll(&self) -> f64;
     fn get_first_visible_line(&self) -> i32;
     /// Whole rows that fit in the view.

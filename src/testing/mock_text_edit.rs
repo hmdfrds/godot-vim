@@ -848,10 +848,6 @@ impl TextEditorPort for MockTextEdit {
 
     // ── Scroll ──────────────────────────────────────────────────────────
 
-    fn set_v_scroll(&mut self, value: f64) {
-        MockTextEdit::set_v_scroll(self, value);
-    }
-
     fn get_v_scroll(&self) -> f64 {
         self.v_scroll
     }

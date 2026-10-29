@@ -288,6 +288,7 @@ pub(super) struct DispatchCtx {
     state: crate::state::ShellState,
     editor_id: godot::prelude::InstanceId,
     clipboard: crate::bridge::clipboard::MockClipboard,
+    scrolloff: i32,
 }
 
 impl DispatchCtx {
@@ -296,7 +297,13 @@ impl DispatchCtx {
             state: crate::state::ShellState::default(),
             editor_id: godot::prelude::InstanceId::from_i64(1),
             clipboard: crate::bridge::clipboard::MockClipboard::new(),
+            scrolloff: 0,
         }
+    }
+
+    pub(super) fn with_scrolloff(mut self, scrolloff: i32) -> Self {
+        self.scrolloff = scrolloff;
+        self
     }
 
     /// Run effects through the full bridge dispatch pipeline, including text
@@ -317,7 +324,7 @@ impl DispatchCtx {
                 auto_brace: crate::effects::dispatch::AutoBraceMode::Ineligible,
                 auto_brace_snapshot: crate::bridge::AutoBraceSnapshot::disabled(),
                 line_index_hint: None,
-                scrolloff: 0,
+                scrolloff: self.scrolloff,
                 highlight_yank_duration_ms: 150,
                 syntax_query: Box::new(|_, _| crate::bridge::SyntaxRegion::code()),
                 clipboard: &mut self.clipboard,
@@ -343,7 +350,7 @@ impl DispatchCtx {
                 auto_brace: crate::effects::dispatch::AutoBraceMode::Ineligible,
                 auto_brace_snapshot: crate::bridge::AutoBraceSnapshot::disabled(),
                 line_index_hint: None,
-                scrolloff: 0,
+                scrolloff: self.scrolloff,
                 highlight_yank_duration_ms: 150,
                 syntax_query: Box::new(|_, _| crate::bridge::SyntaxRegion::code()),
                 clipboard: &mut self.clipboard,

@@ -523,6 +523,7 @@ fn apply_step_effect_to_host(
                 let env = crate::effects::dispatch::DispatchEnv {
                     doc: &doc,
                     scrolloff,
+                    top_line: port.get_first_visible_line(),
                     highlight_yank_duration_ms: highlight_yank_ms,
                     editor_id,
                 };

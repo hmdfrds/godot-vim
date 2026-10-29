@@ -299,10 +299,6 @@ impl TextEditorPort for CodeEditPort<'_> {
         self.0.end_multicaret_edit();
     }
 
-    fn set_v_scroll(&mut self, value: f64) {
-        self.0.set_v_scroll(value);
-    }
-
     fn get_v_scroll(&self) -> f64 {
         self.0.get_v_scroll()
     }
