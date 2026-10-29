@@ -23,7 +23,7 @@ jobs:
         with:
           key: linux
 
-      - run: cargo build --release --target x86_64-unknown-linux-gnu
+      - run: cargo build --release --locked --target x86_64-unknown-linux-gnu
 
       - name: Stage artifact
         run: |
@@ -49,7 +49,7 @@ jobs:
         with:
           key: windows
 
-      - run: cargo build --release --target x86_64-pc-windows-msvc
+      - run: cargo build --release --locked --target x86_64-pc-windows-msvc
 
       - name: Stage artifact
         shell: bash
@@ -77,10 +77,10 @@ jobs:
           key: macos
 
       - name: Build ARM64
-        run: cargo build --release --target aarch64-apple-darwin
+        run: cargo build --release --locked --target aarch64-apple-darwin
 
       - name: Build x86_64
-        run: cargo build --release --target x86_64-apple-darwin
+        run: cargo build --release --locked --target x86_64-apple-darwin
 
       - name: Create universal binary
         run: |
