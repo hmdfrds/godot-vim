@@ -17,6 +17,12 @@ use std::sync::Once;
 
 use godot::prelude::*;
 
+/// Whether gdext's bindings are loaded: false in `cargo test` and after unload.
+/// The only use of `godot::sys`, which is gdext's private API.
+pub(crate) fn engine_loaded() -> bool {
+    godot::sys::is_initialized()
+}
+
 fn extract_panic_message(payload: &dyn Any) -> String {
     if let Some(s) = payload.downcast_ref::<&str>() {
         s.to_string()
@@ -44,7 +50,7 @@ pub(crate) fn install_panic_hook() {
             // Gate: only report if the engine is up, we're inside one of our
             // guards (foreign panics are not mislabeled), and the signature
             // hasn't been seen within the dedup window.
-            if godot::sys::is_initialized()
+            if engine_loaded()
                 && GUARD_DEPTH.with(|d| d.get()) > 0
                 && DEDUP_HOOK.with(|d| {
                     d.borrow_mut()
@@ -117,7 +123,7 @@ where
         Ok(r) => r,
         Err(e) => {
             let msg = extract_panic_message(e.as_ref());
-            if godot::sys::is_initialized()
+            if engine_loaded()
                 && DEDUP_GUARD.with(|d| {
                     d.borrow_mut()
                         .should_report(&format!("{label}:{msg}"), now_ms())

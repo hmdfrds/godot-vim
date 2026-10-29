@@ -327,7 +327,7 @@ impl ShapedTextCache {
     pub(crate) fn invalidate(&mut self) {
         // Guard: only free when Godot is still running, otherwise the
         // TextServer singleton is already destroyed and the call would crash.
-        if self.line >= 0 && godot::sys::is_initialized() {
+        if self.line >= 0 && crate::safety::engine_loaded() {
             if let Some(ref mut ts) = self.ts {
                 ts.free_rid(self.rid);
             }

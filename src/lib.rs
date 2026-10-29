@@ -174,4 +174,19 @@ mod tests {
             "add `tool` to these #[class(...)] attributes: {missing:?}"
         );
     }
+
+    /// `godot::sys` is gdext's private API and is renamed without notice.
+    #[test]
+    fn godot_sys_is_used_only_by_safety_engine_loaded() {
+        let needle = ["godot", "::sys::"].concat();
+        let users: Vec<String> = rust_sources()
+            .into_iter()
+            .filter(|(path, src)| src.contains(&needle) && !path.ends_with("src/safety.rs"))
+            .map(|(path, _)| path.display().to_string())
+            .collect();
+        assert!(
+            users.is_empty(),
+            "call crate::safety::engine_loaded() instead: {users:?}"
+        );
+    }
 }

@@ -110,7 +110,7 @@ impl log::Log for GodotLogger {
         // requires the engine to be initialized (MAIN_THREAD_ID set). In
         // `cargo test` the engine is never started, so this guard prevents
         // a "Godot engine not available" panic on any log macro.
-        if !godot::sys::is_initialized() {
+        if !crate::safety::engine_loaded() {
             return;
         }
 
