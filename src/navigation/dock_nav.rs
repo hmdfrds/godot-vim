@@ -167,7 +167,7 @@ fn handle_tree_nav(mut tree: Gd<Tree>, direction: NavDirection) -> bool {
         // visible), pick the first visible item. If the root is hidden (common
         // in SceneTree dock), skip it — selecting a hidden root is a no-op that
         // makes the Tree appear unresponsive.
-        if let Some(mut root) = tree.get_root() {
+        if let Some(root) = tree.get_root() {
             let start = if tree.safe_is_root_hidden() {
                 root.get_next_visible()
             } else {
@@ -281,7 +281,7 @@ fn handle_item_list_nav(mut list: Gd<ItemList>, direction: NavDirection) -> bool
 /// Godot editor's help/docs panels.
 const RICHTEXTLABEL_SCROLL_STEP: f64 = 50.0;
 
-fn handle_richtextlabel_nav(mut label: Gd<RichTextLabel>, direction: NavDirection) -> bool {
+fn handle_richtextlabel_nav(label: Gd<RichTextLabel>, direction: NavDirection) -> bool {
     let Some(mut scroll) = label.get_v_scroll_bar() else {
         return false;
     };

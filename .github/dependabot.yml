@@ -15,6 +15,5 @@ updates:
       # did exactly that and main did not compile until #67 pinned it back.
       - dependency-name: "compact_str"
       # gdext upgrades change the bridge API surface and are deliberate
-      # migration projects on their own branch, never a bot bump. PR #68 is
-      # the standing example: 0.4.5 to 0.5.5 fails CI outright.
+      # migration projects on their own branch, never a bot bump.
       - dependency-name: "godot"

@@ -97,7 +97,7 @@ mod godot_impl {
 
     fn current_script() -> Option<Gd<Script>> {
         let editor_iface = EditorInterface::singleton();
-        let mut script_editor = editor_iface.get_script_editor()?;
+        let script_editor = editor_iface.get_script_editor()?;
         let script = script_editor.get_current_script()?;
         if script.get_path().is_empty() {
             return None;
