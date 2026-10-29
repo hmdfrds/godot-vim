@@ -910,20 +910,27 @@ fn backspace(line: &mut CommandLine, len: usize) -> CmdStep {
 }
 
 /// Mirrors vim-core's `key_notation::parse_impl`, the parser of mapping
-/// right-hand sides.
+/// right-hand sides, in linear time.
 fn mapping_keys(rhs: &str) -> Vec<vim_core::keymap::KeyEvent> {
     use vim_core::keymap::{Key, KeyEvent};
     let mut keys = Vec::new();
-    let mut rest = rhs;
-    while let Some(ch) = rest.chars().next() {
+    let [mut lt, mut gt, mut paren] = ['<', '>', ')'].map(|c| NextChar::new(rhs, c));
+    let mut at = 0;
+    while let Some(ch) = rhs[at..].chars().next() {
         if ch == '<' {
-            if let Some(end) = rest.find('>') {
-                if let Some(key) = KeyEvent::from_vim_notation(&rest[..=end]) {
-                    rest = &rest[end + 1..];
+            // Only the key of a notation can be a `<` (`<<>`, `<C-<>`).
+            let end = gt
+                .at_or_after(at)
+                .filter(|&end| lt.at_or_after(at + 1).is_none_or(|lt| lt + 1 >= end));
+            if let Some(end) = end {
+                if let Some(key) = KeyEvent::from_vim_notation(&rhs[at..=end]) {
+                    at = end + 1;
                     // `<Action>(name)` and `<Plug>(name)` take their name.
-                    if matches!(key.key(), Key::Action(_) | Key::Plug(_)) && rest.starts_with('(') {
-                        if let Some(close) = rest.find(')').filter(|&close| close > 1) {
-                            rest = &rest[close + 1..];
+                    if matches!(key.key(), Key::Action(_) | Key::Plug(_))
+                        && rhs[at..].starts_with('(')
+                    {
+                        if let Some(close) = paren.at_or_after(at).filter(|&close| close > at + 1) {
+                            at = close + 1;
                         }
                     }
                     keys.push(key);
@@ -932,9 +939,34 @@ fn mapping_keys(rhs: &str) -> Vec<vim_core::keymap::KeyEvent> {
             }
         }
         keys.push(KeyEvent::char(ch));
-        rest = &rest[ch.len_utf8()..];
+        at += ch.len_utf8();
     }
     keys
+}
+
+/// The first `c` in `text` at or after an offset that only grows, searched
+/// for again only once the offset passes it, so each byte is read once.
+struct NextChar<'a> {
+    text: &'a str,
+    c: char,
+    next: Option<usize>,
+}
+
+impl<'a> NextChar<'a> {
+    fn new(text: &'a str, c: char) -> Self {
+        Self {
+            text,
+            c,
+            next: text.find(c),
+        }
+    }
+
+    fn at_or_after(&mut self, offset: usize) -> Option<usize> {
+        if self.next.is_some_and(|next| next < offset) {
+            self.next = self.text[offset..].find(self.c).map(|at| offset + at);
+        }
+        self.next
+    }
 }
 
 /// Whether a command typed at one of `starts`, each a tail of one line, runs
@@ -2215,6 +2247,40 @@ inoremap jk <Esc>
         let input = "nnoremap <Leader>x :ñfoo<CR>\n";
         let output = sandbox_config_text(input);
         assert!(output.contains("nnoremap")); // safe mapping, not stripped
+    }
+
+    /// A `<` inside a notation is read only as its key, as vim-core reads it.
+    #[test]
+    fn reads_a_notation_as_the_engine_does() {
+        let read = |rhs: &str| -> String {
+            mapping_keys(rhs)
+                .iter()
+                .map(|key| key.to_vim_notation())
+                .collect()
+        };
+        for (rhs, keys) in [
+            ("<<>", "<lt>"),
+            ("<<<>", "<lt><lt>"),
+            ("<C-<>", "<C-<>"),
+            ("<a<CR>", "<lt>a<CR>"),
+            ("<<CR>>", "<lt><CR><gt>"),
+            ("<C-<C-x>", "<lt>C-<C-x>"),
+            ("<F0001>", "<F1>"),
+            ("<lt", "<lt>lt"),
+        ] {
+            assert_eq!(read(rhs), keys, "{rhs}");
+        }
+        assert_eq!(mapping_keys("<Plug>(a)x").len(), 2);
+        assert_eq!(mapping_keys("<Plug>()x").len(), 4);
+        assert_eq!(mapping_keys("<Plug>(<Plug>(a)x").len(), 2);
+    }
+
+    #[test]
+    fn reads_a_long_run_of_angle_brackets_in_linear_time() {
+        let n = 1 << 20;
+        assert_eq!(mapping_keys(&"<".repeat(n)).len(), n);
+        assert_eq!(mapping_keys(&format!("{}>", "<".repeat(n))).len(), n - 1);
+        assert_eq!(mapping_keys(&"<Plug>(".repeat(n / 8)).len(), n / 4);
     }
 
     // --- Recursive mapping stripping tests ---
