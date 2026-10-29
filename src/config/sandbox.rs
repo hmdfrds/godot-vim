@@ -99,6 +99,16 @@ const COMMAND_PREFIXES: &[(&str, &str)] = &[
     ("windo", "windo"),
 ];
 
+/// `:global` (`:g!` too), `:vglobal` and vim-core's structural `:sx` and
+/// `:sy`, as `(min_prefix, full_command)`. They run the command after their
+/// pattern.
+const GLOBAL_COMMANDS: &[(&str, &str)] = &[
+    ("g", "global"),
+    ("v", "vglobal"),
+    ("sx", "sx"),
+    ("sy", "sy"),
+];
+
 /// A vimrc after the Project Vimrc policy.
 #[derive(Debug, Default)]
 pub(crate) struct PolicyText {
@@ -521,8 +531,8 @@ fn is_map_or_noremap_abbrev(name: &str) -> bool {
 /// abbreviation-aware, case-insensitive ex-commands the right-hand side runs.
 ///
 /// A blacklist, so not complete: register execution (`@a`, `:@a`), the `!`
-/// filter operator, `<expr>` mappings and keys fed through `:normal` /
-/// `:global` are not analysed (see the module docs).
+/// filter operator, `<expr>` mappings and keys fed through `:normal` (from a
+/// `:global` too) are not analysed (see the module docs).
 fn contains_shell_pattern(line: &str) -> bool {
     if FUNCTION_PATTERNS.iter().any(|pat| line.contains(pat)) {
         return true;
@@ -628,11 +638,13 @@ fn simulate_command_line(rhs: &str, starts_in_command_line: bool) -> bool {
 }
 
 /// One committed command line, judged by the text check and by vim-core's
-/// parser; either one strips. The text check splits on every `|`, an
-/// over-approximation (a `|` inside a pattern or string makes extra pieces)
-/// which can only strip more, never less.
+/// parser; either one strips. The text check takes a command to start after
+/// every `|`, an over-approximation (a `|` inside a pattern or string makes
+/// extra starts) which can only strip more, never less.
 fn line_runs_dangerous(line: &str) -> bool {
-    line.split('|').any(starts_dangerous_command) || parses_to_unsafe_command(line)
+    let after_bars = line.match_indices('|').map(|(at, _)| &line[at + 1..]);
+    starts_dangerous_command(std::iter::once(line).chain(after_bars).collect())
+        || parses_to_unsafe_command(line)
 }
 
 /// Whether one of the commands vim-core runs for `line` is unsafe, split and
@@ -685,7 +697,10 @@ fn is_unsafe_command(command: &vim_core::grammar::types::ExCommand) -> bool {
         ExCommand::Read { path, .. } => path.starts_with('!'),
         ExCommand::WinDo { command, .. }
         | ExCommand::BufDo { command, .. }
-        | ExCommand::TabDo { command, .. } => is_unsafe_command(command),
+        | ExCommand::TabDo { command, .. }
+        | ExCommand::Global { command, .. }
+        | ExCommand::StructuralExtract { command, .. }
+        | ExCommand::StructuralComplement { command, .. } => is_unsafe_command(command),
         _ => false,
     }
 }
@@ -794,22 +809,76 @@ fn mapping_keys(rhs: &str) -> Vec<vim_core::keymap::KeyEvent> {
     keys
 }
 
-/// Whether `text`, typed where a command starts, runs one of
-/// [`EX_COMMAND_PATTERNS`], also behind a range and [`COMMAND_PREFIXES`].
-fn starts_dangerous_command(text: &str) -> bool {
-    let mut text = skip_range(text);
-    loop {
-        if EX_COMMAND_PATTERNS
-            .iter()
-            .any(|&(min, full, tail)| matches_ex_pattern(text, min, full, tail))
-        {
-            return true;
+/// Whether a command typed at one of `starts`, each a tail of one line, runs
+/// one of [`EX_COMMAND_PATTERNS`], also behind a range, [`COMMAND_PREFIXES`]
+/// and the pattern of a [`GLOBAL_COMMANDS`] command.
+fn starts_dangerous_command(mut starts: Vec<&str>) -> bool {
+    // A start is named by its length. Judging each once keeps the readings
+    // of nested `:g` from multiplying.
+    let mut judged = std::collections::HashSet::new();
+    while let Some(start) = starts.pop() {
+        if !judged.insert(start.len()) {
+            continue;
         }
-        match strip_command_prefix(text) {
-            Some(rest) => text = skip_range(rest),
-            None => return false,
+        let mut text = skip_range(start);
+        loop {
+            if EX_COMMAND_PATTERNS
+                .iter()
+                .any(|&(min, full, tail)| matches_ex_pattern(text, min, full, tail))
+            {
+                return true;
+            }
+            starts.extend(global_commands(text));
+            match strip_command_prefix(text) {
+                Some(rest) => text = skip_range(rest),
+                None => break,
+            }
         }
     }
+    false
+}
+
+/// The commands a `:global`, `:sx` or `:sy` at the start of `text` runs
+/// after its pattern. vim-core takes the character after the name (after
+/// `g!` too) as the delimiter, a `!` or a blank too; Vim skips the `!` and
+/// blanks first. Both are judged.
+fn global_commands(text: &str) -> Vec<&str> {
+    let (word, rest) = split_command_name(text);
+    if !GLOBAL_COMMANDS
+        .iter()
+        .any(|&(min, full)| matches_abbrev(word, min, full))
+    {
+        return Vec::new();
+    }
+    let after_bang = rest.strip_prefix('!').unwrap_or(rest);
+    [rest, after_bang, after_bang.trim_start()]
+        .into_iter()
+        .filter_map(after_pattern)
+        .collect()
+}
+
+/// The text after the pattern `text` starts with, ended as vim-core's
+/// `take_delimited` ends it: at the first delimiter a backslash does not
+/// escape. `None` when no delimiter ends it, which runs nothing. Vim reads
+/// `\/`, `\?` and `\&` as a previous pattern.
+fn after_pattern(text: &str) -> Option<&str> {
+    let mut chars = text.chars();
+    let delim = chars.next().filter(|c| !c.is_ascii_alphabetic())?;
+    let pattern = chars.as_str();
+    if delim == '\\' {
+        return pattern.strip_prefix(['/', '?', '&']);
+    }
+    let mut escaped = false;
+    for (at, c) in pattern.char_indices() {
+        if escaped {
+            escaped = false;
+        } else if c == '\\' {
+            escaped = true;
+        } else if c == delim {
+            return Some(&pattern[at + c.len_utf8()..]);
+        }
+    }
+    None
 }
 
 /// Skips blanks (any `char::is_whitespace`, as vim-core reads them), colons
@@ -842,10 +911,7 @@ fn skip_range(mut text: &str) -> &str {
 /// The text after a leading command modifier, such as `silent` in
 /// `silent so x`, or `None` when `text` starts with none.
 fn strip_command_prefix(text: &str) -> Option<&str> {
-    let end = text
-        .find(|c: char| !c.is_ascii_alphabetic())
-        .unwrap_or(text.len());
-    let (word, rest) = text.split_at(end);
+    let (word, rest) = split_command_name(text);
     let rest = match rest.strip_prefix('!') {
         Some(after_bang) => after_bang,
         None if rest.starts_with(char::is_whitespace) => rest,
@@ -855,6 +921,12 @@ fn strip_command_prefix(text: &str) -> Option<&str> {
         .iter()
         .any(|&(min, full)| matches_abbrev(word, min, full))
         .then_some(rest)
+}
+
+/// A command name, which ends at the first non-letter, and the text after it.
+fn split_command_name(text: &str) -> (&str, &str) {
+    let end = text.find(|c: char| !c.is_ascii_alphabetic());
+    text.split_at(end.unwrap_or(text.len()))
 }
 
 fn matches_ex_pattern(text: &str, min: &str, full: &str, tail: Tail) -> bool {
@@ -1410,6 +1482,125 @@ inoremap jk <Esc>
     #[test]
     fn a_mapping_that_defines_a_mapping_defines_nothing_in_the_engine() {
         assert_defines_nothing_in_the_engine(&["nnoremap x :nnoremap y :!echo hi<lt>CR><CR>"]);
+    }
+
+    /// `:g`, `:g!` and `:v` run the command after their pattern, so they are
+    /// judged by that command.
+    #[test]
+    fn strips_a_global_that_runs_a_stripped_command() {
+        assert_all_stripped(&[
+            "nnoremap x :g/x/so user://a.vim<CR>",
+            "nnoremap x :g!/x/so user://a.vim<CR>",
+            "nnoremap x :v/x/so user://a.vim<CR>",
+            "nnoremap x :g/x/!ls<CR>",
+            "nnoremap x :v/x/r !ls<CR>",
+            "nnoremap x :g/x/nnoremap y Z<CR>",
+            "nnoremap x :v/x/set shell=/bin/evil<CR>",
+            "nnoremap x :g/x/windo so f<CR>",
+            "nnoremap x :g/x/v/y/so f<CR>",
+            "nnoremap x :gl/x/so f<CR>",
+            "nnoremap x :global/x/so f<CR>",
+            "nnoremap x :global!/x/so f<CR>",
+            "nnoremap x :vg/x/so f<CR>",
+            "nnoremap x :vglobal/x/!ls<CR>",
+            "nnoremap x <Cmd>g/x/so f<CR>",
+        ]);
+    }
+
+    #[test]
+    fn strips_a_global_behind_a_range_a_modifier_or_a_bar() {
+        assert_all_stripped(&[
+            "nnoremap x :%g/x/so f<CR>",
+            "nnoremap x :'<,'>v/x/so f<CR>",
+            "nnoremap x :silent g/x/so f<CR>",
+            "nnoremap x :windo g!/x/so f<CR>",
+            "nnoremap x :noh<Bar>g/x/so f<CR>",
+            "nnoremap x :noh\\|v/x/!ls<CR>",
+            "nnoremap x :g/x/silent so f<CR>",
+            "nnoremap x :g/x/ :.,+1so f<CR>",
+        ]);
+    }
+
+    /// The pattern ends at the first delimiter a backslash does not escape. A
+    /// `!` or a blank after `g` is read both as vim-core reads it, as the
+    /// delimiter, and as Vim does, skipped.
+    #[test]
+    fn strips_a_global_however_its_pattern_is_delimited() {
+        assert_all_stripped(&[
+            "nnoremap x :g/a\\/b/so f<CR>",
+            "nnoremap x :g#x#so f<CR>",
+            "nnoremap x :v,a\\,b,!ls<CR>",
+            "nnoremap x :g!x!so f<CR>",
+            "nnoremap x :g /x/so f<CR>",
+            "nnoremap x :g! /x/so f<CR>",
+            "nnoremap x :g\\/so f<CR>",
+            "nnoremap x :g/a<Bar>b/so f<CR>",
+        ]);
+    }
+
+    /// `:normal` is not analysed, from a `:global` either.
+    #[test]
+    fn keeps_a_global_that_runs_a_safe_command() {
+        assert_all_kept(&[
+            "nnoremap x :g/x/d<CR>",
+            "nnoremap x :g/x/s/a/b/<CR>",
+            "nnoremap x :g!/x/d<CR>",
+            "nnoremap x :v/x/normal dd<CR>",
+            "nnoremap x :g/so f/d<CR>",
+            "nnoremap x :g/a\\/so f/d<CR>",
+            "nnoremap x :g/so f<CR>",
+        ]);
+    }
+
+    #[test]
+    fn keeps_commands_that_only_start_like_global() {
+        assert_all_kept(&[
+            "nnoremap x :goto 5<CR>",
+            "nnoremap x :grep TODO<CR>",
+            "nnoremap x :vsplit<CR>",
+            "nnoremap x :vertical new<CR>",
+            "nnoremap x :visual res://a.gd<CR>",
+            "nnoremap x :view res://a.gd<CR>",
+            "nnoremap x :vnew<CR>",
+        ]);
+    }
+
+    /// vim-core's structural `:sx` and `:sy` run the command after their
+    /// pattern, as `:g` does, and the text check and the parser each judge it.
+    #[test]
+    fn strips_a_structural_command_that_runs_a_stripped_command() {
+        assert_all_stripped(&[
+            "nnoremap x :sx/x/so user://a.vim<CR>",
+            "nnoremap x :sy/x/!ls<CR>",
+            "nnoremap x :sx#x#nnoremap y Z<CR>",
+            "nnoremap x :sy/x/set shell=/bin/evil<CR>",
+            "nnoremap x :silent sx/x/so f<CR>",
+            "nnoremap x :g/x/sy/y/so f<CR>",
+            "nnoremap x :windo sx/x/nnoremap y Z<CR>",
+            "nnoremap x <Cmd>sy/x/so f<CR>",
+        ]);
+        for line in ["sx/x/so f", "sy#x#!ls", "windo sx/x/so f"] {
+            assert!(starts_dangerous_command(vec![line]), "{line}");
+            assert!(parses_to_unsafe_command(line), "{line}");
+        }
+    }
+
+    #[test]
+    fn keeps_a_structural_command_that_runs_a_safe_command() {
+        assert_all_kept(&[
+            "nnoremap x :sx/x/d<CR>",
+            "nnoremap x :sy/x/d<CR>",
+            "nnoremap x :sx/so f/d<CR>",
+        ]);
+    }
+
+    #[test]
+    fn a_global_that_runs_a_stripped_command_defines_nothing_in_the_engine() {
+        assert_defines_nothing_in_the_engine(&[
+            "nnoremap x :g/x/so user://a.vim<CR>",
+            "nnoremap x :v/x/nnoremap y Z<CR>",
+            "nnoremap x :global!/x/!ls<CR>",
+        ]);
     }
 
     /// Each vimrc runs `:!echo hi` when its keys are pressed, and runs nothing
