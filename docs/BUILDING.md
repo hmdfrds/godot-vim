@@ -105,3 +105,38 @@ FFI into Godot, and that needs unwinding to exist.
 
 To work on the Vim engine rather than the plugin, use the `[patch]` snippet in
 [vim-core's README](https://github.com/hmdfrds/vim-core#readme).
+
+## Changing code that calls Godot
+
+The plugin reaches Godot through godot-rust (gdext), built against the 4.5
+API. That is the `compatibility_minimum` in
+`addons/godot_vim/godot_vim.gdextension`, because a library built against a
+newer API refuses to start on an older Godot, and `cargo test` fails when the
+two differ. API newer than 4.5 is called by name, in
+`src/bridge/godot_calls.rs`.
+
+These rules keep new code building on gdext 0.5 and 0.6 too:
+
+- Every `#[derive(GodotClass)]` is followed by `#[class(tool, ...)]`. All of
+  the plugin's classes run in the editor, where gdext 0.6 will turn a class
+  without `tool` into an inert placeholder. `cargo test` checks this.
+- Only `safety::engine_loaded()` calls into `godot::sys`, gdext's private API,
+  which changes without notice. Ask it whether the bindings are loaded.
+  `cargo test` checks this too.
+- Connect engine signals by name, with `connect` or `connect_flags`, not
+  through typed signals, whose handlers panic when an argument is an object
+  freed before the call. A `DEFERRED` handler takes such an argument as a
+  `Variant`, as `src/plugin/signals.rs` explains.
+- No `#[func]` takes the name of a method of a base class. gdext 0.5 warns
+  about it in debug builds, and 0.6 will reject it.
+- Use nothing gdext marks deprecated, such as `on_level_init` or
+  `Callable::from_local_fn`; 0.5 removed all of it. `-D warnings` stops a
+  deprecated call, but not a deprecated trait method you implement.
+- Import `Side`, `Corner` and `EulerOrder` from `godot::builtin`. gdext 0.5's
+  prelude does not have them.
+- Compare a `GString` with `GString::from(text)`. `== text.into()` does not
+  compile on gdext 0.5.
+- Read a file whole with `get_as_text()` or `FileAccess::get_file_as_string`.
+  The stream reads (`get_line`, `get_8` to `get_64`, `get_buffer`,
+  `get_csv_line`, `get_var` and the like) take `&self` on gdext 0.4 and
+  `&mut self` on 0.5, so no binding for them builds cleanly on both.
