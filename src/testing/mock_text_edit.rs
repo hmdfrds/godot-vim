@@ -158,10 +158,6 @@ impl MockTextEdit {
         self.v_scroll = value.clamp(0.0, f64::from(max));
     }
 
-    pub(crate) fn get_v_scroll(&self) -> f64 {
-        self.v_scroll
-    }
-
     // ── Rows (text_edit.cpp) ─────────────────────────────────────────────
 
     /// CodeEdit enables hiding with code folding; the mock once a test
@@ -287,10 +283,6 @@ impl MockTextEdit {
         let (walked, last_wrap) =
             self.next_visible_row_offset(first, wrap, self.visible_line_count);
         ((first + walked - 1).clamp(0, self.last_line()), last_wrap)
-    }
-
-    fn set_line_as_first_visible(&mut self, line: i32, wrap: i32) {
-        self.set_v_scroll(self.scroll_pos_for_line(line, wrap));
     }
 
     /// As Godot 4.6+, which leaves the row above a sliver at the top (the
@@ -860,12 +852,41 @@ impl TextEditorPort for MockTextEdit {
         MockTextEdit::set_v_scroll(self, value);
     }
 
+    fn get_v_scroll(&self) -> f64 {
+        self.v_scroll
+    }
+
     fn get_first_visible_line(&self) -> i32 {
         self.top().0
     }
 
     fn get_visible_line_count(&self) -> i32 {
         self.visible_line_count
+    }
+
+    fn get_caret_wrap_index(&self) -> i32 {
+        self.caret_wrap_index(0)
+    }
+
+    fn get_line_wrap_count(&self, line: i32) -> i32 {
+        self.line_wrap_count(line)
+    }
+
+    fn get_scroll_pos_for_line(&self, line: i32, wrap: i32) -> f64 {
+        self.scroll_pos_for_line(line, wrap)
+    }
+
+    fn get_next_visible_line_index_offset_from(
+        &self,
+        line: i32,
+        wrap: i32,
+        rows: i32,
+    ) -> (i32, i32) {
+        self.next_visible_row_offset(line, wrap, rows)
+    }
+
+    fn set_line_as_first_visible(&mut self, line: i32, wrap: i32) {
+        self.set_v_scroll(self.scroll_pos_for_line(line, wrap));
     }
 
     fn set_h_scroll(&mut self, value: i32) {

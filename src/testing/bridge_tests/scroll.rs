@@ -1,8 +1,11 @@
 //! Scroll tests: vertical/horizontal scroll state, viewport adjustment, and
 //! scroll effect handlers (center, top, bottom, left/right).
 
+use super::macros::apply_set_selection;
+use crate::bridge::codec::{DocumentView, LineIndex};
 use crate::bridge::port::{FoldCapable, TextEditorPort, ViewportAdjust};
 use crate::testing::MockTextEdit;
+use vim_core::primitives::SelectionShape;
 
 fn numbered(lines: usize) -> String {
     (0..lines)
@@ -113,6 +116,170 @@ fn fold_moves_a_caret_inside_onto_its_header() {
     mock.set_caret_line(9);
     mock.fold_line(5);
     assert_editor!(mock, cursor: (5, 6));
+}
+
+// ── Scrolloff in screen rows ────────────────────────────────────────────
+
+fn offset_of(mock: &MockTextEdit, line: i32) -> usize {
+    let text = mock.get_text();
+    LineIndex::new(&text).line_col_to_byte(&text, line, 0)
+}
+
+fn caret_to(mock: &mut MockTextEdit, line: i32, scrolloff: i32) {
+    let text = mock.get_text();
+    let li = LineIndex::new(&text);
+    let doc = DocumentView::new(&text, &li);
+    let offset = li.line_col_to_byte(&text, line, 0);
+    crate::effects::cursor::handle_set_cursor(mock, &doc, offset, scrolloff);
+}
+
+fn caret_row(mock: &MockTextEdit) -> i32 {
+    mock.get_scroll_pos_for_line(mock.get_caret_line(), mock.get_caret_wrap_index()) as i32
+}
+
+fn last_top_row(mock: &MockTextEdit) -> i32 {
+    let last = mock.get_line_count() - 1;
+    let rows = mock.get_scroll_pos_for_line(last, mock.get_line_wrap_count(last)) as i32 + 1;
+    (rows - mock.get_visible_line_count()).max(0)
+}
+
+/// Puts the caret on each of `lines` in turn, as `j` and `k` do. The caret
+/// keeps `so` rows above and below it, and the view never moves further
+/// than the caret, nor the other way.
+fn walk(mock: &mut MockTextEdit, lines: impl IntoIterator<Item = i32>, so: i32) {
+    let rows = mock.get_visible_line_count();
+    let mut before: Option<(i32, i32)> = None;
+    for line in lines {
+        caret_to(mock, line, so);
+        assert_eq!(
+            mock.get_v_scroll().fract(),
+            0.0,
+            "line {line}: part of a row"
+        );
+        let (top, caret) = (mock.get_v_scroll() as i32, caret_row(mock));
+        let above = caret - top;
+        let at_end = top == last_top_row(mock);
+        if rows > 2 * so {
+            assert!(above >= so.min(caret), "line {line}: {above} rows above");
+            assert!(
+                above <= rows - 1 - so || at_end,
+                "line {line}: {above} rows above"
+            );
+        } else {
+            assert!(
+                above == (rows / 2).min(caret) || at_end,
+                "line {line}: {above}"
+            );
+        }
+        if let Some((top_was, caret_was)) = before {
+            let (view, moved) = (top - top_was, caret - caret_was);
+            assert!(
+                view * moved >= 0 && view.abs() <= moved.abs(),
+                "line {line}: the caret moved {moved} rows, the view {view}"
+            );
+        }
+        before = Some((top, caret));
+    }
+}
+
+fn folded(lines: usize, header: i32, last: i32, rows: i32) -> MockTextEdit {
+    let mut mock = MockTextEdit::new(&numbered(lines));
+    mock.set_visible_line_count(rows);
+    mock.add_fold_region(header, last);
+    mock.fold_line(header);
+    mock
+}
+
+fn down_and_up(mock: &MockTextEdit, header: i32, last: i32) -> Vec<i32> {
+    let lines: Vec<i32> = (0..mock.get_line_count())
+        .filter(|l| *l <= header || *l > last)
+        .collect();
+    lines.iter().chain(lines.iter().rev()).copied().collect()
+}
+
+#[test]
+fn scrolloff_moves_the_view_a_row_at_a_time_past_a_fold() {
+    let mut mock = folded(80, 10, 22, 20);
+    let lines = down_and_up(&mock, 10, 22);
+    walk(&mut mock, lines, 5);
+}
+
+#[test]
+fn scrolloff_counts_a_closed_fold_as_one_row() {
+    let mut mock = folded(80, 10, 22, 20);
+    walk(&mut mock, (0..=10).chain(23..=34), 5);
+    // Line 34 is row 22, 14 rows under the top.
+    assert_editor!(mock, cursor: (34, 0), scroll: 8);
+    // Line 23 is row 11, 5 rows under the top.
+    walk(&mut mock, (23..=34).rev(), 5);
+    assert_editor!(mock, cursor: (23, 0), scroll: 6);
+}
+
+#[test]
+fn scrolloff_past_a_fold_taller_than_the_view() {
+    let mut mock = folded(120, 10, 70, 20);
+    let lines = down_and_up(&mock, 10, 70);
+    walk(&mut mock, lines, 5);
+}
+
+#[test]
+fn scrolloff_keeps_the_caret_centred_in_a_short_view() {
+    let mut mock = folded(80, 10, 22, 8);
+    let lines = down_and_up(&mock, 10, 22);
+    walk(&mut mock, lines, 5);
+}
+
+#[test]
+fn scrolloff_counts_wrapped_rows() {
+    let text: Vec<String> = (0..60)
+        .map(|i| match i % 4 {
+            0 => format!("{i:02} {}", "x".repeat(30)),
+            _ => format!("line {i}"),
+        })
+        .collect();
+    let mut mock = MockTextEdit::new(&text.join("\n"));
+    mock.set_visible_line_count(20);
+    mock.set_wrap_width(10);
+    walk(&mut mock, (0..60).chain((0..60).rev()), 5);
+}
+
+#[test]
+fn scrolloff_counts_the_carets_wrap_row() {
+    let mut mock = MockTextEdit::new(&numbered(40));
+    mock.remove_text(12, 0, 12, 7);
+    mock.insert_text(&"x".repeat(45), 12, 0);
+    mock.set_visible_line_count(20);
+    mock.set_wrap_width(10);
+    // Column 30 of line 12 is row 15, four rows above the bottom.
+    let text = mock.get_text();
+    let li = LineIndex::new(&text);
+    let offset = li.line_col_to_byte(&text, 12, 30);
+    crate::effects::cursor::handle_set_cursor(&mut mock, &DocumentView::new(&text, &li), offset, 5);
+    assert_eq!(mock.get_v_scroll(), 1.0);
+}
+
+#[test]
+fn scrolloff_follows_the_caret_without_folds() {
+    let mut mock = MockTextEdit::new(&numbered(50));
+    mock.set_visible_line_count(10);
+    walk(&mut mock, (0..50).chain((0..50).rev()), 3);
+    caret_to(&mut mock, 45, 3);
+    assert_editor!(mock, scroll: 39);
+}
+
+#[test]
+fn line_visual_head_below_a_fold_is_on_screen() {
+    let mut mock = folded(80, 10, 22, 20);
+    let (anchor, on_screen, off_screen) = (
+        offset_of(&mock, 0),
+        offset_of(&mock, 30),
+        offset_of(&mock, 40),
+    );
+    apply_set_selection(&mut mock, anchor, on_screen, SelectionShape::Line);
+    assert_editor!(mock, scroll: 0);
+    // Line 40 is row 28; the view centres it.
+    apply_set_selection(&mut mock, anchor, off_screen, SelectionShape::Line);
+    assert_editor!(mock, scroll: 30);
 }
 
 // ── Scroll effect handlers ──────────────────────────────────────────────

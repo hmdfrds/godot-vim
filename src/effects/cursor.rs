@@ -3,20 +3,16 @@
 
 use vim_core::primitives::SelectionShape;
 
+use super::viewport;
 use crate::bridge::codec::{i32_to_usize, usize_to_i32, DocumentView};
 use crate::bridge::port::{TextEditorPort, ViewportAdjust};
 use crate::types::CharLineCol;
 
 /// Move the caret to the given byte `offset` and scroll the viewport to follow,
-/// enforcing the Vim `scrolloff` margin.
+/// keeping Vim's `scrolloff` margin.
 ///
-/// Uses `set_caret_line_unfold` so that if the target line is inside a
-/// folded region, Godot will unfold it to keep the cursor visible.
-///
-/// After positioning the caret, checks whether the cursor is within
-/// `scrolloff` lines of the viewport edge. If so, scrolls the viewport
-/// to restore the margin. Godot's `adjust_viewport_to_caret` only ensures
-/// the cursor is *somewhere* on screen — it does not enforce a margin.
+/// A target inside a closed fold puts the caret on the first visible line
+/// after it (`set_caret_line_unfold`).
 pub(crate) fn handle_set_cursor(
     editor: &mut impl TextEditorPort,
     doc: &DocumentView,
@@ -35,45 +31,30 @@ pub(crate) fn handle_set_cursor(
 
     // adjust_viewport_to_caret only guarantees visibility, not scrolloff margin.
     editor.adjust_viewport_to_caret();
-    enforce_scrolloff(editor, pos.line, scrolloff);
+    enforce_scrolloff(editor, scrolloff);
 }
 
-/// Scroll the viewport so the cursor keeps at least `scrolloff` lines of
-/// context above and below, matching Vim's `set scrolloff=N` behavior.
-///
-/// Only scrolls the minimum amount needed — if the cursor is already within
-/// the margin, the viewport stays put.
-pub(crate) fn enforce_scrolloff(
-    editor: &mut impl TextEditorPort,
-    cursor_line: i32,
-    scrolloff: i32,
-) {
+/// Scroll the viewport so the caret keeps at least `scrolloff` screen rows
+/// of context above and below, as Vim's `scrolloff` does, by the fewest rows.
+pub(crate) fn enforce_scrolloff(editor: &mut impl TextEditorPort, scrolloff: i32) {
     if scrolloff <= 0 {
         return;
     }
-
-    let first_visible = editor.get_first_visible_line();
-    let visible_count = editor.get_visible_line_count();
-
-    // When the viewport is too small for full top+bottom margins, center instead.
-    if visible_count <= scrolloff * 2 {
-        let center = cursor_line - visible_count / 2;
-        let target = center.max(0);
-        if first_visible != target {
-            editor.set_v_scroll(target.into());
-        }
+    let rows = editor.get_visible_line_count();
+    let caret = viewport::caret_row(editor);
+    let from_top = caret - viewport::top_row(editor);
+    // A view too small for both margins keeps the caret in the middle.
+    let wanted = if rows <= scrolloff * 2 {
+        (rows / 2).min(caret)
+    } else if from_top < scrolloff {
+        scrolloff.min(caret)
+    } else if from_top > rows - 1 - scrolloff {
+        rows - 1 - scrolloff
+    } else {
         return;
-    }
-
-    let top_margin = first_visible + scrolloff;
-    let bot_margin = first_visible + visible_count - 1 - scrolloff;
-
-    if cursor_line < top_margin {
-        let target = (cursor_line - scrolloff).max(0);
-        editor.set_v_scroll(target.into());
-    } else if cursor_line > bot_margin {
-        let target = cursor_line - visible_count + 1 + scrolloff;
-        editor.set_v_scroll(target.into());
+    };
+    if wanted != from_top {
+        viewport::put_caret_row(editor, wanted);
     }
 }
 
@@ -104,8 +85,8 @@ pub(crate) fn enforce_scrolloff(
 /// max_col+1). The full block highlight is rendered by `BlockVisualOverlay`,
 /// driven by `UiCoordinator::update` via `UiSnapshot::block_visual`.
 ///
-/// After setting the selection, ensures the head line is visible via
-/// unfold and scrolls the viewport to follow.
+/// After setting the selection, moves the caret off a folded head line and
+/// scrolls the viewport to follow.
 pub(crate) fn handle_set_selection(
     editor: &mut impl TextEditorPort,
     doc: &DocumentView,
@@ -209,7 +190,7 @@ pub(crate) fn handle_set_selection(
         }
     }
 
-    // Unfold the head line if it's hidden inside a fold region.
+    // A head line inside a closed fold gives the line after the fold.
     editor.set_caret_line_unfold(head_line, ViewportAdjust::NoAdjust);
 
     // Viewport scrolling strategy depends on selection shape because Godot's
@@ -220,14 +201,12 @@ pub(crate) fn handle_set_selection(
             editor.adjust_viewport_to_caret();
         }
         _ => {
-            // In line/block mode, Godot normalizes the caret to the selection
-            // boundary (e.g., always bottom for line mode), which diverges
-            // from the Vim head. Manually scroll to keep head_line visible.
-            let first_visible = editor.get_first_visible_line();
-            let visible_count = editor.get_visible_line_count();
-            if head_line < first_visible || head_line >= first_visible + visible_count {
-                let target = head_line.saturating_sub(visible_count / 2).max(0);
-                editor.set_v_scroll(target.into());
+            // In line/block mode the caret is on the head line but not at the
+            // head column. A head line off screen comes back centred.
+            let rows = editor.get_visible_line_count();
+            let from_top = viewport::caret_row(editor) - viewport::top_row(editor);
+            if !(0..rows).contains(&from_top) {
+                viewport::put_caret_row(editor, rows / 2);
             }
         }
     }
