@@ -17,6 +17,7 @@
 
 use std::fmt::Write;
 
+use godot::builtin::Side;
 use godot::classes::control::{GrowDirection, MouseFilter, SizeFlags};
 use godot::classes::{
     CodeEdit, Control, HBoxContainer, IHBoxContainer, Label, Node, PanelContainer, StyleBoxFlat,

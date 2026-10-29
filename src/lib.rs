@@ -93,10 +93,10 @@ struct GodotVimExt;
 //   3. Rust panics are caught by `safety::panic_guard` at every signal handler
 //      boundary, preventing unwinding across the FFI.
 unsafe impl ExtensionLibrary for GodotVimExt {
-    fn on_level_init(level: InitLevel) {
-        // Scene is the earliest InitLevel where Godot's print macros work;
-        // calling godot_print! at Server or Core level panics.
-        if level == InitLevel::Scene {
+    fn on_stage_init(stage: InitStage) {
+        // Scene is the earliest stage where Godot's print macros work;
+        // calling godot_print! at Servers or Core stage panics.
+        if stage == InitStage::Scene {
             logging::init();
         }
     }
