@@ -599,8 +599,8 @@ fn starts_in_command_line(cmd: &str) -> bool {
 /// command line, both as typed in Normal mode and as typed in Visual mode,
 /// and every `/` or `?` a search, which is read as one is for its bounds
 /// only. Each is judged, and more than [`MAX_OPEN_LINES`] open at once strip
-/// the mapping, as does running out of the [`Judge`]'s work, so that judging
-/// takes time linear in the right-hand side.
+/// the mapping, as do more than [`MAX_KEYS`] keys and running out of the
+/// [`Judge`]'s work, so that judging takes time linear in the right-hand side.
 /// Keys whose effect on the final text is not modelled (Tab, `<C-R>`, history
 /// recall, word motions, …) strip the mapping, because the text cannot be
 /// known, except that in a search `<C-r>` and the register it names insert
@@ -622,6 +622,9 @@ fn simulate_command_line(rhs: &str, starts_in_command_line: bool, judge: &mut Ju
     let mut cmd: Option<CommandLine> = None;
 
     let keys = mapping_keys(rhs);
+    if keys.len() > MAX_KEYS {
+        return true;
+    }
     // A `cmap` runs again when its trigger is pressed twice, so it is read
     // twice in a row, and what it leaves open is judged after each.
     let runs = if starts_in_command_line { 2 } else { 1 };
@@ -876,6 +879,10 @@ const MAX_COMMAND_LINE: usize = 1024;
 
 /// The range vim-core fills in when `:` is typed in Visual mode.
 const VISUAL_RANGE: &str = "'<,'>";
+
+/// The most keys a right-hand side may have. vim-core keeps 10,000 keys of
+/// typeahead and drops the rest, so the filter would read keys that never run.
+const MAX_KEYS: usize = 2048;
 
 /// The most command lines, and the most searches, a right-hand side may hold
 /// open at once, since every key is read into each.
@@ -3175,6 +3182,15 @@ inoremap jk <Esc>
             format!("inoremap x {}", ":".repeat(MAX_OPEN_LINES + 1)).as_str(),
             format!("inoremap x {}", "/".repeat(MAX_OPEN_LINES + 1)).as_str(),
         ]);
+    }
+
+    /// vim-core drops typeahead past 10,000 keys, and with it the `<Esc>`
+    /// that ends this `<Cmd>`, which then runs on the next `<CR>`.
+    #[test]
+    fn strips_a_right_hand_side_of_too_many_keys() {
+        let line = |n: usize| format!("nnoremap x <Cmd>!echo hi{}<Esc>", "<Left>".repeat(n));
+        assert_all_kept(&[line(MAX_KEYS - 10).as_str()]);
+        assert_all_stripped(&[line(MAX_KEYS - 9).as_str(), line(10_000).as_str()]);
     }
 
     #[test]
