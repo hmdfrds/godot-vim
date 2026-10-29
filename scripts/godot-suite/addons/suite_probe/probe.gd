@@ -456,6 +456,7 @@ func _snap() -> Dictionary:
 		lines.append(ce.get_line(l))
 	s["text"] = lines
 	s["caret"] = [ce.get_caret_line() - row_base, ce.get_caret_column()]
+	s["top"] = ce.get_first_visible_line() - row_base
 	s["carets"] = ce.get_caret_count()
 	var sel := ce.get_code_completion_selected_index()
 	s["popup"] = false

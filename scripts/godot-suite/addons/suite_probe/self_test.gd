@@ -148,6 +148,7 @@ func _defaults() -> void:
 	_check(C.check_case({"id": "t", "keys": "x"}) != "", "a case without desc is refused")
 	_check(C.check_case({"id": "t", "desc": "d", "keys": "x", "colour": 1}) != "", "an unknown field is refused")
 	_check(C.check_case({"id": "t", "keys": "x", "expect": {"end": {"txt": []}}}) != "", "an unknown snapshot field is refused")
+	_check(C.check_case({"id": "t", "desc": "d", "keys": "x", "expect": {"end": {"top": 3}}}) == "", "top is a snapshot field")
 	_check(C.check_case({"id": "t", "keys": "x", "text": "a"}) != "", "text without caret is refused")
 	_check(C.version_at_least({"major": 4, "minor": 6, "patch": 1}, "4.6"), "4.6.1 is at least 4.6")
 	_check(not C.version_at_least({"major": 4, "minor": 5, "patch": 2}, "4.6"), "4.5.2 is below 4.6")

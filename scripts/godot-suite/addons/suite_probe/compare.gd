@@ -28,7 +28,7 @@ const CASE_FIELDS := [
 	"expect", "by_godot",
 ]
 
-const SNAP_FIELDS := ["text", "caret", "carets", "popup", "focus", "mode", "bar", "closed", "disk"]
+const SNAP_FIELDS := ["text", "caret", "carets", "top", "popup", "focus", "mode", "bar", "closed", "disk"]
 
 # Fields that change what vanilla Godot does; a recording is stale when any of
 # them changes.
