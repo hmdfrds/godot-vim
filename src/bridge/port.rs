@@ -8,8 +8,8 @@
 //! - **`NavigationCapable`** (2 methods, default no-ops) — go-to-definition, hover docs.
 //!
 //! Production: `CodeEditPort` (in `port_impl.rs`) implements all four.
-//! Tests: `MockTextEdit` implements `TextEditorPort`; extension traits
-//! use their default no-op bodies.
+//! Tests: `MockTextEdit` implements `TextEditorPort` and `FoldCapable`; the
+//! other extension traits mostly use their default no-op bodies.
 
 use crate::types::CharLineCol;
 
@@ -46,8 +46,8 @@ pub(crate) trait TextEditorPort {
     fn get_caret_line(&self) -> i32;
     fn get_caret_column(&self) -> i32;
 
-    /// Set caret line with fold-awareness: always unfolds the target line
-    /// (`can_be_hidden=false`) and optionally scrolls the viewport.
+    /// Set caret line with `can_be_hidden=false`: a line inside a closed fold
+    /// gives the first visible line below it (Godot does not unfold).
     fn set_caret_line_unfold(&mut self, line: i32, viewport: ViewportAdjust);
     fn adjust_viewport_to_caret(&mut self);
 
@@ -92,7 +92,7 @@ pub(crate) trait TextEditorPort {
 }
 
 // Extension traits: optional capabilities with default no-op bodies so that
-// test mocks can implement them trivially (`impl FoldCapable for MockTextEdit {}`).
+// test mocks implement only what they model.
 
 /// Code folding. Default no-ops for editors without fold support.
 pub(crate) trait FoldCapable: TextEditorPort {

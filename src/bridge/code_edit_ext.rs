@@ -31,9 +31,10 @@ use super::codec;
 /// - **Line motions** (`j`, `k`): skip folded lines (fold = one visible line).
 /// - **Jump motions** (`G`, `gg`, search, marks): unfold to reveal the target.
 ///
-/// `move_up_visible`/`move_down_visible` handle the first case. Jump-target
-/// unfolding is done separately by `set_caret_line_unfold` (which passes
-/// `can_be_hidden(false)` to Godot).
+/// `move_up_visible`/`move_down_visible` handle the first case. Godot does
+/// not unfold for the second: `set_caret_line_unfold` passes
+/// `can_be_hidden(false)`, which moves a caret inside a closed fold to the
+/// first visible line below it.
 pub(crate) trait CodeEditExt {
     /// Indent size in characters, clamped to at least 1.
     fn safe_indent_size(&self) -> usize;
