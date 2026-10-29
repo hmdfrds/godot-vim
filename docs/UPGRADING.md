@@ -19,7 +19,18 @@ blocked option such as `shell`, is now commented out, and so are
 `langmap` and `langremap` lines. Blanks other than space and tab, such as
 a non-breaking space, are read as the engine reads them, and colons before
 a command are skipped as in Vim, so a command hidden behind either is
-caught. Put such lines in your own `user://.godot-vimrc` if you need them.
+caught. A `:g` or `:v` command is judged by the command it runs, so
+`:g/pat/source file` is stripped as `:source file` is. The filter does not
+follow modes, so a `/` or `?` typed in Insert mode is read as a search, and
+a key it cannot follow there strips the mapping: `inoremap <C-k> // <C-o>A`
+is stripped. Every `:` a mapping types is read as starting a command line,
+since the filter cannot tell when it is a key's argument, as in `f:`, so
+`:e res://source/main.gd<CR>` is stripped: from the `:` of `res:`,
+`//source/main.gd` would run `:source`. `<Cmd>e res://source/main.gd<CR>`
+opens no command line and is kept. A `cmap` is judged with what you may
+have typed before it, so `cnoremap w!! w !sudo tee % > /dev/null` is
+stripped: after a `'` you typed, it filters lines through the shell. Put
+such lines in your own `user://.godot-vimrc` if you need them.
 
 **`:q!` discards your changes.** It used to mark them saved and close the
 tab while Godot kept them in its in-memory copy of the script, so opening
