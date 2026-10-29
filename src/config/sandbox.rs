@@ -368,9 +368,15 @@ fn is_safe_non_mapping_line(trimmed: &str) -> bool {
     // `:filetype plugin off` and the rest of `:filetype` only switch the
     // built-in filetype plugins on or off; nothing in them runs code. What
     // follows a `|` is another command, so the line is safe only when that
-    // command is too.
-    if let Some((_, rest)) = crate::ftplugin::split_filetype_line(trimmed) {
-        return rest.is_none_or(|rest| is_safe_non_mapping_line(rest.trim()));
+    // command is too. A loop, not recursion, as a line may chain any number.
+    if let Some((_, mut rest)) = crate::ftplugin::split_filetype_line(trimmed) {
+        while let Some(next) = rest.map(str::trim) {
+            match crate::ftplugin::split_filetype_line(next) {
+                Some((_, after)) => rest = after,
+                None => return is_safe_non_mapping_line(next),
+            }
+        }
+        return true;
     }
     // Only allow `let mapleader` / `let g:mapleader` -- NOT `let mapleader_hack`
     // (which could contain `system(...)` in the value expression).
@@ -578,26 +584,31 @@ fn starts_in_command_line(cmd: &str) -> bool {
 ///
 /// Models the two ways a key sequence builds a command the engine executes:
 /// a `:` command line (with its editing keys and cursor) and a `<Cmd>…<CR>`
-/// sequence. Keys whose effect on the final text is not modelled (Tab,
-/// `<C-R>`, history recall, word motions, …) strip the mapping, because the
-/// text cannot be known. Keys are read as the engine reads a mapping, so
-/// `<Bar>`, `<Space>` and `<S-Space>` are the characters `|` and ` `.
+/// sequence. A `/` or `?` search is read alongside the `:` line, as one, for
+/// its bounds only; modes are not followed, so any `/` or `?` may start one.
+/// Keys whose effect on the final text is not modelled (Tab, `<C-R>`, history
+/// recall, word motions, …) strip the mapping, because the text cannot be
+/// known, except that in a search `<C-r>` and the register it names insert
+/// text the filter cannot see and only what it sees is bounded. Keys are read
+/// as the engine reads a mapping, so `<Bar>`, `<Space>` and `<S-Space>` are
+/// the characters `|` and ` `.
 fn simulate_command_line(rhs: &str, starts_in_command_line: bool) -> bool {
     use vim_core::keymap::{Key, Modifiers};
-    let mut ex: Option<(String, usize)> = starts_in_command_line.then(|| (String::new(), 0));
-    let mut cmd: Option<String> = None;
+    let mut ex = starts_in_command_line.then(CommandLine::default);
+    let mut search: Option<CommandLine> = None;
+    let mut cmd: Option<CommandLine> = None;
 
     for key in mapping_keys(rhs) {
         // `<Cmd>` starts (and restarts) a `<Cmd>…<CR>` sequence from any mode,
         // ahead of the current command line (vim-core engine.rs).
         if key.key() == Key::Cmd {
-            cmd = Some(String::new());
+            cmd = Some(CommandLine::default());
             continue;
         }
-        if let Some(buf) = cmd.as_mut() {
+        if let Some(line) = cmd.as_mut() {
             match key.key() {
                 Key::Enter => {
-                    if line_runs_dangerous(buf) {
+                    if line_runs_dangerous(line) {
                         return true;
                     }
                     cmd = None;
@@ -605,7 +616,12 @@ fn simulate_command_line(rhs: &str, starts_in_command_line: bool) -> bool {
                 Key::Escape => cmd = None,
                 // Only characters reach the `<Cmd>` buffer; the engine drops
                 // everything else, so modifiers on a character fall away too.
-                Key::Char(c) => buf.push(c),
+                Key::Char(c) => {
+                    line.insert(c);
+                    if line.exceeds_parse_bounds() {
+                        return true;
+                    }
+                }
                 _ => {}
             }
             continue;
@@ -615,13 +631,14 @@ fn simulate_command_line(rhs: &str, starts_in_command_line: bool) -> bool {
                 if matches!(key.key(), Key::Char(':'))
                     && (key.modifiers() - Modifiers::SHIFT).is_empty()
                 {
-                    ex = Some((String::new(), 0));
+                    ex = Some(CommandLine::default());
                 }
             }
-            Some((buf, cursor)) => match apply_cmdline_key(buf, cursor, key) {
+            Some(line) => match apply_cmdline_key(line, key) {
+                CmdStep::Continue if line.exceeds_parse_bounds() => return true,
                 CmdStep::Continue => {}
                 CmdStep::Commit => {
-                    if line_runs_dangerous(buf) {
+                    if line_runs_dangerous(line) {
                         return true;
                     }
                     ex = None;
@@ -630,21 +647,135 @@ fn simulate_command_line(rhs: &str, starts_in_command_line: bool) -> bool {
                 CmdStep::Unmodelled => return true,
             },
         }
+        match search.as_mut() {
+            None => {
+                if matches!(key.key(), Key::Char('/' | '?'))
+                    && (key.modifiers() - Modifiers::SHIFT).is_empty()
+                {
+                    search = Some(CommandLine::search());
+                }
+            }
+            Some(line) => match apply_cmdline_key(line, key) {
+                CmdStep::Continue if line.exceeds_parse_bounds() => return true,
+                CmdStep::Continue => {}
+                CmdStep::Commit | CmdStep::Cancel => search = None,
+                CmdStep::Unmodelled => return true,
+            },
+        }
     }
     // A command line left open still strips: the branch strips bare and open
     // `:source` too, and a `<Cmd>` left open runs on the next key.
-    cmd.as_deref().is_some_and(line_runs_dangerous)
-        || ex.is_some_and(|(buf, _)| line_runs_dangerous(&buf))
+    cmd.is_some_and(|line| line_runs_dangerous(&line))
+        || ex.is_some_and(|line| line_runs_dangerous(&line))
 }
+
+/// A command line as a right-hand side types it: the text, a byte cursor,
+/// and how many of what vim-core nests the text names ([`count_nested`]),
+/// kept current as the text changes so that a key takes time only in what it
+/// changes.
+#[derive(Default)]
+struct CommandLine {
+    text: String,
+    cursor: usize,
+    nested: usize,
+    /// A `/` or `?` line, which runs only its pattern.
+    search: bool,
+    /// After `<C-r>` in a search: the next key names a register.
+    register: bool,
+}
+
+impl CommandLine {
+    fn search() -> Self {
+        Self {
+            search: true,
+            ..Self::default()
+        }
+    }
+
+    /// Whether the text is too long or too deeply nested for vim-core's
+    /// parser or vim-regex. The parser reads a `:` line after every key for
+    /// the live `:s` preview, which compiles the pattern, so a line that is
+    /// cleared or cancelled is held to it too.
+    fn exceeds_parse_bounds(&self) -> bool {
+        self.text.len() > MAX_COMMAND_LINE || self.nested > MAX_NESTED
+    }
+
+    /// Replaces `range` with `with`. A name reads the 2 bytes before it and
+    /// the 5 from it, so only names from 4 bytes before the change to 2 after
+    /// it are counted again.
+    fn splice(&mut self, range: std::ops::Range<usize>, with: &str) {
+        let from = range.start.saturating_sub(4);
+        let to = range.start + with.len() + 2;
+        self.nested -= count_nested(&self.text, from..range.end + 2, self.search);
+        self.text.replace_range(range, with);
+        self.nested += count_nested(&self.text, from..to, self.search);
+    }
+
+    fn insert(&mut self, c: char) {
+        self.splice(self.cursor..self.cursor, c.encode_utf8(&mut [0; 4]));
+        self.cursor += c.len_utf8();
+    }
+}
+
+/// The longest command line a right-hand side may type, in bytes. vim-core's
+/// `split_ex_pipeline` takes time quadratic in a run of range characters.
+const MAX_COMMAND_LINE: usize = 1024;
+
+/// The most a command line a right-hand side types may name of what vim-core
+/// nests ([`count_nested`]). vim-core's parser and vim-regex recurse once for
+/// each, and a stack overflow aborts the editor.
+const MAX_NESTED: usize = 8;
+
+/// The commands vim-core's parser reads another command inside, and whether
+/// a delimiter follows the name: `:g/pat/cmd`, `:sx/pat/cmd`, `:windo cmd`.
+const NESTING_COMMANDS: &[(&str, bool)] = &[
+    ("g", true),
+    ("v", true),
+    ("sx", true),
+    ("sy", true),
+    ("windo", false),
+    ("bufdo", false),
+    ("tabdo", false),
+];
 
 /// One committed command line, judged by the text check and by vim-core's
 /// parser; either one strips. The text check takes a command to start after
 /// every `|`, an over-approximation (a `|` inside a pattern or string makes
-/// extra starts) which can only strip more, never less.
-fn line_runs_dangerous(line: &str) -> bool {
+/// extra starts) which can only strip more, never less. A line too long or
+/// too deeply nested to judge is stripped before either runs.
+fn line_runs_dangerous(line: &CommandLine) -> bool {
+    if line.exceeds_parse_bounds() {
+        return true;
+    }
+    let line = line.text.as_str();
     let after_bars = line.match_indices('|').map(|(at, _)| &line[at + 1..]);
     starts_dangerous_command(std::iter::once(line).chain(after_bars).collect())
         || parses_to_unsafe_command(line)
+}
+
+/// How many `%(`, `%[` and (outside a search) [`NESTING_COMMANDS`] start in `starts`.
+fn count_nested(line: &str, starts: std::ops::Range<usize>, search: bool) -> usize {
+    let bytes = line.as_bytes();
+    let is_delimiter = |b: &u8| !b.is_ascii_alphanumeric() && *b != b'_';
+    // After a non-letter, or after the letter of a mark (`'ag`).
+    let starts_command = |at: usize| {
+        at == 0 || !bytes[at - 1].is_ascii_alphabetic() || (at > 1 && bytes[at - 2] == b'\'')
+    };
+    let names_command = |at: usize| {
+        NESTING_COMMANDS.iter().any(|&(name, delimited)| {
+            let end = at + name.len();
+            bytes
+                .get(at..end)
+                .is_some_and(|word| word.eq_ignore_ascii_case(name.as_bytes()))
+                && (!delimited || bytes.get(end).is_some_and(is_delimiter))
+        })
+    };
+    (starts.start..starts.end.min(bytes.len()))
+        .filter(|&at| {
+            matches!(bytes[at..], [b'%', b'(' | b'[', ..])
+                || (!search && starts_command(at) && names_command(at))
+        })
+        .count()
 }
 
 /// Whether one of the commands vim-core runs for `line` is unsafe, split and
@@ -718,48 +849,43 @@ enum CmdStep {
     Unmodelled,
 }
 
-/// Apply one key to a `:` command line (`buf` plus a byte `cursor`), mirroring
-/// vim-core's command-line handler and edit state (`mode/command_line.rs`,
-/// `state/command_line.rs`). Only the editing keys that have a definite effect
-/// on the text are modelled; any other key returns [`CmdStep::Unmodelled`].
-fn apply_cmdline_key(
-    buf: &mut String,
-    cursor: &mut usize,
-    key: vim_core::keymap::KeyEvent,
-) -> CmdStep {
+/// Apply one key to a `:` command line, mirroring vim-core's command-line
+/// handler and edit state (`mode/command_line.rs`, `state/command_line.rs`).
+/// Only the editing keys that have a definite effect on the text are
+/// modelled; any other key returns [`CmdStep::Unmodelled`].
+fn apply_cmdline_key(line: &mut CommandLine, key: vim_core::keymap::KeyEvent) -> CmdStep {
     use vim_core::keymap::{Key, Modifiers};
+    // vim-core reads any key as the register name, and `=` as the expression
+    // register.
+    if std::mem::take(&mut line.register) {
+        return match key.key() {
+            Key::Char('=') => CmdStep::Unmodelled,
+            _ => CmdStep::Continue,
+        };
+    }
+    let cursor = line.cursor;
+    // The lengths of the characters before and after the cursor.
+    let prev = line.text[..cursor].chars().last().map_or(0, char::len_utf8);
+    let next = line.text[cursor..].chars().next().map_or(0, char::len_utf8);
     match key.key() {
         Key::Enter => return CmdStep::Commit,
         Key::Escape => return CmdStep::Cancel,
-        Key::Backspace => return backspace(buf, cursor),
-        Key::Delete if *cursor < buf.len() => {
-            buf.remove(*cursor);
-        }
-        Key::Delete => {}
-        Key::Left if key.modifiers().is_empty() => {
-            if *cursor > 0 {
-                *cursor = buf[..*cursor].char_indices().last().map_or(0, |(i, _)| i);
-            }
-        }
-        Key::Right if key.modifiers().is_empty() => {
-            if *cursor < buf.len() {
-                *cursor += buf[*cursor..].chars().next().map_or(0, char::len_utf8);
-            }
-        }
-        Key::Home if key.modifiers().is_empty() => *cursor = 0,
-        Key::End if key.modifiers().is_empty() => *cursor = buf.len(),
-        Key::Char(c) if (key.modifiers() - Modifiers::SHIFT).is_empty() => {
-            buf.insert(*cursor, c);
-            *cursor += c.len_utf8();
-        }
+        Key::Backspace => return backspace(line, prev),
+        Key::Delete => line.splice(cursor..cursor + next, ""),
+        Key::Left if key.modifiers().is_empty() => line.cursor -= prev,
+        Key::Right if key.modifiers().is_empty() => line.cursor += next,
+        Key::Home if key.modifiers().is_empty() => line.cursor = 0,
+        Key::End if key.modifiers().is_empty() => line.cursor = line.text.len(),
+        Key::Char(c) if (key.modifiers() - Modifiers::SHIFT).is_empty() => line.insert(c),
         Key::Char(c) if key.modifiers() == Modifiers::CTRL => match c {
-            'h' => return backspace(buf, cursor),
+            'h' => return backspace(line, prev),
             'u' => {
-                buf.replace_range(..*cursor, "");
-                *cursor = 0;
+                line.splice(0..cursor, "");
+                line.cursor = 0;
             }
-            'k' => buf.truncate(*cursor),
+            'k' => line.splice(cursor..line.text.len(), ""),
             'c' | '[' => return CmdStep::Cancel,
+            'r' if line.search => line.register = true,
             _ => return CmdStep::Unmodelled,
         },
         _ => return CmdStep::Unmodelled,
@@ -767,17 +893,14 @@ fn apply_cmdline_key(
     CmdStep::Continue
 }
 
-/// Delete the character before the cursor. An empty command line cancels
-/// instead, as in Vim.
-fn backspace(buf: &mut String, cursor: &mut usize) -> CmdStep {
-    if buf.is_empty() {
+/// Delete the character before the cursor, `len` bytes long. An empty
+/// command line cancels instead, as in Vim.
+fn backspace(line: &mut CommandLine, len: usize) -> CmdStep {
+    if line.text.is_empty() {
         return CmdStep::Cancel;
     }
-    if *cursor > 0 {
-        let prev = buf[..*cursor].char_indices().last().map_or(0, |(i, _)| i);
-        buf.remove(prev);
-        *cursor = prev;
-    }
+    line.cursor -= len;
+    line.splice(line.cursor..line.cursor + len, "");
     CmdStep::Continue
 }
 
@@ -813,15 +936,13 @@ fn mapping_keys(rhs: &str) -> Vec<vim_core::keymap::KeyEvent> {
 /// one of [`EX_COMMAND_PATTERNS`], also behind a range, [`COMMAND_PREFIXES`]
 /// and the pattern of a [`GLOBAL_COMMANDS`] command.
 fn starts_dangerous_command(mut starts: Vec<&str>) -> bool {
-    // A start is named by its length. Judging each once keeps the readings
-    // of nested `:g` from multiplying.
+    // A command start is named by its length. Judging each once keeps the
+    // readings of nested `:g` from multiplying, and starts that run into one
+    // another (`sil '|sil '|`) linear.
     let mut judged = std::collections::HashSet::new();
     while let Some(start) = starts.pop() {
-        if !judged.insert(start.len()) {
-            continue;
-        }
         let mut text = skip_range(start);
-        loop {
+        while judged.insert(text.len()) {
             if EX_COMMAND_PATTERNS
                 .iter()
                 .any(|&(min, full, tail)| matches_ex_pattern(text, min, full, tail))
@@ -1353,6 +1474,8 @@ inoremap jk <Esc>
             "nnoremap x :2verbose so user://a.vim<CR>",
             "nnoremap x :windo so user://a.vim<CR>",
             "nnoremap x :<Space>so<Space>user://a.vim<CR>",
+            "nnoremap x f/:so user://a.vim<CR>",
+            "nnoremap x r?:so user://a.vim<CR>",
             "nnoremap x :<Tab>so user://a.vim<CR>",
             "nnoremap x :\tso user://a.vim<CR>",
             "nnoremap <silent> x :so user://a.vim<CR>",
@@ -1603,13 +1726,325 @@ inoremap jk <Esc>
         ]);
     }
 
+    /// Runs `f` on a 1 MiB stack, the main thread's on Windows.
+    fn on_a_small_stack<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
+        std::thread::Builder::new()
+            .stack_size(1 << 20)
+            .spawn(f)
+            .unwrap()
+            .join()
+            .unwrap()
+    }
+
+    /// vim-core's parser recurses once for each command run inside another.
+    #[test]
+    fn strips_a_command_line_too_deeply_nested_or_too_long_to_judge() {
+        for (unit, depth) in [
+            ("g/x/", 200),
+            ("g//", 300),
+            ("g!/x/", 200),
+            ("v/x/", 200),
+            ("sx/x/", 200),
+            ("sy/x/", 200),
+            ("windo ", 100),
+            ("bufdo ", 100),
+            ("TabDo ", 100),
+            ("silent windo g/x/", 50),
+            ("tabdo sx/x/bufdo v/x/", 40),
+            ("1g/x/", 200),
+            ("'ag/x/", 160),
+            ("g/x/", 2000),
+            ("windo ", 2000),
+        ] {
+            let commands = format!("{}d", unit.repeat(depth));
+            for line in [
+                format!("nnoremap x :{commands}<CR>"),
+                format!("nnoremap x <Cmd>{commands}<CR>"),
+            ] {
+                let out = on_a_small_stack(move || sandbox_config_text(&line));
+                assert!(out.starts_with(STRIPPED), "kept: {unit} x {depth}");
+            }
+        }
+    }
+
+    #[test]
+    fn strips_a_command_line_past_either_bound() {
+        for (start, end) in [
+            (":", "<CR>"),
+            (":", "<Esc>"),
+            (":", "<C-u>noh<CR>"),
+            ("<Cmd>", "<Esc>"),
+        ] {
+            let nested = |commands: usize, groups: usize, sequences: usize| {
+                format!(
+                    "nnoremap x {start}{}s/{}{}a{}{}/b/{end}",
+                    "windo ".repeat(commands),
+                    "\\%(".repeat(groups),
+                    "\\%[".repeat(sequences),
+                    "]".repeat(sequences),
+                    "\\)".repeat(groups),
+                )
+            };
+            let long = |len: usize| format!("nnoremap x {start}{:len$}{end}", "noh");
+            assert_all_kept(&[
+                nested(MAX_NESTED, 0, 0).as_str(),
+                nested(0, MAX_NESTED, 0).as_str(),
+                nested(0, 0, MAX_NESTED).as_str(),
+                nested(4, 2, 2).as_str(),
+                long(MAX_COMMAND_LINE).as_str(),
+            ]);
+            assert_all_stripped(&[
+                nested(MAX_NESTED + 1, 0, 0).as_str(),
+                nested(0, MAX_NESTED + 1, 0).as_str(),
+                nested(0, 0, MAX_NESTED + 1).as_str(),
+                nested(4, 2, 3).as_str(),
+                long(MAX_COMMAND_LINE + 1).as_str(),
+            ]);
+        }
+    }
+
+    /// A `%(` or `%[` opens a group or an optional sequence wherever it is.
+    /// The `v` of `\v` before a delimiter could start a `:v`, so it counts too.
+    #[test]
+    fn counts_the_groups_and_sequences_a_pattern_opens() {
+        for (line, count) in [
+            ("s/\\%(a\\)\\%(b\\)/c/", 2),
+            ("s/\\(a\\)\\(b\\)/c/", 0),
+            ("s/\\v%(a)%(b)/c/", 3),
+            ("s/\\va%(b)/c/", 1),
+            ("s/fu\\%[nction]/c/", 1),
+            ("s/\\%[a\\%[b]]/c/", 2),
+            ("s/\\v%[ab]/c/", 2),
+            ("s/[ab]/c/", 0),
+        ] {
+            assert_eq!(count_nested(line, 0..line.len(), false), count, "{line}");
+        }
+    }
+
+    /// Sources `config` into `one` and presses `x`, on a 1 MiB stack.
+    fn press_x_on_a_small_stack(config: String) -> String {
+        use vim_core::execution::HostSession;
+        use vim_core::keymap::KeyEvent;
+        on_a_small_stack(move || {
+            let mut session = HostSession::new("one\n");
+            let _ = session.source_config(&config);
+            let _ = session.process_key_host(KeyEvent::char('x'));
+            session.text().to_string()
+        })
+    }
+
+    /// The live `:s` preview parses a `:` line after every key.
+    #[test]
+    fn strips_a_command_line_cleared_after_it_was_too_deeply_nested() {
+        for typed in [
+            format!("{}d", "g/x/".repeat(200)),
+            format!("s/{}{}/y/", "\\%(".repeat(200), "\\)".repeat(200)),
+        ] {
+            let each = |key: &str| key.repeat(typed.len());
+            for end in [
+                "<Esc>".to_string(),
+                "<C-c>".to_string(),
+                "<C-[>".to_string(),
+                "<C-u>".to_string(),
+                "<C-u>noh<CR>".to_string(),
+                "<Home><C-k>noh<CR>".to_string(),
+                format!("{}noh<CR>", each("<BS>")),
+                format!("{}<BS>", each("<C-h>")),
+                format!("<Home>{}noh<CR>", each("<Del>")),
+            ] {
+                let out = sandbox_config_text(&format!("nnoremap x :{typed}{end}"));
+                assert!(out.starts_with(STRIPPED), "kept: {end}");
+                assert_eq!(press_x_on_a_small_stack(out), "ne\n", "{end}");
+            }
+        }
+    }
+
+    /// vim-regex recurses once for each group and optional sequence.
+    #[test]
+    fn strips_a_command_line_whose_pattern_is_too_deeply_nested() {
+        let groups = format!("{}{}", "\\%(".repeat(200), "\\)".repeat(200));
+        let sequences = "\\%[".repeat(339);
+        for rhs in [
+            format!(":s/{sequences}a/y/<CR>"),
+            format!(":s/{sequences}a/y/<Esc>"),
+            format!(":s/{sequences}a/y/<C-u>noh<CR>"),
+            format!(":g/{sequences}a/d<CR>"),
+            format!("<Cmd>s/{sequences}a/y/<CR>"),
+            format!(":s/{groups}/y/<CR>"),
+            format!(":s/\\v{groups}/y/<CR>"),
+            format!(":s/\\V{groups}/y/<CR>"),
+            format!(":g/{groups}/d<CR>"),
+            format!(":sort /{groups}/<CR>"),
+            format!(":/{groups}/d<CR>"),
+            format!("<Cmd>s/{groups}/y/<CR>"),
+            format!(":s/{}a<Esc>", "\\%(".repeat(200)),
+        ] {
+            let out = sandbox_config_text(&format!("nnoremap x {rhs}"));
+            assert!(out.starts_with(STRIPPED), "kept: {rhs:.20}");
+            assert_eq!(press_x_on_a_small_stack(out), "ne\n", "{rhs:.20}");
+        }
+    }
+
+    /// vim-core compiles the pattern of a search when it runs.
+    #[test]
+    fn strips_a_search_whose_pattern_is_too_deeply_nested() {
+        let groups = format!("{}a{}", "\\%(".repeat(200), "\\)".repeat(200));
+        let assembled = format!("{}a{}", "\\(<Left>%<End>".repeat(200), "\\)".repeat(200));
+        for rhs in [
+            format!("/{groups}<CR>"),
+            format!("?{groups}<CR>"),
+            format!("d/{groups}<CR>"),
+            format!("i<C-o>/{groups}<CR>"),
+            format!("/{assembled}<CR>"),
+            format!("/{}a<CR>", "\\%[".repeat(400)),
+            format!("/\\v{}a{}<CR>", "%(".repeat(200), ")".repeat(200)),
+            format!("/{groups}"),
+            format!("/{groups}<Esc>"),
+        ] {
+            let out = sandbox_config_text(&format!("nnoremap x {rhs}"));
+            assert!(out.starts_with(STRIPPED), "kept: {rhs:.20}");
+            assert_eq!(press_x_on_a_small_stack(out), "ne\n", "{rhs:.20}");
+        }
+    }
+
+    /// A search counts only the groups and sequences of its pattern.
+    #[test]
+    fn strips_a_search_past_either_bound() {
+        let nested = |groups: usize| {
+            let (open, close) = ("\\%(".repeat(groups), "\\)".repeat(groups));
+            format!("nnoremap x /{open}a{close}<CR>")
+        };
+        let long = |len: usize| format!("nnoremap x /{}<CR>", "a".repeat(len));
+        assert_all_kept(&[
+            nested(MAX_NESTED).as_str(),
+            long(MAX_COMMAND_LINE).as_str(),
+            "nnoremap x /\\v<(g<Bar>v<Bar>sx<Bar>sy<Bar>windo<Bar>bufdo<Bar>tabdo<Bar>g<Bar>v)><CR>",
+        ]);
+        assert_all_stripped(&[
+            nested(MAX_NESTED + 1).as_str(),
+            long(MAX_COMMAND_LINE + 1).as_str(),
+            "nnoremap x :s/\\v<(g<Bar>v<Bar>sx<Bar>sy<Bar>windo<Bar>bufdo<Bar>tabdo<Bar>g<Bar>v)>//<CR>",
+        ]);
+    }
+
+    #[test]
+    fn keeps_mappings_that_search_a_few_groups_or_sequences() {
+        assert_all_kept(&[
+            "nnoremap x /\\%(foo\\|bar\\)\\(baz\\)<CR>",
+            "nnoremap x ?fu\\%[nction]<CR>",
+            "nnoremap x d/\\v<end%[if]><CR>",
+            "nnoremap x /foo<BS><BS>ar<Home>\\<<End>\\><CR>",
+            "nnoremap <Leader>s /\\v",
+            "inoremap <C-l> /* */<Left><Left><Left>",
+        ]);
+    }
+
+    /// In a search, `<C-r>` and the register it names insert text the filter
+    /// cannot see, and what it sees is still bounded.
+    #[test]
+    fn keeps_a_search_that_inserts_a_register() {
+        assert_all_kept(&[
+            "vnoremap // y/<C-r>\"<CR>",
+            "nnoremap x /<C-r><C-w><CR>",
+            "nnoremap x ?\\<<C-r><C-a>\\><CR>",
+            "nnoremap x /<C-r>/<BS><CR>",
+            "nnoremap x /<C-r><Esc>a<CR>",
+        ]);
+        let groups = |n: usize| "\\%(".repeat(n);
+        assert_all_stripped(&[
+            format!("nnoremap x /{}<C-r>a{}<CR>", groups(4), groups(5)).as_str(),
+            format!("nnoremap x /<C-r>a{}<CR>", "a".repeat(MAX_COMMAND_LINE + 1)).as_str(),
+        ]);
+    }
+
+    #[test]
+    fn keeps_mappings_that_type_and_correct_a_short_command_line() {
+        assert_all_kept(&[
+            "nnoremap x :windo set nu<C-u>noh<CR>",
+            "nnoremap x :g/x/d<BS>s/a/b/<CR>",
+            "nnoremap x :bufdo e<Esc>:noh<CR>",
+            "nnoremap x :tabdo windo set nu<Home><C-k>noh<CR>",
+            "nnoremap x :%s/a/b/g<Left><Left><BS>c<CR>",
+            "nnoremap x <Cmd>windo set nu<Esc><Cmd>noh<CR>",
+            "cnoremap <C-x> <C-u>windo set nu",
+        ]);
+    }
+
+    /// The count a command line keeps as it is edited is the count of its
+    /// text, whatever the edit.
+    #[test]
+    fn a_command_line_keeps_count_of_what_it_nests() {
+        let edits = mapping_keys("<Left><Right><Home><End><BS><Del><C-u><C-k>");
+        let words: Vec<&str> = NESTING_COMMANDS
+            .iter()
+            .map(|&(name, _)| name)
+            .chain(["G", "Windo", " ", "'", "a", "/", "!", "_", "|", "1", "é"])
+            .chain(["%(", "%[", "%", "(", "[", "\\"])
+            .collect();
+        for mut line in [CommandLine::default(), CommandLine::search()] {
+            let mut seed = 1_u32;
+            for _ in 0..20_000 {
+                seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+                let pick = (seed >> 17) as usize;
+                let keys = if seed & (1 << 16) == 0 {
+                    vec![edits[pick % edits.len()]]
+                } else {
+                    mapping_keys(words[pick % words.len()])
+                };
+                for key in keys {
+                    let _ = apply_cmdline_key(&mut line, key);
+                }
+                let all = count_nested(&line.text, 0..line.text.len(), line.search);
+                assert_eq!(line.nested, all, "{}", line.text);
+            }
+        }
+    }
+
+    /// Capturing groups do not count: vim-regex allows no more than nine.
+    #[test]
+    fn keeps_mappings_that_nest_a_few_commands_or_groups() {
+        assert_all_kept(&[
+            "nnoremap x :g/^$/d<CR>",
+            "nnoremap x :windo set nu<CR>",
+            "nnoremap x :tabdo windo set nu<CR>",
+            "nnoremap x :silent keepjumps g/x/d<CR>",
+            "nnoremap x :silent! windo g/x/s/a/b/g<CR>",
+            "nnoremap x :bufdo silent %s/a/b/ge<CR>",
+            "nnoremap x <Cmd>windo diffthis<CR>",
+            "nnoremap x :%s/\\%(foo\\|bar\\)\\(baz\\)/\\1/g<CR>",
+            "nnoremap x :g/\\%(a\\|b\\)/s/\\v%(c\\|d)+/e/<CR>",
+            "nnoremap x :%s/fu\\%[nction]/func/g<CR>",
+            "nnoremap x :g/\\v<end%[if]>/d<CR>",
+            "nnoremap x :s/\\(\\(\\(\\(\\(\\(\\(\\(\\(a\\)\\)\\)\\)\\)\\)\\)\\)\\)/\\9/<CR>",
+        ]);
+    }
+
+    /// A `g` or `v` that ends a word cannot start a command.
+    #[test]
+    fn keeps_a_command_line_with_words_that_end_in_g_or_v() {
+        assert_all_kept(&[
+            "nnoremap x :e res://debug/log/img/svg/config/rev/nav/dev/env/tag.gd<CR>",
+        ]);
+    }
+
+    /// `:filetype` lines chain without recursion, so a long chain still passes.
+    #[test]
+    fn keeps_a_long_chain_of_filetype_commands() {
+        let line = format!("{}filetype on", "filetype plugin on|".repeat(5_000));
+        let out = on_a_small_stack(move || {
+            let out = sandbox_config_text(&line);
+            out.trim_end() == line
+        });
+        assert!(out, "a :filetype chain was stripped");
+    }
+
     /// Each vimrc runs `:!echo hi` when its keys are pressed, and runs nothing
     /// after the sandbox.
     #[test]
     fn the_known_routes_to_the_shell_run_nothing_after_the_sandbox() {
         use vim_core::execution::{HostRequest, HostSession};
         let shell_commands = |text: &str, keys: &str| {
-            let mut session = HostSession::new("one\ntwo\n");
+            let mut session = HostSession::new("a/b?c\ntwo\n");
             let _ = session.source_config(text);
             let mut commands = Vec::new();
             for ch in keys.chars() {
@@ -1628,6 +2063,21 @@ inoremap jk <Esc>
             ("nnoremap x :\u{3000}!echo hi<CR>\n", "x"),
             ("nnoremap x :nnoremap y :!echo hi<lt>CR><CR>\n", "xy"),
             ("set langmap=q:\nnnoremap x 0q!echo hi<CR>\n", "x"),
+            ("nnoremap x f/:!echo hi<CR>\n", "x"),
+            ("nnoremap x t/:!echo hi<CR>\n", "x"),
+            ("nnoremap x $F/:!echo hi<CR>\n", "x"),
+            ("nnoremap x $T/:!echo hi<CR>\n", "x"),
+            ("nnoremap x f?:!echo hi<CR>\n", "x"),
+            ("nnoremap x df/:!echo hi<CR>\n", "x"),
+            ("nnoremap x r/:!echo hi<CR>\n", "x"),
+            ("nnoremap x m/:!echo hi<CR>\n", "x"),
+            ("nnoremap x @/:!echo hi<CR>\n", "x"),
+            ("nnoremap x \"/:!echo hi<CR>\n", "x"),
+            ("nnoremap x `/:!echo hi<CR>\n", "x"),
+            ("nnoremap x '/:!echo hi<CR>\n", "x"),
+            ("nnoremap x $f/:!echo hi<CR>\n", "x"),
+            ("nnoremap x r?:!echo hi<CR>\n", "x"),
+            ("nnoremap x f/:nnoremap y :!echo hi<lt>CR><CR>\n", "xy"),
         ] {
             assert_eq!(shell_commands(text, keys), ["echo hi"], "{text}");
             assert!(
@@ -1664,6 +2114,8 @@ inoremap jk <Esc>
             "nnoremap x :echo<Up><CR>",
             "nnoremap x :echo<C-f>",
             "cnoremap <C-x> <C-r>a",
+            "nnoremap x ?<Up><CR>",
+            "nnoremap x /<C-r>=@a<CR><CR>",
         ]);
     }
 
