@@ -696,7 +696,7 @@ void fragment() {
 /// **Animation**: exponential-decay lerp toward target; square-wave blink when
 /// stationary.
 #[derive(GodotClass)]
-#[class(base = Control)]
+#[class(tool, base = Control)]
 pub struct VimCursor {
     base: Base<Control>,
 

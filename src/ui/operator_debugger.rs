@@ -26,7 +26,7 @@ const CLEAR_DELAY_SECS: f64 = 0.5;
 const MAX_HIGHLIGHT_RECTS: usize = 500;
 
 #[derive(GodotClass)]
-#[class(base=Control)]
+#[class(tool, base=Control)]
 pub(crate) struct DebugRangeOverlay {
     base: Base<Control>,
     highlights: Vec<RangeHighlight>,

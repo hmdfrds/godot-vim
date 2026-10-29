@@ -111,7 +111,7 @@ impl StatusBarTheme {
 /// Anchored to the bottom-right of a `CodeEdit`. Displays mode, command-line,
 /// messages, and recording state via a colored panel with a text label.
 #[derive(GodotClass)]
-#[class(base = HBoxContainer)]
+#[class(tool, base = HBoxContainer)]
 pub struct VimStatusBar {
     base: Base<HBoxContainer>,
 

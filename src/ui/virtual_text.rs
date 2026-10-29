@@ -61,7 +61,7 @@ struct DrawCmd {
 /// Pixel positions are pre-computed via `get_rect_at_line_column()` when
 /// entries change and cached in `draw_list` for `_draw()` to consume.
 #[derive(GodotClass)]
-#[class(base=Control)]
+#[class(tool, base=Control)]
 pub(crate) struct VirtualTextOverlay {
     base: Base<Control>,
     /// Logical entries keyed by namespace for independent clear/update.

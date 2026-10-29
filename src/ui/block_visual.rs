@@ -29,7 +29,7 @@ struct BlockGeometry {
 }
 
 #[derive(GodotClass)]
-#[class(base=Control)]
+#[class(tool, base=Control)]
 pub(crate) struct BlockVisualOverlay {
     base: Base<Control>,
     highlights: Vec<Rect2>,

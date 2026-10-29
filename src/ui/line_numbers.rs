@@ -36,7 +36,7 @@ const SHOW_LINE_NUMBERS: &str = "text_editor/appearance/gutters/show_line_number
 const MIN_DIGITS_PROPERTY: &str = "gutters_line_numbers_min_digits";
 
 #[derive(GodotClass)]
-#[class(base = Node)]
+#[class(tool, base = Node)]
 pub struct LineNumberManager {
     base: Base<Node>,
     editor: Option<Gd<CodeEdit>>,

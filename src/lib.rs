@@ -132,4 +132,46 @@ mod tests {
              set the matching api-4-N feature on the godot dependency"
         );
     }
+
+    fn rust_sources() -> Vec<(std::path::PathBuf, String)> {
+        fn visit(dir: &std::path::Path, out: &mut Vec<(std::path::PathBuf, String)>) {
+            for entry in std::fs::read_dir(dir).expect("read src") {
+                let path = entry.expect("dir entry").path();
+                if path.is_dir() {
+                    visit(&path, out);
+                } else if path.extension().is_some_and(|e| e == "rs") {
+                    let src = std::fs::read_to_string(&path).expect("read file");
+                    out.push((path, src));
+                }
+            }
+        }
+        let mut out = Vec::new();
+        visit(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+            &mut out,
+        );
+        out
+    }
+
+    /// gdext 0.6 makes a non-tool class an inert placeholder in the editor,
+    /// where every class of this plugin runs.
+    #[test]
+    fn every_godot_class_is_a_tool_class() {
+        let mut missing = Vec::new();
+        for (path, src) in rust_sources() {
+            let mut lines = src.lines().enumerate();
+            while let Some((i, line)) = lines.next() {
+                if line.trim() == "#[derive(GodotClass)]" {
+                    let class = lines.next().map_or("", |(_, l)| l.trim());
+                    if !class.starts_with("#[class(tool") {
+                        missing.push(format!("{}:{}", path.display(), i + 1));
+                    }
+                }
+            }
+        }
+        assert!(
+            missing.is_empty(),
+            "add `tool` to these #[class(...)] attributes: {missing:?}"
+        );
+    }
 }
