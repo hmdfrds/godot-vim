@@ -24,6 +24,7 @@ mod highlight_yank;
 mod inccommand;
 mod line_numbers;
 pub(crate) mod mapping_dialog;
+mod native_caret;
 mod operator_debugger;
 mod search_hl;
 mod status_bar;

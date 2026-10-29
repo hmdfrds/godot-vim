@@ -20,6 +20,7 @@ use super::cursor_shape::{compute_cursor_geometry, VimCursor};
 use super::highlight_yank::HighlightYankOverlay;
 use super::inccommand::InccommandOverlay;
 use super::line_numbers::LineNumberManager;
+use super::native_caret::NativeCaretColor;
 use super::operator_debugger::DebugRangeOverlay;
 use super::search_hl::SearchHighlighter;
 use super::status_bar::{self, VimStatusBar};
@@ -65,11 +66,8 @@ fn valid_mut<T: godot::prelude::GodotClass>(slot: &mut Option<Gd<T>>) -> Option<
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Editor properties we override on attach and must restore on detach.
-/// `None` fields mean the editor had no explicit override (theme-inherited),
-/// so detach should remove our override rather than setting a value.
 #[derive(Default)]
 struct SavedEditorState {
-    caret_color: Option<Color>,
     caret_type: Option<CaretType>,
 }
 
@@ -144,6 +142,7 @@ pub(crate) struct UiCoordinator {
     search_hl: SearchHighlighter,
     inccommand: Option<Gd<InccommandOverlay>>,
     saved: SavedEditorState,
+    native_caret: NativeCaretColor,
     /// When false, the native Godot caret is used instead of VimCursor.
     /// Toggled by user settings; requires swapping caret_color overrides.
     cursor_enabled: bool,
@@ -165,6 +164,7 @@ impl UiCoordinator {
             search_hl: SearchHighlighter::new(),
             inccommand: None,
             saved: SavedEditorState::default(),
+            native_caret: NativeCaretColor::default(),
             cursor_enabled: true,
             cache: DirtyCache::default(),
             debug_overlay: None,
@@ -206,15 +206,10 @@ impl UiCoordinator {
         self.cursor_enabled = true;
 
         // ── 3. Hide native caret ─────────────────────────────────────────
-        // Save the existing override (or None for theme-inherited) so detach
+        // Saves the existing override (or None for theme-inherited) so detach
         // can restore the original behavior without leaking our transparent
         // override into future theme changes.
-        self.saved.caret_color = if editor.has_theme_color_override("caret_color") {
-            Some(editor.get_theme_color("caret_color"))
-        } else {
-            None
-        };
-        editor.add_theme_color_override("caret_color", Color::from_rgba(0.0, 0.0, 0.0, 0.0));
+        self.native_caret.attach(editor);
 
         // ── 3b. Cache caret type ───────────────────────────────────────
         self.saved.caret_type = Some(editor.get_caret_type());
@@ -255,11 +250,7 @@ impl UiCoordinator {
         // ── 2. Cursor ────────────────────────────────────────────────────
         remove_and_free(&mut self.cursor);
 
-        if let Some(color) = self.saved.caret_color.take() {
-            editor.add_theme_color_override("caret_color", color);
-        } else {
-            editor.remove_theme_color_override("caret_color");
-        }
+        self.native_caret.detach(editor);
 
         if let Some(caret_type) = self.saved.caret_type.take() {
             editor.set_caret_type(caret_type);
@@ -305,6 +296,7 @@ impl UiCoordinator {
     pub(crate) fn reset_cached_state(&mut self) {
         self.cache = DirtyCache::default();
         self.saved = SavedEditorState::default();
+        self.native_caret = NativeCaretColor::default();
         self.cursor_enabled = true;
         self.search_hl = SearchHighlighter::new();
         self.status_bar.take();
@@ -380,15 +372,10 @@ impl UiCoordinator {
         // Multi-cursor: restore native caret color so Godot renders secondary
         // cursors. VimCursor overlay covers the primary (acceptable overlap).
         // Single cursor: transparent (VimCursor handles rendering).
+        self.native_caret
+            .update(editor, snap.cursor_count, self.cursor_enabled);
         if snap.cursor_count > 1 {
-            if let Some(ref color) = self.saved.caret_color {
-                editor.add_theme_color_override("caret_color", *color);
-            } else {
-                editor.remove_theme_color_override("caret_color");
-            }
             editor.set_caret_type(mode_to_native_caret(snap.mode));
-        } else if self.cursor_enabled {
-            editor.add_theme_color_override("caret_color", Color::from_rgba(0.0, 0.0, 0.0, 0.0));
         }
 
         // ── 2c. Native caret type (when custom cursor is disabled) ──────
@@ -561,15 +548,10 @@ impl UiCoordinator {
                 with_valid_overlay!(self.cursor, |cursor| {
                     cursor.set_visible(false);
                 });
-                if let Some(color) = self.saved.caret_color {
-                    editor.add_theme_color_override("caret_color", color);
-                } else {
-                    editor.remove_theme_color_override("caret_color");
-                }
+                self.native_caret.set_vim_cursor(editor, false);
                 editor.set_caret_type(mode_to_native_caret(current_mode));
             } else {
-                editor
-                    .add_theme_color_override("caret_color", Color::from_rgba(0.0, 0.0, 0.0, 0.0));
+                self.native_caret.set_vim_cursor(editor, true);
                 with_valid_overlay!(self.cursor, |cursor| {
                     cursor.set_visible(true);
                 });
