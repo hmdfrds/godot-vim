@@ -779,18 +779,23 @@ fn count_nested(line: &str, starts: std::ops::Range<usize>, search: bool) -> usi
 }
 
 /// Whether one of the commands vim-core runs for `line` is unsafe, split and
-/// parsed as `execute_ex_line` does. A piece that fails to parse runs nothing.
+/// parsed as `execute_ex_line` does. A piece that fails to parse runs nothing;
+/// a line the parser panics on is unsafe.
 fn parses_to_unsafe_command(line: &str) -> bool {
     use vim_core::grammar::{parse_ex_command_with_modifiers, split_ex_pipeline};
-    let pieces = split_ex_pipeline(line);
-    let pieces = if pieces.len() <= 1 {
-        vec![line]
-    } else {
-        pieces
-    };
-    pieces.into_iter().any(|piece| {
-        parse_ex_command_with_modifiers(piece).is_ok_and(|(_, command)| is_unsafe_command(&command))
+    std::panic::catch_unwind(|| {
+        let pieces = split_ex_pipeline(line);
+        let pieces = if pieces.len() <= 1 {
+            vec![line]
+        } else {
+            pieces
+        };
+        pieces.into_iter().any(|piece| {
+            parse_ex_command_with_modifiers(piece)
+                .is_ok_and(|(_, command)| is_unsafe_command(&command))
+        })
     })
+    .unwrap_or(true)
 }
 
 /// A command a right-hand side may not run: the shell, `:source`, one that
@@ -2036,6 +2041,39 @@ inoremap jk <Esc>
             out.trim_end() == line
         });
         assert!(out, "a :filetype chain was stripped");
+    }
+
+    /// vim-core's `split_ex_pipeline` may panic on a mark followed by a
+    /// character of more than one byte. Judging such a line never crashes,
+    /// and stripped or kept, it reaches no shell and sources nothing.
+    #[test]
+    fn a_command_line_the_parser_may_panic_on_is_judged_without_crashing() {
+        use vim_core::execution::{HostRequest, HostSession};
+        for line in [
+            "nnoremap x :'é<CR>",
+            "nnoremap x :1,'éd<CR>",
+            "nnoremap x <Cmd>'é<CR>",
+            "nnoremap x :'é",
+        ] {
+            let mut session = HostSession::new("one\ntwo\n");
+            let _ = session.source_config(&sandbox_config_text(line));
+            for key in [
+                vim_core::keymap::KeyEvent::char('x'),
+                vim_core::keymap::KeyEvent::enter(),
+            ] {
+                for request in session.process_key_host(key).host_requests {
+                    assert!(
+                        !matches!(
+                            request,
+                            HostRequest::ExternalCommand { .. }
+                                | HostRequest::ReadConfigFile { .. }
+                        ),
+                        "{line}"
+                    );
+                }
+            }
+        }
+        assert_all_kept(&["nnoremap x :s/'é/e/<CR>", "nnoremap x :'a,'bs/é/e/<CR>"]);
     }
 
     /// Each vimrc runs `:!echo hi` when its keys are pressed, and runs nothing
