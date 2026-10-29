@@ -3,6 +3,13 @@
 Notes for people arriving from an older release. Nothing here applies to a
 fresh install.
 
+## From v1.9.1
+
+**Building from source needs Rust 1.94 or newer.** GodotVim is now built
+with godot-rust 0.5.5, which needs it, and an older toolchain stops with a
+message naming that version. Nothing changes in the editor, and a release
+download needs no Rust at all.
+
 ## From v1.9.0
 
 **A project vimrc line with several commands is judged command by
