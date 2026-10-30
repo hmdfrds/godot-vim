@@ -31,7 +31,7 @@ struct MatchHighlight {
 const MAX_HIGHLIGHTS: usize = 100;
 
 #[derive(GodotClass)]
-#[class(base=Control)]
+#[class(tool, base=Control)]
 pub(crate) struct InccommandOverlay {
     base: Base<Control>,
     highlights: Vec<MatchHighlight>,

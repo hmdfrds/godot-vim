@@ -17,6 +17,7 @@
 
 use std::fmt::Write;
 
+use godot::builtin::Side;
 use godot::classes::control::{GrowDirection, MouseFilter, SizeFlags};
 use godot::classes::{
     CodeEdit, Control, HBoxContainer, IHBoxContainer, Label, Node, PanelContainer, StyleBoxFlat,
@@ -111,7 +112,7 @@ impl StatusBarTheme {
 /// Anchored to the bottom-right of a `CodeEdit`. Displays mode, command-line,
 /// messages, and recording state via a colored panel with a text label.
 #[derive(GodotClass)]
-#[class(base = HBoxContainer)]
+#[class(tool, base = HBoxContainer)]
 pub struct VimStatusBar {
     base: Base<HBoxContainer>,
 

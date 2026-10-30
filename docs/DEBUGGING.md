@@ -113,7 +113,7 @@ Trace is for engine developers narrowing down a specific keystroke.
 - **Logs are ephemeral.** Godot's Output panel has no persistence or rotation.
   Copy the output before closing the editor.
 - **`cargo test` does not capture logs.** The `logging.rs` guard
-  (`!godot::sys::is_initialized()`) silently discards logs outside Godot.
+  (`safety::engine_loaded()`) silently discards logs outside Godot.
   Log-dependent behavior cannot be tested in unit tests.
 
 ---

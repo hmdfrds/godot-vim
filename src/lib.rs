@@ -93,10 +93,10 @@ struct GodotVimExt;
 //   3. Rust panics are caught by `safety::panic_guard` at every signal handler
 //      boundary, preventing unwinding across the FFI.
 unsafe impl ExtensionLibrary for GodotVimExt {
-    fn on_level_init(level: InitLevel) {
-        // Scene is the earliest InitLevel where Godot's print macros work;
-        // calling godot_print! at Server or Core level panics.
-        if level == InitLevel::Scene {
+    fn on_stage_init(stage: InitStage) {
+        // Scene is the earliest stage where Godot's print macros work;
+        // calling godot_print! at Servers or Core stage panics.
+        if stage == InitStage::Scene {
             logging::init();
         }
     }
@@ -130,6 +130,63 @@ mod tests {
             minimum,
             "godot is built against a different API than compatibility_minimum; \
              set the matching api-4-N feature on the godot dependency"
+        );
+    }
+
+    fn rust_sources() -> Vec<(std::path::PathBuf, String)> {
+        fn visit(dir: &std::path::Path, out: &mut Vec<(std::path::PathBuf, String)>) {
+            for entry in std::fs::read_dir(dir).expect("read src") {
+                let path = entry.expect("dir entry").path();
+                if path.is_dir() {
+                    visit(&path, out);
+                } else if path.extension().is_some_and(|e| e == "rs") {
+                    let src = std::fs::read_to_string(&path).expect("read file");
+                    out.push((path, src));
+                }
+            }
+        }
+        let mut out = Vec::new();
+        visit(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+            &mut out,
+        );
+        out
+    }
+
+    /// gdext 0.6 makes a non-tool class an inert placeholder in the editor,
+    /// where every class of this plugin runs.
+    #[test]
+    fn every_godot_class_is_a_tool_class() {
+        let mut missing = Vec::new();
+        for (path, src) in rust_sources() {
+            let mut lines = src.lines().enumerate();
+            while let Some((i, line)) = lines.next() {
+                if line.trim() == "#[derive(GodotClass)]" {
+                    let class = lines.next().map_or("", |(_, l)| l.trim());
+                    if !class.starts_with("#[class(tool") {
+                        missing.push(format!("{}:{}", path.display(), i + 1));
+                    }
+                }
+            }
+        }
+        assert!(
+            missing.is_empty(),
+            "add `tool` to these #[class(...)] attributes: {missing:?}"
+        );
+    }
+
+    /// `godot::sys` is gdext's private API and is renamed without notice.
+    #[test]
+    fn godot_sys_is_used_only_by_safety_engine_loaded() {
+        let needle = ["godot", "::sys::"].concat();
+        let users: Vec<String> = rust_sources()
+            .into_iter()
+            .filter(|(path, src)| src.contains(&needle) && !path.ends_with("src/safety.rs"))
+            .map(|(path, _)| path.display().to_string())
+            .collect();
+        assert!(
+            users.is_empty(),
+            "call crate::safety::engine_loaded() instead: {users:?}"
         );
     }
 }
