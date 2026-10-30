@@ -70,6 +70,8 @@ pub(crate) struct DispatchContext<'a> {
 pub(crate) struct DispatchEnv<'a> {
     pub(crate) doc: &'a DocumentView<'a>,
     pub(crate) scrolloff: i32,
+    /// The first visible line the engine's scroll targets start from.
+    pub(crate) top_line: i32,
     pub(crate) highlight_yank_duration_ms: u32,
     #[allow(dead_code)] // written by dispatch() and process.rs step mode; read access pending
     pub(crate) editor_id: InstanceId,
@@ -379,6 +381,7 @@ pub(crate) fn dispatch(
     } = ctx;
     let auto_brace_eligible = matches!(auto_brace, AutoBraceMode::Eligible);
     log::trace!("dispatch: {} effects", effects.len());
+    let top_line = editor.get_first_visible_line();
     let mut pass2 = Vec::with_capacity(effects.len());
 
     // Clear stale carets and selections. Secondaries of an active multi-cursor
@@ -686,6 +689,7 @@ pub(crate) fn dispatch(
     let env = DispatchEnv {
         doc: &doc,
         scrolloff,
+        top_line,
         highlight_yank_duration_ms,
         editor_id,
     };
@@ -886,7 +890,7 @@ pub(crate) fn dispatch_pass2_effect(
         | Effect::ScrollHalfScreenRight { .. }
         | Effect::ScrollCursorToLeftEdge
         | Effect::ScrollCursorToRightEdge => {
-            dispatch_scroll_effect(effect, editor, env.doc);
+            dispatch_scroll_effect(effect, editor, env.doc, env.top_line);
         }
         // ── Fold ────────────────────────────────────────────────────────
         Effect::FoldLine { .. }
@@ -1309,10 +1313,15 @@ fn dispatch_search_effect(effect: Effect, state: &mut ShellState, doc: &Document
     }
 }
 
-fn dispatch_scroll_effect(effect: Effect, editor: &mut impl TextEditorPort, doc: &DocumentView) {
+fn dispatch_scroll_effect(
+    effect: Effect,
+    editor: &mut impl TextEditorPort,
+    doc: &DocumentView,
+    top_line: i32,
+) {
     match effect {
         Effect::ScrollTo { offset } => {
-            scroll::handle_scroll_to(editor, doc, offset.get());
+            scroll::handle_scroll_to(editor, doc, offset.get(), top_line);
         }
         Effect::CenterCursor => scroll::handle_center_cursor(editor),
         Effect::CursorToTop => scroll::handle_cursor_to_top(editor),

@@ -136,6 +136,7 @@ gives for row R, column C; `<now>` puts two of them in one frame.
 |---|---|---|
 | `text` | the lines (line form: from line 4, without `\tpass`) | stated, and with vanilla by default |
 | `caret`, `carets` | main caret `[row, col]`, caret count | stated, and with vanilla by default |
+| `top` | the first visible line, counted as `caret` counts rows | stated only |
 | `popup` | `false`, or the highlighted row's text | stated, and with vanilla by default |
 | `focus` | `""` while the case's CodeEdit has focus, else the focus owner's class, plus `[dialog 'Title']` per visible dialog | stated, and with vanilla by default |
 | `mode` | the mode word when the whole status bar is one of its mode forms, else `null` | stated only |

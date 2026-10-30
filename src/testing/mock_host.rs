@@ -55,6 +55,7 @@ struct MockHost {
     brace_pairs: Option<Vec<(String, String)>>,
     auto_brace_eligible: bool,
     engine_auto_pairs_active: bool,
+    scrolloff: i32,
 }
 
 impl MockHost {
@@ -73,6 +74,7 @@ impl MockHost {
             brace_pairs: None,
             auto_brace_eligible: false,
             engine_auto_pairs_active: false,
+            scrolloff: 0,
         }
     }
 
@@ -214,7 +216,7 @@ impl VimHost for MockHost {
                 auto_brace,
                 auto_brace_snapshot,
                 line_index_hint,
-                scrolloff: 0,
+                scrolloff: self.scrolloff,
                 highlight_yank_duration_ms: 0,
                 syntax_query: Box::new(|_, _| SyntaxRegion::code()),
                 clipboard: &mut self.clipboard,
@@ -315,10 +317,12 @@ impl Harness {
             session.host_mut().state.globals_mut().clear_message();
             let mode = session.engine().mode();
             let auto_pairs_active = session.engine().options().auto_pairs().is_some();
+            let scrolloff = codec::usize_to_i32(session.engine().options().scrolloff());
             let host = session.host_mut();
             host.refresh_from_editor();
             host.auto_brace_eligible = mode.is_insert();
             host.engine_auto_pairs_active = auto_pairs_active;
+            host.scrolloff = scrolloff;
             let _ = session.process_key(key);
             self.ensure_undo_balanced();
         }
@@ -462,6 +466,14 @@ impl Harness {
 
     pub(crate) fn mode(&self) -> Mode {
         self.session.engine().mode()
+    }
+
+    pub(crate) fn set_scrolloff(&mut self, lines: usize) {
+        self.session.engine_mut().options_mut().set_scrolloff(lines);
+    }
+
+    pub(crate) fn editor(&self) -> &MockTextEdit {
+        &self.session.host().editor
     }
 
     pub(crate) fn orphaned_undo_groups(&self) -> usize {

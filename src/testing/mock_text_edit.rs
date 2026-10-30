@@ -3,9 +3,10 @@
 //!
 //! Replicates behavioral semantics from Godot's `text_edit.cpp`: text storage
 //! (`Vec<String>`), caret model with `last_fit_x`, origin-based selection,
-//! multi-caret, and group-based undo with caret snapshots. This lets bridge
-//! effect handlers run against a real text model in `cargo test` without
-//! requiring a Godot editor instance or GDExtension linkage.
+//! multi-caret, group-based undo with caret snapshots, and the viewport in
+//! screen rows with folds and wrap. This lets bridge effect handlers run
+//! against a real text model in `cargo test` without requiring a Godot
+//! editor instance or GDExtension linkage.
 //!
 //! ## Undo model
 //!
@@ -15,6 +16,8 @@
 //! not by the mock's undo stack.
 //!
 //! Reference: `/reference/godot/scene/gui/text_edit.{h,cpp}`
+
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::bridge::port::TextEditorPort;
 
@@ -82,10 +85,17 @@ pub(crate) struct MockTextEdit {
     /// to the outermost `end_multicaret_edit`.
     multicaret_edit_count: u32,
 
-    // ── Scroll state (simplified: no wrap, no minimap) ──
+    // ── Viewport, in screen rows: a line inside a closed fold takes none, a
+    // wrapped line one per wrap. No minimap, no scroll past the end. ──
+    /// The row at the top, as Godot's `v_scroll`.
     v_scroll: f64,
     h_scroll: i32,
     visible_line_count: i32,
+    /// Fold header -> last line it hides, for each fold a test declares.
+    fold_regions: BTreeMap<i32, i32>,
+    folded: BTreeSet<i32>,
+    /// Characters per screen row; 0 does not wrap.
+    wrap_width: i32,
 
     /// Completion popup calls, in order, and what the popup and caret are on.
     pub(crate) completion_log: Vec<String>,
@@ -115,6 +125,9 @@ impl MockTextEdit {
             v_scroll: 0.0,
             h_scroll: 0,
             visible_line_count: 25,
+            fold_regions: BTreeMap::new(),
+            folded: BTreeSet::new(),
+            wrap_width: 0,
             completion_log: Vec::new(),
             popup_open: false,
             popup_paths: false,
@@ -128,6 +141,183 @@ impl MockTextEdit {
 
     pub(crate) fn set_visible_line_count(&mut self, count: i32) {
         self.visible_line_count = count;
+    }
+
+    /// A fold at `header` hiding `header + 1..=last`, as Godot finds from
+    /// indentation or `#region`. Edits do not move it.
+    pub(crate) fn add_fold_region(&mut self, header: i32, last: i32) {
+        self.fold_regions.insert(header, last);
+    }
+
+    pub(crate) fn set_wrap_width(&mut self, cols: i32) {
+        self.wrap_width = cols;
+    }
+
+    pub(crate) fn set_v_scroll(&mut self, value: f64) {
+        let max = (self.total_rows() - self.visible_line_count).max(0);
+        self.v_scroll = value.clamp(0.0, f64::from(max));
+    }
+
+    // ── Rows (text_edit.cpp) ─────────────────────────────────────────────
+
+    /// CodeEdit enables hiding with code folding; the mock once a test
+    /// declares a fold. Godot's fast paths apply without it.
+    fn hiding_enabled(&self) -> bool {
+        !self.fold_regions.is_empty()
+    }
+
+    fn last_line(&self) -> i32 {
+        self.lines.len() as i32 - 1
+    }
+
+    fn is_line_hidden(&self, line: i32) -> bool {
+        self.folded
+            .iter()
+            .any(|h| line > *h && line <= self.fold_regions[h])
+    }
+
+    fn line_wrap_count(&self, line: i32) -> i32 {
+        if self.wrap_width <= 0 {
+            return 0;
+        }
+        let len = self.lines[line as usize].len() as i32;
+        (len.max(1) - 1) / self.wrap_width
+    }
+
+    fn caret_wrap_index(&self, idx: usize) -> i32 {
+        let caret = &self.carets[idx];
+        if self.wrap_width <= 0 {
+            return 0;
+        }
+        (caret.column / self.wrap_width).min(self.line_wrap_count(caret.line))
+    }
+
+    /// `get_visible_line_count_in_range`, inclusive.
+    fn rows_in(&self, from: i32, to: i32) -> i32 {
+        (from..=to)
+            .filter(|l| !self.is_line_hidden(*l))
+            .map(|l| 1 + self.line_wrap_count(l))
+            .sum()
+    }
+
+    fn total_rows(&self) -> i32 {
+        self.rows_in(0, self.last_line())
+    }
+
+    fn scroll_pos_for_line(&self, line: i32, wrap: i32) -> f64 {
+        debug_assert!((0..=self.line_wrap_count(line)).contains(&wrap));
+        f64::from(self.rows_in(0, line - 1) + wrap)
+    }
+
+    /// `_scroll_moved`: the line and wrap row at the top.
+    fn top(&self) -> (i32, i32) {
+        let v = self.v_scroll.floor() as i32;
+        let mut rows = 0;
+        let mut line = 0;
+        while line <= self.last_line() {
+            if !self.is_line_hidden(line) {
+                rows += 1 + self.line_wrap_count(line);
+                if rows > v {
+                    break;
+                }
+            }
+            line += 1;
+        }
+        let line = line.min(self.last_line());
+        let wraps = self.line_wrap_count(line);
+        (line, (wraps - (rows - v - 1)).clamp(0, wraps))
+    }
+
+    /// `get_next_visible_line_index_offset_from`: lines walked, inclusive,
+    /// and the wrap row reached.
+    fn next_visible_row_offset(&self, line: i32, wrap: i32, amount: i32) -> (i32, i32) {
+        if !self.hiding_enabled() && self.wrap_width <= 0 {
+            return (amount.abs(), 0);
+        }
+        if amount == 0 {
+            return (0, 0);
+        }
+        let count = self.lines.len() as i32;
+        let mut total = 0;
+        let wrap_index = if amount > 0 {
+            let mut visible = -wrap;
+            let mut i = line;
+            while i < count {
+                total += 1;
+                if !self.is_line_hidden(i) {
+                    visible += 1 + self.line_wrap_count(i);
+                }
+                if visible >= amount {
+                    break;
+                }
+                i += 1;
+            }
+            let mut w = self.line_wrap_count(i.min(count - 1)) - (visible - amount).max(0);
+            let end = line + total - 1;
+            if self.is_line_hidden(end) {
+                let back = self.next_visible_row_offset(end, 0, -1);
+                total -= back.0 - 1;
+                w = back.1;
+            }
+            w
+        } else {
+            let mut visible = wrap - self.line_wrap_count(line);
+            let mut i = line;
+            while i >= 0 {
+                total += 1;
+                if !self.is_line_hidden(i) {
+                    visible += 1 + self.line_wrap_count(i);
+                }
+                if visible >= -amount {
+                    break;
+                }
+                i -= 1;
+            }
+            visible + amount
+        };
+        (total, wrap_index.max(0))
+    }
+
+    fn last_full_visible(&self) -> (i32, i32) {
+        let (first, wrap) = self.top();
+        let (walked, last_wrap) =
+            self.next_visible_row_offset(first, wrap, self.visible_line_count);
+        ((first + walked - 1).clamp(0, self.last_line()), last_wrap)
+    }
+
+    /// As Godot 4.6+, which leaves the row above a sliver at the top (the
+    /// 0.999 of `_get_visible_lines_offset`); 4.5 rounds it away.
+    fn set_line_as_last_visible(&mut self, line: i32, wrap: i32) {
+        let rows = self.visible_line_count;
+        let (walked, first_wrap) = self.next_visible_row_offset(line, wrap, -rows - 1);
+        if self.rows_in(0, line) < rows + 1 {
+            self.set_v_scroll(0.0);
+            return;
+        }
+        self.set_v_scroll(self.scroll_pos_for_line(line - walked + 1, first_wrap) + 0.999);
+    }
+
+    /// Godot keeps the top line when folds change, and a fold collapses the
+    /// carets inside it onto the end of its header.
+    fn refold(&mut self, change: impl FnOnce(&mut Self)) {
+        let (top, wrap) = self.top();
+        change(self);
+        let folds: Vec<(i32, i32)> = self
+            .folded
+            .iter()
+            .map(|h| (*h, self.fold_regions[h]))
+            .collect();
+        for caret in &mut self.carets {
+            if let Some((header, _)) = folds
+                .iter()
+                .find(|(h, last)| caret.line > *h && caret.line <= *last)
+            {
+                caret.line = *header;
+                caret.column = self.lines[*header as usize].len() as i32;
+                caret.selection.active = false;
+            }
+        }
+        self.set_line_as_first_visible(top, wrap);
     }
 
     fn merge_overlapping_carets(&mut self) {
@@ -468,20 +658,34 @@ impl TextEditorPort for MockTextEdit {
         self.carets[0].column
     }
 
-    /// No folds to unfold in the mock — delegates straight to `set_caret_line`.
-    fn set_caret_line_unfold(&mut self, line: i32, _viewport: crate::bridge::port::ViewportAdjust) {
+    /// `set_caret_line` with `can_be_hidden = false`: a line inside a closed
+    /// fold gives the first visible line below it, else the one above.
+    fn set_caret_line_unfold(&mut self, line: i32, viewport: crate::bridge::port::ViewportAdjust) {
+        let mut line = self.clamp_line(line);
+        if self.is_line_hidden(line) {
+            let down = self.get_next_visible_line_offset_from(line, 1) - 1;
+            let up = self.get_next_visible_line_offset_from(line, -1) - 1;
+            if line + down <= self.last_line() && !self.is_line_hidden(line + down) {
+                line += down;
+            } else if line - up > 0 && !self.is_line_hidden(line - up) {
+                line -= up;
+            }
+        }
         self.set_caret_line(line);
+        if viewport == crate::bridge::port::ViewportAdjust::Adjust {
+            self.adjust_viewport_to_caret();
+        }
     }
 
     fn adjust_viewport_to_caret(&mut self) {
-        let caret_line = self.carets[0].line;
-        let first_visible = self.v_scroll as i32;
-        let last_visible = first_visible + self.visible_line_count - 1;
-
-        if caret_line < first_visible {
-            self.v_scroll = caret_line as f64;
-        } else if caret_line > last_visible {
-            self.v_scroll = (caret_line - self.visible_line_count + 1).max(0) as f64;
+        let line = self.carets[0].line;
+        let wrap = self.caret_wrap_index(0);
+        let (first, first_wrap) = self.top();
+        let (last, last_wrap) = self.last_full_visible();
+        if line < first || (line == first && wrap < first_wrap) {
+            self.set_line_as_first_visible(line, wrap);
+        } else if line > last || (line == last && wrap > last_wrap) {
+            self.set_line_as_last_visible(line, wrap);
         }
     }
 
@@ -644,16 +848,41 @@ impl TextEditorPort for MockTextEdit {
 
     // ── Scroll ──────────────────────────────────────────────────────────
 
-    fn set_v_scroll(&mut self, value: f64) {
-        self.v_scroll = value.max(0.0);
+    fn get_v_scroll(&self) -> f64 {
+        self.v_scroll
     }
 
     fn get_first_visible_line(&self) -> i32 {
-        self.v_scroll as i32
+        self.top().0
     }
 
     fn get_visible_line_count(&self) -> i32 {
         self.visible_line_count
+    }
+
+    fn get_caret_wrap_index(&self) -> i32 {
+        self.caret_wrap_index(0)
+    }
+
+    fn get_line_wrap_count(&self, line: i32) -> i32 {
+        self.line_wrap_count(line)
+    }
+
+    fn get_scroll_pos_for_line(&self, line: i32, wrap: i32) -> f64 {
+        self.scroll_pos_for_line(line, wrap)
+    }
+
+    fn get_next_visible_line_index_offset_from(
+        &self,
+        line: i32,
+        wrap: i32,
+        rows: i32,
+    ) -> (i32, i32) {
+        self.next_visible_row_offset(line, wrap, rows)
+    }
+
+    fn set_line_as_first_visible(&mut self, line: i32, wrap: i32) {
+        self.set_v_scroll(self.scroll_pos_for_line(line, wrap));
     }
 
     fn set_h_scroll(&mut self, value: i32) {
@@ -664,20 +893,66 @@ impl TextEditorPort for MockTextEdit {
         self.h_scroll
     }
 
-    /// Without code folding, every line is visible — so the visible offset
-    /// from any line is just the absolute count requested.
-    fn get_next_visible_line_offset_from(&self, _line: i32, visible_amount: i32) -> i32 {
-        visible_amount.abs()
+    fn get_next_visible_line_offset_from(&self, line: i32, visible_amount: i32) -> i32 {
+        if !self.hiding_enabled() {
+            return visible_amount.abs();
+        }
+        let step = if visible_amount >= 0 { 1 } else { -1 };
+        let (mut visible, mut total, mut i) = (0, 0, line);
+        while (0..=self.last_line()).contains(&i) {
+            total += 1;
+            if !self.is_line_hidden(i) {
+                visible += 1;
+            }
+            if visible >= visible_amount.abs() {
+                break;
+            }
+            i += step;
+        }
+        total
     }
 }
 
 // ─── Extension trait implementations ────────────────────────────────────────
-// Fold and navigation are default no-ops. The completion popup is a recorder:
-// no candidates, only the order of calls.
+// Folds act on the regions a test declares. Navigation is a default no-op.
+// The completion popup is a recorder: no candidates, only the order of calls.
 
 use crate::bridge::port::{FoldCapable, IdeCapable, NavigationCapable};
 
-impl FoldCapable for MockTextEdit {}
+impl FoldCapable for MockTextEdit {
+    fn fold_line(&mut self, line: i32) {
+        if self.fold_regions.contains_key(&line) {
+            self.refold(|m| {
+                m.folded.insert(line);
+            });
+        }
+    }
+
+    /// The fold at `line`, or the one hiding it.
+    fn unfold_line(&mut self, line: i32) {
+        let regions = self.fold_regions.clone();
+        self.refold(|m| {
+            m.folded.retain(|h| !(line >= *h && line <= regions[h]));
+        });
+    }
+
+    fn toggle_foldable_line(&mut self, line: i32) {
+        if self.folded.contains(&line) {
+            self.unfold_line(line);
+        } else {
+            self.fold_line(line);
+        }
+    }
+
+    fn fold_all_lines(&mut self) {
+        self.refold(|m| m.folded = m.fold_regions.keys().copied().collect());
+    }
+
+    fn unfold_all_lines(&mut self) {
+        self.refold(|m| m.folded.clear());
+    }
+}
+
 impl IdeCapable for MockTextEdit {
     fn cancel_code_completion(&mut self) {
         self.completion_log.push("cancel".into());

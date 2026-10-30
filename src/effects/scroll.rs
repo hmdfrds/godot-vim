@@ -1,22 +1,29 @@
 //! Applies scroll effects (scroll-to, center, top, bottom, horizontal scroll)
 //! to CodeEdit's viewport.
 
+use super::viewport;
 use crate::bridge::codec::{self, DocumentView};
 use crate::bridge::port::TextEditorPort;
 
 /// Scroll the viewport so that `offset` (byte position) is at the top.
 ///
-/// If the target line is inside a folded region (hidden), the viewport is
-/// scrolled to the nearest visible line at or above the target instead of
-/// landing on a hidden line.
+/// `before` is the top line the engine scrolled from: the caret moves first,
+/// and scrolloff may have moved the view with it. A target inside a closed
+/// fold gives the fold's header, or the line after the fold when the view
+/// moves down from that header, so Ctrl-E steps over it.
 pub(super) fn handle_scroll_to(
     editor: &mut impl TextEditorPort,
     doc: &DocumentView,
     offset: usize,
+    before: i32,
 ) {
-    let before = editor.get_first_visible_line();
     let line = doc.line_index.byte_to_line_col(doc.text, offset).line;
-    let scroll_line = nearest_visible_line_at_or_above(editor, line);
+    let header = nearest_visible_line_at_or_above(editor, line);
+    let scroll_line = if header == before && line > before {
+        line
+    } else {
+        header
+    };
     log::trace!(
         "scroll_to: offset={} target={} scroll={} before={}",
         offset,
@@ -24,7 +31,7 @@ pub(super) fn handle_scroll_to(
         scroll_line,
         before
     );
-    editor.set_v_scroll(scroll_line.into());
+    editor.set_line_as_first_visible(scroll_line, 0);
 }
 
 /// Scan upward for the nearest visible (non-folded) line at or above `line`.
@@ -41,50 +48,24 @@ fn nearest_visible_line_at_or_above(editor: &impl TextEditorPort, line: i32) -> 
     (line - back_offset + 1).max(0)
 }
 
-/// Walk `count` visible lines backward from `start`, respecting fold regions.
-///
-/// Returns the resulting line number. Stops early if it reaches line 0 or
-/// encounters a fold boundary that produces no progress (stall detection).
-fn walk_visible_lines_back(editor: &impl TextEditorPort, start: i32, count: i32) -> i32 {
-    let mut target = start;
-    for _ in 0..count {
-        let offset = editor.get_next_visible_line_offset_from(target, -1);
-        let prev = (target - offset).max(0);
-        if prev == target {
-            break;
-        }
-        target = prev;
-    }
-    target
-}
-
 /// `zz` — center viewport around caret (fold-aware).
 pub(crate) fn handle_center_cursor(editor: &mut impl TextEditorPort) {
-    let caret_line = editor.get_caret_line();
-    let half = editor.get_visible_line_count() / 2;
-    let target = walk_visible_lines_back(editor, caret_line, half);
-    log::trace!("center_cursor: line={}", target);
-    editor.set_v_scroll(target.into());
+    let rows = editor.get_visible_line_count();
+    log::trace!("center_cursor: line={}", editor.get_caret_line());
+    viewport::put_caret_row(editor, rows / 2);
 }
 
 /// `zt` — caret at top of viewport.
 pub(crate) fn handle_cursor_to_top(editor: &mut impl TextEditorPort) {
-    let line = editor.get_caret_line();
-    log::trace!("cursor_to_top: line={}", line);
-    editor.set_v_scroll(line.into());
+    log::trace!("cursor_to_top: line={}", editor.get_caret_line());
+    viewport::put_caret_row(editor, 0);
 }
 
 /// `zb` — caret at bottom of viewport (fold-aware).
 pub(crate) fn handle_cursor_to_bottom(editor: &mut impl TextEditorPort) {
-    let caret_line = editor.get_caret_line();
-    let visible_lines = editor.get_visible_line_count();
-    if visible_lines <= 1 {
-        editor.set_v_scroll(caret_line.into());
-        return;
-    }
-    let target = walk_visible_lines_back(editor, caret_line, visible_lines - 1);
-    log::trace!("cursor_to_bottom: line={}", target);
-    editor.set_v_scroll(target.into());
+    let rows = editor.get_visible_line_count();
+    log::trace!("cursor_to_bottom: line={}", editor.get_caret_line());
+    viewport::put_caret_row(editor, (rows - 1).max(0));
 }
 
 /// `zh` — scroll viewport left by `count` columns.

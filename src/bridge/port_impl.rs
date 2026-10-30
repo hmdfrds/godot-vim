@@ -299,8 +299,8 @@ impl TextEditorPort for CodeEditPort<'_> {
         self.0.end_multicaret_edit();
     }
 
-    fn set_v_scroll(&mut self, value: f64) {
-        self.0.set_v_scroll(value);
+    fn get_v_scroll(&self) -> f64 {
+        self.0.get_v_scroll()
     }
 
     fn get_first_visible_line(&self) -> i32 {
@@ -309,6 +309,40 @@ impl TextEditorPort for CodeEditPort<'_> {
 
     fn get_visible_line_count(&self) -> i32 {
         self.0.get_visible_line_count()
+    }
+
+    fn get_caret_wrap_index(&self) -> i32 {
+        self.0.get_caret_wrap_index()
+    }
+
+    fn get_line_wrap_count(&self, line: i32) -> i32 {
+        self.0.get_line_wrap_count(line)
+    }
+
+    fn get_scroll_pos_for_line(&self, line: i32, wrap: i32) -> f64 {
+        self.0
+            .get_scroll_pos_for_line_ex(line)
+            .wrap_index(wrap)
+            .done()
+    }
+
+    fn get_next_visible_line_index_offset_from(
+        &self,
+        line: i32,
+        wrap: i32,
+        rows: i32,
+    ) -> (i32, i32) {
+        let walked = self
+            .0
+            .get_next_visible_line_index_offset_from(line, wrap, rows);
+        (walked.x, walked.y)
+    }
+
+    fn set_line_as_first_visible(&mut self, line: i32, wrap: i32) {
+        self.0
+            .set_line_as_first_visible_ex(line)
+            .wrap_index(wrap)
+            .done();
     }
 
     fn set_h_scroll(&mut self, value: i32) {

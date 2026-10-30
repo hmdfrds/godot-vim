@@ -325,3 +325,79 @@ fn issue_20_the_port_never_pairs_a_typed_newline() {
     );
     assert_eq!(mock.get_text(), "void f() {\n}");
 }
+
+// ── #105: the view jumped past a closed fold ────────────────────────────────
+// scrolloff, zt and ScrollTo gave Godot lines where it scrolls by rows.
+
+/// 80 numbered lines in a 20-row view, `zc` folding lines 11 to 22 under
+/// line 10, the caret back on line 0.
+fn issue_105_folded() -> Harness {
+    let text: Vec<String> = (0..80).map(|i| format!("line {i}")).collect();
+    let mut h = Harness::new(&text.join("\n"));
+    h.godot_edit(|m| {
+        m.set_visible_line_count(20);
+        m.add_fold_region(10, 22);
+    });
+    h.place_caret(10, 0);
+    h.feed("zc");
+    h.place_caret(0, 0);
+    h
+}
+
+/// The top row and the caret's row.
+fn issue_105_rows(h: &Harness) -> (i32, i32) {
+    let m = h.editor();
+    let caret = m.get_scroll_pos_for_line(m.get_caret_line(), m.get_caret_wrap_index());
+    (m.get_v_scroll() as i32, caret as i32)
+}
+
+#[test]
+fn issue_105_j_moves_the_view_a_row_at_a_time_past_a_fold() {
+    let mut h = issue_105_folded();
+    h.set_scrolloff(5);
+    let (mut top, _) = issue_105_rows(&h);
+    for _ in 0..60 {
+        h.feed("j");
+        let (now, caret) = issue_105_rows(&h);
+        assert!(
+            (0..=1).contains(&(now - top)),
+            "caret {:?}: top row {top} to {now}",
+            h.caret()
+        );
+        assert!((5..=14).contains(&(caret - now)) || caret < 5);
+        top = now;
+    }
+    assert_eq!(h.caret(), (72, 0));
+    assert_eq!(h.editor().get_first_visible_line(), 58);
+}
+
+#[test]
+fn issue_105_ctrl_e_steps_over_a_fold_header() {
+    let mut h = issue_105_folded();
+    h.feed("10<C-e>");
+    assert_eq!(h.editor().get_first_visible_line(), 10);
+    h.feed("<C-e>");
+    assert_eq!(h.editor().get_first_visible_line(), 23);
+    h.feed("<C-y>");
+    assert_eq!(h.editor().get_first_visible_line(), 10);
+}
+
+/// Ctrl-D and Ctrl-U move the caret, scrolloff moves the view with it, and
+/// only then does the view take the top line they ask for.
+#[test]
+fn issue_105_ctrl_d_and_ctrl_u_scroll_past_a_fold() {
+    let mut h = issue_105_folded();
+    h.set_scrolloff(5);
+    let mut seen = Vec::new();
+    for keys in ["7<C-d>", "<C-d>", "<C-d>", "<C-u>", "<C-u>", "<C-u>"] {
+        h.feed(keys);
+        seen.push((h.caret().0, h.editor().get_first_visible_line()));
+    }
+    // Ctrl-D asks for lines 14 and 17 and Ctrl-U for 16, all hidden: the view
+    // takes the fold's header, or the line after the fold when it moves down
+    // from the header.
+    assert_eq!(
+        seen,
+        [(7, 7), (23, 10), (30, 23), (23, 10), (23, 3), (23, 0)]
+    );
+}

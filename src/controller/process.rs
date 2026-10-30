@@ -523,6 +523,7 @@ fn apply_step_effect_to_host(
                 let env = crate::effects::dispatch::DispatchEnv {
                     doc: &doc,
                     scrolloff,
+                    top_line: port.get_first_visible_line(),
                     highlight_yank_duration_ms: highlight_yank_ms,
                     editor_id,
                 };
@@ -819,7 +820,7 @@ fn sync_multi_cursors_to_godot(session: &mut vim_core::execution::VimSession<God
         if let Some((line, col, scrolloff)) = transition_pos {
             port.set_caret_line_unfold(line, crate::bridge::port::ViewportAdjust::Adjust);
             port.set_caret_column(col);
-            crate::effects::cursor::enforce_scrolloff(&mut port, line, scrolloff);
+            crate::effects::cursor::enforce_scrolloff(&mut port, scrolloff);
         }
 
         let buf = state.buffer(editor_id);
@@ -932,7 +933,7 @@ fn sync_multi_cursors_to_godot(session: &mut vim_core::execution::VimSession<God
         let primary_line = positions[0].0 as i32;
         port.set_caret_line_unfold(primary_line, crate::bridge::port::ViewportAdjust::Adjust);
         port.adjust_viewport_to_caret();
-        crate::effects::cursor::enforce_scrolloff(&mut port, primary_line, scrolloff);
+        crate::effects::cursor::enforce_scrolloff(&mut port, scrolloff);
     }
 }
 

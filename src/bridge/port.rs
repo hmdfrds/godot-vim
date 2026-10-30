@@ -2,14 +2,14 @@
 //!
 //! Trait hierarchy:
 //!
-//! - **`TextEditorPort`** (33 methods) — core text editing (required).
+//! - **`TextEditorPort`** (38 methods): core text editing (required).
 //! - **`FoldCapable`** (5 methods, default no-ops) — code folding.
 //! - **`IdeCapable`** (7 methods, default no-ops): autocomplete/hints.
 //! - **`NavigationCapable`** (2 methods, default no-ops) — go-to-definition, hover docs.
 //!
 //! Production: `CodeEditPort` (in `port_impl.rs`) implements all four.
-//! Tests: `MockTextEdit` implements `TextEditorPort`; extension traits
-//! use their default no-op bodies.
+//! Tests: `MockTextEdit` implements `TextEditorPort` and `FoldCapable`; the
+//! other extension traits mostly use their default no-op bodies.
 
 use crate::types::CharLineCol;
 
@@ -46,8 +46,8 @@ pub(crate) trait TextEditorPort {
     fn get_caret_line(&self) -> i32;
     fn get_caret_column(&self) -> i32;
 
-    /// Set caret line with fold-awareness: always unfolds the target line
-    /// (`can_be_hidden=false`) and optionally scrolls the viewport.
+    /// Set caret line with `can_be_hidden=false`: a line inside a closed fold
+    /// gives the first visible line below it (Godot does not unfold).
     fn set_caret_line_unfold(&mut self, line: i32, viewport: ViewportAdjust);
     fn adjust_viewport_to_caret(&mut self);
 
@@ -80,9 +80,28 @@ pub(crate) trait TextEditorPort {
     fn begin_multicaret_edit(&mut self);
     fn end_multicaret_edit(&mut self);
 
-    fn set_v_scroll(&mut self, value: f64);
+    // Vertical scrolling counts screen rows: a closed fold is one row, a
+    // wrapped line one per wrap. Lines and carets count document lines.
+    fn get_v_scroll(&self) -> f64;
     fn get_first_visible_line(&self) -> i32;
+    /// Whole rows that fit in the view.
     fn get_visible_line_count(&self) -> i32;
+    /// The primary caret's wrap row within its line.
+    fn get_caret_wrap_index(&self) -> i32;
+    fn get_line_wrap_count(&self, line: i32) -> i32;
+    /// The row of wrap row `wrap` of `line`; a folded line gives the row
+    /// after its fold.
+    fn get_scroll_pos_for_line(&self, line: i32, wrap: i32) -> f64;
+    /// Walks `rows` rows from (`line`, `wrap`) inclusive, up for negative
+    /// `rows`: the lines walked, inclusive, and the wrap row reached.
+    fn get_next_visible_line_index_offset_from(
+        &self,
+        line: i32,
+        wrap: i32,
+        rows: i32,
+    ) -> (i32, i32);
+    /// Puts (`line`, `wrap`) on the top row and ends a smooth scroll.
+    fn set_line_as_first_visible(&mut self, line: i32, wrap: i32);
     fn set_h_scroll(&mut self, value: i32);
     fn get_h_scroll(&self) -> i32;
 
@@ -92,7 +111,7 @@ pub(crate) trait TextEditorPort {
 }
 
 // Extension traits: optional capabilities with default no-op bodies so that
-// test mocks can implement them trivially (`impl FoldCapable for MockTextEdit {}`).
+// test mocks implement only what they model.
 
 /// Code folding. Default no-ops for editors without fold support.
 pub(crate) trait FoldCapable: TextEditorPort {
