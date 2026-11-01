@@ -138,6 +138,8 @@ pub struct GodotVimCore {
     chain_cache: Option<input::ChainCache>,
     /// Android: the Esc presses and releases the root window saw.
     esc_release: android::EscRelease,
+    /// Android: when the Back key was last pressed.
+    back_key: android::BackKey,
     /// Desired master-enable state (mirrors plugins/GodotVim/enabled).
     enabled: bool,
     /// Disabled->enabled EDGE detector (NOT a correctness gate): apply_enabled_state
@@ -182,6 +184,7 @@ impl INode for GodotVimCore {
             bindings,
             chain_cache: None,
             esc_release: android::EscRelease::default(),
+            back_key: android::BackKey::default(),
             enabled: true,
             wired: false,
         }
@@ -790,6 +793,17 @@ impl GodotVimCore {
     #[func]
     fn on_window_input(&mut self, event: Gd<InputEvent>) {
         panic_guard("on_window_input", || self.on_window_input_impl(event), ());
+    }
+
+    /// Android only: the root window's go-back request.
+    #[func]
+    fn on_go_back_requested(&mut self) {
+        if !self.enabled || self.controller.is_none() {
+            return;
+        }
+        if let Some(esc) = panic_guard("on_go_back_requested", || self.gesture_back_key(), None) {
+            self.handle_gui_input(esc.upcast());
+        }
     }
 
     #[func]

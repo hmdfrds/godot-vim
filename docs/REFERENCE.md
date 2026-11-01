@@ -581,9 +581,11 @@ frame, so it never trails the text it sits on.
 | Setting | Key | Type | Default | Description |
 |---------|-----|------|---------|-------------|
 | Passthrough Keys | `plugins/GodotVim/input/passthrough_keys` | `string` | `""` | Comma-separated keys the script editor hands to Godot instead of Vim (e.g. `<C-v>,<C-a>`). Docks never check it. |
+| Back As Escape | `plugins/GodotVim/input/back_as_escape` | `bool` | `true` | Android only, and listed only there: in the script editor the Back key and gesture back act as Esc. Off, Back does what the Android editor does with it. |
 
-Godot builds the settings tree from the key path, so this one renders under
-**Input**, not under **Key Mapping** where its two former neighbours sit.
+Godot builds the settings tree from the key path, so these render under
+**Input**, not under **Key Mapping** where Passthrough Keys' two former
+neighbours sit.
 
 ### Security Settings
 

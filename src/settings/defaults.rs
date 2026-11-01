@@ -115,6 +115,7 @@ pub(crate) const CODE_COMPLETE_DELAY: f64 = 0.3;
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub(crate) const PASSTHROUGH_KEYS: &str = "";
+pub(crate) const BACK_AS_ESCAPE: bool = true;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Status bar colors

@@ -199,7 +199,12 @@ impl GodotVimCore {
         let Ok(key_event) = event.try_cast::<InputEventKey>() else {
             return;
         };
-        let key_event = self.android_key(key_event);
+        let Some(key_event) = self.android_key(key_event) else {
+            if let Some(mut viewport) = self.base().get_viewport() {
+                viewport.set_input_as_handled();
+            }
+            return;
+        };
         if !key_event.is_pressed() {
             return;
         }
@@ -588,7 +593,12 @@ impl GodotVimCore {
         let Ok(key_event) = event.try_cast::<InputEventKey>() else {
             return;
         };
-        let key_event = self.android_key(key_event);
+        let Some(key_event) = self.android_key(key_event) else {
+            if let Some(mut viewport) = editor.get_viewport() {
+                viewport.set_input_as_handled();
+            }
+            return;
+        };
         // Accept both press and echo (key-repeat) -- held-key repeat is
         // correct Vim semantics (e.g. holding `j` to scroll down).
         if !key_event.is_pressed() {
