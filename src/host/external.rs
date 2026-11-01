@@ -74,6 +74,21 @@ fn run_shell_command(cmd: &str, capture_stderr: bool) -> (i32, String) {
     (exit_code, output_text)
 }
 
+/// Where the filter input goes. On Android `std::env::temp_dir()` can be
+/// `/data/local/tmp`, which an app cannot write. The desktop keeps it, since
+/// Godot's answer there ignores `$TMPDIR` on Linux and has forward slashes on
+/// Windows, where the path goes into a `type` command.
+fn temp_dir() -> std::path::PathBuf {
+    if crate::platform::is_android() {
+        let dir = Os::singleton().get_temp_dir().to_string();
+        // `OS_Android::get_temp_path` answers "." when Java has no answer.
+        if !dir.is_empty() && dir != "." {
+            return std::path::PathBuf::from(dir);
+        }
+    }
+    std::env::temp_dir()
+}
+
 /// Write filter input to a temp file for piping to the shell command.
 ///
 /// Security: `create_new(true)` (O_EXCL) prevents symlink attacks — fails if
@@ -82,8 +97,7 @@ fn run_shell_command(cmd: &str, capture_stderr: bool) -> (i32, String) {
 fn write_temp_input(text: &str) -> Option<String> {
     use std::io::Write;
 
-    let dir = std::env::temp_dir();
-    let path = dir.join(format!(
+    let path = temp_dir().join(format!(
         "godot_vim_filter_{}_{}.tmp",
         std::process::id(),
         FILTER_COUNTER.fetch_add(1, Ordering::Relaxed),
