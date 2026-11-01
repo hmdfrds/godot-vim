@@ -100,8 +100,60 @@ jobs:
           name: libgodot_vim.dylib
           path: staging/*
 
+  build-android:
+    runs-on: ubuntu-24.04
+    env:
+      # Godot's platform/android/java/app/config.gradle (NDK) and minSdk.
+      NDK_VERSION: "29.0.14206865"
+      ANDROID_API: "24"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8  # stable
+        with:
+          targets: aarch64-linux-android, x86_64-linux-android
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32  # v2
+        with:
+          key: android
+
+      # By path, not ANDROID_NDK_HOME: the image's default NDK can change,
+      # and one older than r28 links with 4 KB pages.
+      - name: Locate NDK
+        run: |
+          NDK="$ANDROID_SDK_ROOT/ndk/$NDK_VERSION"
+          if [ ! -d "$NDK" ]; then
+            yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "ndk;$NDK_VERSION" > /dev/null
+          fi
+          BIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          {
+            echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$BIN/aarch64-linux-android${ANDROID_API}-clang"
+            echo "CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=$BIN/x86_64-linux-android${ANDROID_API}-clang"
+            echo "READELF=$BIN/llvm-readelf"
+          } >> "$GITHUB_ENV"
+
+      - run: cargo build --release --locked --target aarch64-linux-android
+
+      - run: cargo build --release --locked --target x86_64-linux-android
+
+      - name: Stage and check
+        run: |
+          mkdir -p staging
+          cp target/aarch64-linux-android/release/libgodot_vim.so staging/libgodot_vim.android.arm64.so
+          cp target/x86_64-linux-android/release/libgodot_vim.so staging/libgodot_vim.android.x86_64.so
+          ./scripts/check-android-lib.sh staging/*.so
+          for f in staging/*.so; do
+            n=$(basename "$f")
+            sha256sum "$f" | awk -v n="$n" '{print $1 "  " n}' > "staging/$n.sha256"
+          done
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
+        with:
+          name: libgodot_vim.android
+          path: staging/*
+
   release:
-    needs: [build-linux, build-windows, build-macos]
+    needs: [build-linux, build-windows, build-macos, build-android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -130,6 +182,8 @@ jobs:
             --lib artifacts/libgodot_vim.so \
             --lib artifacts/godot_vim.dll \
             --lib artifacts/libgodot_vim.dylib \
+            --lib artifacts/libgodot_vim.android.arm64.so \
+            --lib artifacts/libgodot_vim.android.x86_64.so \
             --version "$VERSION" \
             --out .
           # Later steps (VirusTotal, attestation, SBOM) read the binaries from
@@ -147,6 +201,8 @@ jobs:
             addons/godot_vim/bin/libgodot_vim.so
             addons/godot_vim/bin/godot_vim.dll
             addons/godot_vim/bin/libgodot_vim.dylib
+            addons/godot_vim/bin/libgodot_vim.android.arm64.so
+            addons/godot_vim/bin/libgodot_vim.android.x86_64.so
 
       - name: Attest build provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8  # v4.2.2
@@ -207,7 +263,11 @@ jobs:
             addons/godot_vim/bin/libgodot_vim.so
             addons/godot_vim/bin/godot_vim.dll
             addons/godot_vim/bin/libgodot_vim.dylib
+            addons/godot_vim/bin/libgodot_vim.android.arm64.so
+            addons/godot_vim/bin/libgodot_vim.android.x86_64.so
             artifacts/libgodot_vim.so.sha256
             artifacts/godot_vim.dll.sha256
             artifacts/libgodot_vim.dylib.sha256
+            artifacts/libgodot_vim.android.arm64.so.sha256
+            artifacts/libgodot_vim.android.x86_64.so.sha256
             godot-vim-sbom.cdx.json

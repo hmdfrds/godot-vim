@@ -77,6 +77,50 @@ jobs:
           path: target/release/libgodot_vim.so
           retention-days: 3
 
+  android:
+    name: Android build
+    # Built only: no Godot runs here. The checks are what a device needs to
+    # load the library.
+    runs-on: ubuntu-24.04
+    env:
+      # As release.yml: Godot's NDK and minSdk.
+      NDK_VERSION: "29.0.14206865"
+      ANDROID_API: "24"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android, x86_64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: android
+
+      - name: Locate NDK
+        run: |
+          NDK="$ANDROID_SDK_ROOT/ndk/$NDK_VERSION"
+          if [ ! -d "$NDK" ]; then
+            yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "ndk;$NDK_VERSION" > /dev/null
+          fi
+          BIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          {
+            echo "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$BIN/aarch64-linux-android${ANDROID_API}-clang"
+            echo "CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=$BIN/x86_64-linux-android${ANDROID_API}-clang"
+            echo "READELF=$BIN/llvm-readelf"
+          } >> "$GITHUB_ENV"
+
+      - name: Build
+        run: |
+          cargo build --release --locked --target aarch64-linux-android
+          cargo build --release --locked --target x86_64-linux-android
+
+      - name: Check
+        run: |
+          ./scripts/check-android-lib.sh \
+            target/aarch64-linux-android/release/libgodot_vim.so \
+            target/x86_64-linux-android/release/libgodot_vim.so
+
   godot:
     name: Godot ${{ matrix.godot }}
     needs: build

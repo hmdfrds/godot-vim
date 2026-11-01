@@ -12,7 +12,13 @@
 #                                               target/release/ (or --lib)
 #   ./scripts/assemble-addon.sh --lib a.so --lib b.dll ...
 #                                               stage the given libraries;
-#                                               CI passes all three platforms
+#                                               CI passes every platform
+#   ./scripts/assemble-addon.sh --android       also build (unless --no-build)
+#                                               and stage the arm64 and x86_64
+#                                               Android libraries, as
+#                                               libgodot_vim.android.<arch>.so
+#                                               (docs/BUILDING.md has the NDK
+#                                               setup)
 #   ./scripts/assemble-addon.sh --out DIR       stage into DIR (default: dist/)
 #   ./scripts/assemble-addon.sh --version vX.Y.Z
 #                                               wrap in godot-vim-vX.Y.Z/ and
@@ -24,14 +30,15 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-BUILD=1; OUT=dist; VERSION=""; LIBS=()
+BUILD=1; ANDROID=0; OUT=dist; VERSION=""; LIBS=()
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-build) BUILD=0 ;;
+    --android) ANDROID=1 ;;
     --lib) LIBS+=("$2"); shift ;;
     --out) OUT="$2"; shift ;;
     --version) VERSION="$2"; shift ;;
-    -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,29p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
@@ -47,15 +54,38 @@ if [ ${#LIBS[@]} -eq 0 ]; then
   for cand in target/release/libgodot_vim.so target/release/godot_vim.dll target/release/libgodot_vim.dylib; do
     [ -f "$cand" ] && LIBS+=("$cand")
   done
-  if [ ${#LIBS[@]} -eq 0 ]; then
+  if [ ${#LIBS[@]} -eq 0 ] && [ "$ANDROID" = 0 ]; then
     echo "no library found in target/release/; run cargo build --release or pass --lib" >&2
     exit 1
   fi
 fi
 
-for lib in "${LIBS[@]}"; do
+# Each entry is <source>:<name in bin/>. A --lib keeps its own name.
+STAGED=()
+for lib in ${LIBS[@]+"${LIBS[@]}"}; do
   [ -f "$lib" ] || { echo "not a file: $lib" >&2; exit 1; }
+  STAGED+=("$lib:$(basename "$lib")")
 done
+
+# An Android build is libgodot_vim.so too, so it takes the name the
+# .gdextension gives it rather than overwriting the Linux library.
+if [ "$ANDROID" = 1 ]; then
+  for pair in aarch64-linux-android:arm64 x86_64-linux-android:x86_64; do
+    triple="${pair%%:*}"
+    if [ "$BUILD" = 1 ]; then
+      cargo build --release --locked --target "$triple"
+    fi
+    lib="target/$triple/release/libgodot_vim.so"
+    [ -f "$lib" ] || { echo "no Android library at $lib; see docs/BUILDING.md" >&2; exit 1; }
+    STAGED+=("$lib:libgodot_vim.android.${pair##*:}.so")
+  done
+fi
+
+DUPLICATE=$(for entry in "${STAGED[@]}"; do echo "${entry##*:}"; done | sort | uniq -d)
+if [ -n "$DUPLICATE" ]; then
+  echo "two libraries would be staged as: $DUPLICATE" >&2
+  exit 1
+fi
 
 # Wrap addons/ in a version-named folder for the release zip. Godot Asset
 # Library's "Ignore asset root" (default checked) strips that wrapper and
@@ -70,7 +100,7 @@ rm -rf "$STAGE"
 mkdir -p "$ADDON/bin" "$ADDON/docs"
 
 cp addons/godot_vim/plugin.cfg addons/godot_vim/godot_vim.gd addons/godot_vim/godot_vim.gdextension "$ADDON/"
-for lib in "${LIBS[@]}"; do cp "$lib" "$ADDON/bin/"; done
+for entry in "${STAGED[@]}"; do cp "${entry%:*}" "$ADDON/bin/${entry##*:}"; done
 
 # EVERYTHING ships INSIDE addons/godot_vim/, nothing beside it.
 #
