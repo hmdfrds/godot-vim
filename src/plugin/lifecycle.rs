@@ -130,6 +130,7 @@ impl GodotVimCore {
 
     /// Connect editor-level signals for tab switching and focus tracking.
     pub(super) fn connect_editor_signals(&mut self) {
+        self.connect_android_signals();
         let interface = EditorInterface::singleton();
 
         let Some(mut script_editor) = interface.get_script_editor() else {
@@ -154,6 +155,7 @@ impl GodotVimCore {
 
     /// Symmetric teardown for `connect_editor_signals`.
     pub(super) fn disconnect_editor_signals(&mut self) {
+        self.disconnect_android_signals();
         let interface = EditorInterface::singleton();
 
         if let Some(mut se) = interface.get_script_editor() {

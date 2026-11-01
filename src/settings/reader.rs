@@ -36,6 +36,7 @@ pub(crate) fn read_all(settings: &EditorSettings) -> SettingsSnapshot {
         ignorecase: read_bool(settings, keys::IGNORECASE, defaults::IGNORECASE),
         smartcase: read_bool(settings, keys::SMARTCASE, defaults::SMARTCASE),
         filetype_plugin: read_bool(settings, keys::FILETYPE_PLUGIN, defaults::FILETYPE_PLUGIN),
+        back_as_escape: read_bool(settings, keys::BACK_AS_ESCAPE, defaults::BACK_AS_ESCAPE),
         code_complete_enabled: read_bool(
             settings,
             keys::CODE_COMPLETE_ENABLED,

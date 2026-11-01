@@ -79,6 +79,8 @@ pub(crate) const CODE_COMPLETE_DELAY: &str = "text_editor/completion/code_comple
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub(crate) const PASSTHROUGH_KEYS: &str = "plugins/GodotVim/input/passthrough_keys";
+/// Android only: the Back key and gesture back act as Esc.
+pub(crate) const BACK_AS_ESCAPE: &str = "plugins/GodotVim/input/back_as_escape";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Security

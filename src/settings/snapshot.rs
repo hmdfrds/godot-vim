@@ -161,6 +161,8 @@ pub(crate) struct SettingsSnapshot {
     pub(crate) smartcase: bool,
     /// `plugins/GodotVim/editor/filetype_plugin`, see [`crate::ftplugin`].
     pub(crate) filetype_plugin: bool,
+    /// `plugins/GodotVim/input/back_as_escape`, read on Android only.
+    pub(crate) back_as_escape: bool,
     /// Whether Godot's native code completion should auto-trigger on typing.
     /// Read from `text_editor/completion/code_complete_enabled` (native Godot
     /// EditorSetting, not registered by GodotVim).
@@ -270,6 +272,7 @@ impl SettingsSnapshot {
             ignorecase: false,
             smartcase: false,
             filetype_plugin: true,
+            back_as_escape: true,
             code_complete_enabled: true,
             line_number_mode: LineNumberMode::Hybrid,
             inccommand: InccommandMode::Nosplit,

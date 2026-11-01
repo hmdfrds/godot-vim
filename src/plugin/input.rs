@@ -199,6 +199,12 @@ impl GodotVimCore {
         let Ok(key_event) = event.try_cast::<InputEventKey>() else {
             return;
         };
+        let Some(key_event) = self.android_key(key_event) else {
+            if let Some(mut viewport) = self.base().get_viewport() {
+                viewport.set_input_as_handled();
+            }
+            return;
+        };
         if !key_event.is_pressed() {
             return;
         }
@@ -585,6 +591,12 @@ impl GodotVimCore {
         // ── Mouse wheel interception ─────────────────────────────────────
         // Route mouse wheel through the vim engine as Ctrl-Y (scroll up) /
         let Ok(key_event) = event.try_cast::<InputEventKey>() else {
+            return;
+        };
+        let Some(key_event) = self.android_key(key_event) else {
+            if let Some(mut viewport) = editor.get_viewport() {
+                viewport.set_input_as_handled();
+            }
             return;
         };
         // Accept both press and echo (key-repeat) -- held-key repeat is

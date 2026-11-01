@@ -3,6 +3,18 @@
 Notes for people arriving from an older release. Nothing here applies to a
 fresh install.
 
+## From v1.9.2
+
+**Restart the editor after replacing the addon or rebuilding its library.**
+GodotVim no longer reloads while the editor runs. That reload left it inert,
+with `i` typed into the script as text, and quitting the editor afterwards
+could crash it.
+
+**The starter config is now `.godot-vimrc.example`.** Godot on Windows read
+`.godot-vimrc.sample` as an audio resource and logged two errors on the
+first start. If you copied the new addon over the old folder rather than
+replacing it, delete `addons/godot_vim/.godot-vimrc.sample`.
+
 ## From v1.9.1
 
 **Building from source needs Rust 1.94 or newer.** GodotVim is now built

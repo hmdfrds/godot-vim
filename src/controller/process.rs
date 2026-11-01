@@ -19,6 +19,7 @@
 //!   +- per-keystroke debug logging
 //! ```
 
+use godot::classes::display_server::Feature;
 use godot::classes::{CodeEdit, DisplayServer};
 use godot::prelude::*;
 use vim_core::execution::host_api::{DeferredAction, WindowNavAction};
@@ -579,6 +580,12 @@ fn normalize_key_for_mapping(key: KeyEvent) -> KeyEvent {
     }
 }
 
+/// Whether the display server has an IME to switch, as TextEdit asks before
+/// it calls one. The Android one has none and warns on every call.
+fn ime_supported() -> bool {
+    DisplayServer::singleton().has_feature(Feature::IME)
+}
+
 /// Activate IME for text input modes (Insert/Replace).
 ///
 /// Cancels any in-progress composition first, then enables the OS IME so that
@@ -587,6 +594,9 @@ fn normalize_key_for_mapping(key: KeyEvent) -> KeyEvent {
 /// script editors get correct IME activation on Windows.
 fn activate_ime(editor: &mut Gd<CodeEdit>) {
     editor.cancel_ime();
+    if !ime_supported() {
+        return;
+    }
     let window_id = editor
         .get_window()
         .map(|w| w.get_window_id())
@@ -606,6 +616,9 @@ fn activate_ime(editor: &mut Gd<CodeEdit>) {
 /// Targets the editor's actual window for floating script editor support.
 fn deactivate_ime(editor: &mut Gd<CodeEdit>) {
     editor.cancel_ime();
+    if !ime_supported() {
+        return;
+    }
     let window_id = editor
         .get_window()
         .map(|w| w.get_window_id())
@@ -625,6 +638,9 @@ fn deactivate_ime(editor: &mut Gd<CodeEdit>) {
 /// re-enables IME before the next frame's input arrives. This deferred call
 /// runs after draw, ensuring `im_active=false` survives into the next frame.
 fn deactivate_ime_deferred(editor: &Gd<CodeEdit>) {
+    if !ime_supported() {
+        return;
+    }
     let window_id = editor
         .get_window()
         .map(|w| w.get_window_id())
@@ -643,6 +659,9 @@ fn deactivate_ime_deferred(editor: &Gd<CodeEdit>) {
 /// (window-relative) for correct positioning in both docked and floating
 /// script editors.
 fn update_ime_position(editor: &Gd<CodeEdit>) {
+    if !ime_supported() {
+        return;
+    }
     let caret_pos = editor.get_caret_draw_pos();
     let global_pos = editor.get_global_position();
     let ime_pos = Vector2i::new(

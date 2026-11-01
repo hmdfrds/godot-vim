@@ -23,6 +23,7 @@ use super::line_numbers::LineNumberManager;
 use super::native_caret::NativeCaretColor;
 use super::operator_debugger::DebugRangeOverlay;
 use super::search_hl::SearchHighlighter;
+use super::soft_keyboard::SoftKeyboard;
 use super::status_bar::{self, VimStatusBar};
 use super::virtual_text::VirtualTextOverlay;
 use super::CursorColorMap;
@@ -143,6 +144,7 @@ pub(crate) struct UiCoordinator {
     inccommand: Option<Gd<InccommandOverlay>>,
     saved: SavedEditorState,
     native_caret: NativeCaretColor,
+    soft_keyboard: SoftKeyboard,
     /// When false, the native Godot caret is used instead of VimCursor.
     /// Toggled by user settings; requires swapping caret_color overrides.
     cursor_enabled: bool,
@@ -165,6 +167,7 @@ impl UiCoordinator {
             inccommand: None,
             saved: SavedEditorState::default(),
             native_caret: NativeCaretColor::default(),
+            soft_keyboard: SoftKeyboard::default(),
             cursor_enabled: true,
             cache: DirtyCache::default(),
             debug_overlay: None,
@@ -213,6 +216,7 @@ impl UiCoordinator {
 
         // ── 3b. Cache caret type ───────────────────────────────────────
         self.saved.caret_type = Some(editor.get_caret_type());
+        self.soft_keyboard.attach(editor);
 
         // ── 4. Line numbers ─────────────────────────────────────────────
         let mut line_numbers = LineNumberManager::new_alloc();
@@ -255,6 +259,7 @@ impl UiCoordinator {
         if let Some(caret_type) = self.saved.caret_type.take() {
             editor.set_caret_type(caret_type);
         }
+        self.soft_keyboard.detach(editor);
 
         // ── 2b. Inccommand overlay ───────────────────────────────────────
         remove_and_free(&mut self.inccommand);
@@ -297,6 +302,7 @@ impl UiCoordinator {
         self.cache = DirtyCache::default();
         self.saved = SavedEditorState::default();
         self.native_caret = NativeCaretColor::default();
+        self.soft_keyboard = SoftKeyboard::default();
         self.cursor_enabled = true;
         self.search_hl = SearchHighlighter::new();
         self.status_bar.take();
@@ -382,6 +388,9 @@ impl UiCoordinator {
         if !self.cursor_enabled {
             editor.set_caret_type(mode_to_native_caret(snap.mode));
         }
+
+        // ── 2d. On-screen keyboard (Android) ─────────────────────────────
+        self.soft_keyboard.update(editor, snap.mode);
 
         // ── 3. Search highlighting ──────────────────────────────────────
         // Incremental search (`incsearch`): while typing in `/` or `?`, use

@@ -28,6 +28,17 @@ for bug reports, `Trace` for engine development. Logs appear in Godot's
 
 All log levels are available in both debug and release builds.
 
+### In the Android editor
+
+The same lines go to the device's log under the tag `godot`. With USB or
+wireless debugging on, read them from a computer with `adb`:
+
+```bash
+adb logcat -s godot
+```
+
+`adb logcat -s godot > output.log` saves them for the patterns below.
+
 ### The per-keystroke summary line
 
 At `Debug` level, every keystroke produces exactly **one line** that tells

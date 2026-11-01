@@ -27,6 +27,7 @@ pub(crate) mod mapping_dialog;
 mod native_caret;
 mod operator_debugger;
 mod search_hl;
+mod soft_keyboard;
 mod status_bar;
 // Virtual text overlay is wired into the attach/detach lifecycle but the
 // engine does not yet emit virtual text effects, so update methods are

@@ -119,6 +119,9 @@ pub(crate) fn register_all(settings: &mut EditorSettings) {
 
     // ── Input ─────────────────────────────────────────────────────────────
     register_string(settings, keys::PASSTHROUGH_KEYS, defaults::PASSTHROUGH_KEYS);
+    if crate::platform::is_android() {
+        register_bool(settings, keys::BACK_AS_ESCAPE, defaults::BACK_AS_ESCAPE);
+    }
 
     // ── Security ─────────────────────────────────────────────────────────
     register_enum(
