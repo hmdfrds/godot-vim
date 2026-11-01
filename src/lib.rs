@@ -73,6 +73,7 @@ mod ui;
 mod config;
 mod logging;
 mod navigation;
+mod platform;
 mod plugin;
 mod safety;
 mod scene_tree;

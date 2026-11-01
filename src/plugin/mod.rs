@@ -11,6 +11,7 @@
 //! not auto-registered as an `EditorPlugin`, and the GDScript layer can use
 //! plain `extends EditorPlugin` instead.
 
+mod android;
 mod attach;
 mod caret_reconcile;
 mod completion_delay;
@@ -135,6 +136,8 @@ pub struct GodotVimCore {
     /// The focus chain, sampled once per distinct focus/mode/prompt state
     /// rather than once per keystroke. See `plugin::input::ChainCache`.
     chain_cache: Option<input::ChainCache>,
+    /// Android: the Esc presses and releases the root window saw.
+    esc_release: android::EscRelease,
     /// Desired master-enable state (mirrors plugins/GodotVim/enabled).
     enabled: bool,
     /// Disabled->enabled EDGE detector (NOT a correctness gate): apply_enabled_state
@@ -178,6 +181,7 @@ impl INode for GodotVimCore {
             actions,
             bindings,
             chain_cache: None,
+            esc_release: android::EscRelease::default(),
             enabled: true,
             wired: false,
         }
@@ -780,6 +784,12 @@ impl GodotVimCore {
         if !ok {
             self.recover_controller_from_panic();
         }
+    }
+
+    /// Android only: every event of the root window, before dispatch.
+    #[func]
+    fn on_window_input(&mut self, event: Gd<InputEvent>) {
+        panic_guard("on_window_input", || self.on_window_input_impl(event), ());
     }
 
     #[func]

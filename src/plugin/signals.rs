@@ -121,6 +121,7 @@ mod deferred_delivery_contract {
     const SAFE_BY_REFCOUNT: &[(&str, &str)] = &[
         ("handle_gui_input", "Gd<InputEvent>"),
         ("on_fs_prompt_gui_input", "Gd<InputEvent>"),
+        ("on_window_input", "Gd<InputEvent>"),
     ];
 
     /// May take a manually managed `Gd<T>` *only* because every connect site
@@ -134,6 +135,7 @@ mod deferred_delivery_contract {
     /// no file outside this directory can call it, and the module-list
     /// assertion below fails the day a tenth file appears.
     const PLUGIN_FILES: &[(&str, &str, usize)] = &[
+        ("android.rs", include_str!("android.rs"), 0),
         ("attach.rs", include_str!("attach.rs"), 6),
         ("caret_reconcile.rs", include_str!("caret_reconcile.rs"), 0),
         (
