@@ -56,6 +56,8 @@ Without `--no-build` the script runs `cargo build --release --locked` first, so
 Enable it in **Project Settings > Plugins** and restart the editor, the same as
 any other install. The `.debug` and `.release` entries in the `.gdextension`
 refer to the Godot build, not the Rust profile, so one artifact serves both.
+After a rebuild, restart the editor too: the library does not reload while the
+editor runs (`reloadable = false`).
 
 To check a build without opening your own project, run
 `./scripts/godot-smoke.sh --godot <path-to-godot>`. It installs the library in a
@@ -105,6 +107,42 @@ FFI into Godot, and that needs unwinding to exist.
 
 To work on the Vim engine rather than the plugin, use the `[patch]` snippet in
 [vim-core's README](https://github.com/hmdfrds/vim-core#readme).
+
+## Building for the Android editor
+
+Releases carry `libgodot_vim.android.arm64.so` for phones and tablets and
+`libgodot_vim.android.x86_64.so` for emulators and ChromeOS. Building them
+needs the Android NDK, r28 or newer: older ones link with 4 KB pages, which a
+device with 16 KB pages refuses. The release uses r29, the NDK Godot builds
+with. Nothing else is needed: no cargo-ndk and no C++ runtime.
+
+```bash
+rustup target add aarch64-linux-android x86_64-linux-android
+NDK=~/Android/Sdk/ndk/29.0.14206865
+BIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
+export CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$BIN/aarch64-linux-android24-clang"
+export CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER="$BIN/x86_64-linux-android24-clang"
+./scripts/assemble-addon.sh --android
+```
+
+The `24` is the API level, Godot's minimum. On macOS the NDK's folder is
+`darwin-x86_64`; on Windows it is `windows-x86_64` and the linkers end in
+`.cmd`. `--android` builds both targets after this platform's library and
+stages them as `bin/libgodot_vim.android.<arch>.so`, the names the
+`.gdextension` gives them; the build itself writes `libgodot_vim.so` under
+`target/<triple>/release/`. The release checks every Android library with
+
+```bash
+READELF="$BIN/llvm-readelf" ./scripts/check-android-lib.sh dist/addons/godot_vim/bin/libgodot_vim.android.*.so
+```
+
+which wants every LOAD segment aligned to 16 KB or more, nothing needed beyond
+`libc.so`, `libm.so` and `libdl.so`, and `gdext_rust_init` exported.
+
+Copy `addons/godot_vim/` into the project on the device as for any install.
+The editor copies the library into its own cache before it loads it, because
+Android loads no code from shared storage. 32-bit Android does not build:
+gdext's prebuilt bindings are 64-bit only.
 
 ## Changing code that calls Godot
 

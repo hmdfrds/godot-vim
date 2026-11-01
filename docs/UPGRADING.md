@@ -3,6 +3,13 @@
 Notes for people arriving from an older release. Nothing here applies to a
 fresh install.
 
+## From v1.9.2
+
+**Restart the editor after replacing the addon or rebuilding its library.**
+GodotVim no longer reloads while the editor runs. That reload left it inert,
+with `i` typed into the script as text, and quitting the editor afterwards
+could crash it.
+
 ## From v1.9.1
 
 **Building from source needs Rust 1.94 or newer.** GodotVim is now built

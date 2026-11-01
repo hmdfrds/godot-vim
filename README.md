@@ -30,8 +30,9 @@
 
 Godot 4.5 or newer, and Godot's own script editor. The plugin has no effect in
 Rider, VS Code or any other external editor. Prebuilt binaries cover Linux and
-Windows x86_64 and macOS universal; Linux arm64, and any Linux with glibc older
-than 2.34 (Ubuntu 20.04, Debian 11, RHEL 8), need a
+Windows x86_64, macOS universal, and Godot's Android editor on arm64 and x86_64
+([experimental](#the-android-editor-experimental)); Linux arm64, and any Linux
+with glibc older than 2.34 (Ubuntu 20.04, Debian 11, RHEL 8), need a
 [source build](docs/BUILDING.md). On 4.5, `d` and `r` in the FileSystem dock
 do nothing, because they use an API Godot added in 4.6.
 
@@ -83,6 +84,41 @@ Nothing needs configuring; the plugin works with no config file at all. When you
 do want one, `:mkvimrc` writes `res://.godot-vimrc` with all 20 built-in presets
 listed and commented out, and `:mappings` opens a dialog that edits the same file
 for you.
+
+## The Android editor (experimental)
+
+Godot's Android editor loads the same addon: install it as above, in the
+project on the device. Support is experimental, and it is made for a hardware
+keyboard, Bluetooth or USB.
+
+- **Chords use Ctrl.** Android keeps Cmd and Meta for itself, so Godot never
+  sees them: `<C-w>`, `<C-r>` and the rest are Ctrl. Alt (Option on a Mac
+  keyboard) is Alt.
+- **Esc may act only when you release it.** Keyboard apps such as SwiftKey
+  take the press of Esc and pass on only the release, so a release that had
+  no press counts as Esc. **`Ctrl+[`** is Esc too.
+- **Back is Esc** in the script editor, the Back key and the back gesture
+  alike. **Input > Back As Escape**, a setting only the Android editor lists,
+  turns that off.
+- **The on-screen keyboard works in Insert mode only, and only as well as it
+  can.** It sends every key as a change to the text, which Normal mode would
+  run as commands, so it is off outside Insert and Replace mode, and off
+  altogether while a hardware keyboard is connected. In Insert mode, tap the
+  editor to bring it up; turning off word prediction in the keyboard app
+  helps. It has no Esc, and Back closes it first: press Back again, or map
+  one, such as `inoremap jk <Esc>`. Leaving Insert with Back after the
+  keyboard was up can leave the keyboard app holding the input, so the next
+  keys go through it, until you tap the editor. Leaving with `Ctrl+[` avoids
+  that.
+- **Touch.** A tap moves the cursor and a double tap selects a word, as a
+  mouse click does, and a one-finger drag selects text rather than scrolling.
+  The touch actions panel's Undo, Redo, Cut, Copy and Paste buttons send
+  Ctrl+Z, Ctrl+Y, Ctrl+X, Ctrl+C and Ctrl+V, so they do what those keys do in
+  Vim (Ctrl+V starts Visual block mode), not what their labels say. The panel
+  hides while a hardware keyboard is connected.
+
+To read GodotVim's log on a computer, see
+[docs/DEBUGGING.md](docs/DEBUGGING.md#in-the-android-editor).
 
 ## Features
 
