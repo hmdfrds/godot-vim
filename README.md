@@ -53,7 +53,7 @@ do nothing, because they use an API Godot added in 4.6.
 1. Download `godot-vim-vX.Y.Z.zip` from the
    [releases page](https://github.com/hmdfrds/godot-vim/releases/latest).
 2. Extract it. The folder inside contains `addons/` and nothing else. `LICENSE`,
-   `README.md`, `docs/` and `.godot-vimrc.sample` all live inside
+   `README.md`, `docs/` and `.godot-vimrc.example` all live inside
    `addons/godot_vim/`, so installing the addon cannot overwrite anything in
    your project root.
 3. Copy `addons/godot_vim/` into your project, giving
@@ -246,7 +246,7 @@ Settings overrides. [Security](docs/REFERENCE.md#security)
 ## Configuration
 
 Run `:mkvimrc` to write a starter `res://.godot-vimrc`, or copy
-[`.godot-vimrc.sample`](.godot-vimrc.sample) to your project root and edit it:
+[`.godot-vimrc.example`](.godot-vimrc.example) to your project root and edit it:
 
 ```vim
 let mapleader = " "
@@ -339,7 +339,7 @@ is usually faster than reading a long log top to bottom.
 - [docs/REFERENCE.md](docs/REFERENCE.md), every motion, command, setting and `panelmap` rule
 - [docs/DEBUGGING.md](docs/DEBUGGING.md), reading a log and what to attach to a bug report
 - [docs/BUILDING.md](docs/BUILDING.md), compiling the plugin yourself
-- [`.godot-vimrc.sample`](.godot-vimrc.sample), an annotated starter config that ships with the addon
+- [`.godot-vimrc.example`](.godot-vimrc.example), an annotated starter config that ships with the addon
 - [docs/UPGRADING.md](https://github.com/hmdfrds/godot-vim/blob/main/docs/UPGRADING.md), coming from v0.x or v1.6.x
 
 ## Architecture

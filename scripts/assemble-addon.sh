@@ -108,7 +108,7 @@ for entry in "${STAGED[@]}"; do cp "${entry%:*}" "$ADDON/bin/${entry##*:}"; done
 # sitting next to addons/ lands at the USER'S project root, and LICENSE and
 # README.md would overwrite theirs. An addon must be self-contained: drop the
 # folder in, delete the folder out, nothing else touched.
-cp LICENSE README.md .godot-vimrc.sample "$ADDON/"
+cp LICENSE README.md .godot-vimrc.example "$ADDON/"
 # docs/ is copied file by file rather than cp -r, so a future internal doc
 # landing in docs/ cannot silently ship to every user's project tree. Every
 # file listed here is one the README links to relatively; a doc the README
