@@ -29,7 +29,7 @@ fn get_debugger_node() -> Option<Gd<Node>> {
     let editor_iface = EditorInterface::singleton();
     let main_screen = editor_iface.get_editor_main_screen()?;
     let root = main_screen.upcast::<Node>();
-    let tree_root = root.get_tree()?.get_root()?;
+    let tree_root = root.get_tree_or_null()?.get_root()?;
     // COMPAT: Wildcard match on internal EditorDebugger node name.
     tree_root
         .find_child_ex(&GString::from("*EditorDebugger*"))

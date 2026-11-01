@@ -513,7 +513,7 @@ fn native_intent(editor: &Gd<CodeEdit>, hid_native: bool, previous: bool) -> boo
 }
 
 fn find_gutter(editor: &Gd<CodeEdit>, name: &str) -> Option<i32> {
-    (0..editor.get_gutter_count()).find(|&i| editor.get_gutter_name(i) == name.into())
+    (0..editor.get_gutter_count()).find(|&i| editor.get_gutter_name(i) == name)
 }
 
 /// `TextEdit::Text::remove_gutter` checks the gutter index against the line

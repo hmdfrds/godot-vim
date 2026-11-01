@@ -123,7 +123,7 @@ pub(crate) fn handle_enter(focused: &Gd<Control>, dock_kind: DockKind) -> DockIn
             DockInputResult::Handled
         }
         DockKind::ItemList => {
-            let Ok(mut list) = focused.clone().try_cast::<godot::classes::ItemList>() else {
+            let Ok(list) = focused.clone().try_cast::<godot::classes::ItemList>() else {
                 return DockInputResult::Declined;
             };
             let selected = list.get_selected_items();

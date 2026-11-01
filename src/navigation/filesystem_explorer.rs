@@ -503,7 +503,7 @@ fn get_selected_path(control: &Gd<Control>, kind: DockKind) -> Option<String> {
             Some(path_str)
         }
         DockKind::ItemList => {
-            let mut list = control.clone().try_cast::<ItemList>().ok()?;
+            let list = control.clone().try_cast::<ItemList>().ok()?;
             let selected = list.get_selected_items();
             if selected.is_empty() {
                 return None;

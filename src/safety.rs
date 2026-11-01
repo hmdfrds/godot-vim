@@ -20,7 +20,7 @@ use godot::prelude::*;
 /// Whether gdext's bindings are loaded: false in `cargo test` and after unload.
 /// The only use of `godot::sys`, which is gdext's private API.
 pub(crate) fn engine_loaded() -> bool {
-    godot::sys::is_initialized()
+    godot::sys::is_godot_initialized()
 }
 
 fn extract_panic_message(payload: &dyn Any) -> String {

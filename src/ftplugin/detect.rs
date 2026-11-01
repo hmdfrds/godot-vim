@@ -193,7 +193,7 @@ pub(crate) fn read_signals(editor: &godot::obj::Gd<godot::classes::CodeEdit>) ->
     let file_path = owner.as_ref().and_then(script_list_path);
 
     let script_class = owner.and_then(|tab| {
-        let mut script_editor = EditorInterface::singleton().get_script_editor()?;
+        let script_editor = EditorInterface::singleton().get_script_editor()?;
         let current = script_editor.get_current_editor()?;
         if current.instance_id() != tab.instance_id() {
             return None;

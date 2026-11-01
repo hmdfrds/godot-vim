@@ -4,7 +4,7 @@ Build it yourself if your distribution's glibc is older than 2.34 so the
 published Linux binary will not load, if you are on Linux arm64 which no release
 ships, or if you want to change the plugin.
 
-You need Rust 1.87 or newer on the stable channel, from
+You need Rust 1.94 or newer on the stable channel, from
 [rustup](https://rustup.rs), and a C toolchain for the linker: `build-essential`
 on Debian and Ubuntu, the Xcode Command Line Tools on macOS, Visual Studio Build
 Tools with the C++ workload on Windows. You do not need a Godot binary, clang,
@@ -108,14 +108,14 @@ To work on the Vim engine rather than the plugin, use the `[patch]` snippet in
 
 ## Changing code that calls Godot
 
-The plugin reaches Godot through godot-rust (gdext), built against the 4.5
-API. That is the `compatibility_minimum` in
-`addons/godot_vim/godot_vim.gdextension`, because a library built against a
-newer API refuses to start on an older Godot, and `cargo test` fails when the
-two differ. API newer than 4.5 is called by name, in
-`src/bridge/godot_calls.rs`.
+The plugin reaches Godot through godot-rust (gdext) 0.5, built against the 4.5
+API by the `api-4-5` feature of the `godot` dependency. That is the
+`compatibility_minimum` in `addons/godot_vim/godot_vim.gdextension`, because a
+library built against a newer API refuses to start on an older Godot, and
+`cargo test` fails when the two differ. gdext's default API, 4.6, does not load
+on 4.5. API newer than 4.5 is called by name, in `src/bridge/godot_calls.rs`.
 
-These rules keep new code building on gdext 0.5 and 0.6 too:
+These rules keep new code right on gdext 0.5 and building on 0.6:
 
 - Every `#[derive(GodotClass)]` is followed by `#[class(tool, ...)]`. All of
   the plugin's classes run in the editor, where gdext 0.6 will turn a class
@@ -127,16 +127,23 @@ These rules keep new code building on gdext 0.5 and 0.6 too:
   through typed signals, whose handlers panic when an argument is an object
   freed before the call. A `DEFERRED` handler takes such an argument as a
   `Variant`, as `src/plugin/signals.rs` explains.
-- No `#[func]` takes the name of a method of a base class. gdext 0.5 warns
-  about it in debug builds, and 0.6 will reject it.
-- Use nothing gdext marks deprecated, such as `on_level_init` or
-  `Callable::from_local_fn`; 0.5 removed all of it. `-D warnings` stops a
-  deprecated call, but not a deprecated trait method you implement.
-- Import `Side`, `Corner` and `EulerOrder` from `godot::builtin`. gdext 0.5's
-  prelude does not have them.
-- Compare a `GString` with `GString::from(text)`. `== text.into()` does not
-  compile on gdext 0.5.
-- Read a file whole with `get_as_text()` or `FileAccess::get_file_as_string`.
-  The stream reads (`get_line`, `get_8` to `get_64`, `get_buffer`,
-  `get_csv_line`, `get_var` and the like) take `&self` on gdext 0.4 and
-  `&mut self` on 0.5, so no binding for them builds cleanly on both.
+- No `#[func]` takes the name of a method of a base class. gdext warns about
+  it in debug builds, and 0.6 will reject it.
+- Use nothing gdext marks deprecated; the next major release removes it.
+  `-D warnings` stops a deprecated call, but not a deprecated trait method you
+  implement.
+- Getters (`get_`, `is_`, `has_`) take `&self`, so bind a `Gd` without `mut`
+  unless a `&mut self` method follows. The `FileAccess` stream reads
+  (`get_line`, `get_8` to `get_64`, `get_buffer`, `get_csv_line`, `get_var`
+  and the like) take `&mut self`; `get_as_text()` and
+  `FileAccess::get_file_as_string` do not.
+- `Node::get_tree()` panics outside the tree. Code that can run before
+  `enter_tree`, after `exit_tree`, or on a node that may not be in the tree
+  calls `get_tree_or_null()`.
+- Nullable returns stay `Option` at the 4.5 API. A higher API level makes some
+  of them non-null, such as `create_tween()` from 4.6 and `get_root()` from
+  4.7, so raising the floor changes their call sites.
+- Import `Side`, `Corner` and `EulerOrder` from `godot::builtin`, and
+  `PropertyHint` from `godot::register::info`; the prelude does not have them.
+- Compare a `GString` with a `&str` directly, as in `name == "Windows"`.
+  `== text.into()` does not compile.

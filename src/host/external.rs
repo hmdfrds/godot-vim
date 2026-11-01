@@ -32,7 +32,7 @@ impl Drop for TempFileGuard {
 /// Runtime OS detection via Godot rather than `cfg!(target_os)`, because Godot
 /// plugins may be cross-compiled for a different target than the build host.
 fn is_windows() -> bool {
-    Os::singleton().get_name().to_string() == "Windows"
+    Os::singleton().get_name() == "Windows"
 }
 
 fn platform_shell() -> (&'static str, &'static str) {

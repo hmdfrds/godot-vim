@@ -18,8 +18,8 @@
 //!    renders the correct widget (slider, enum dropdown, color picker, etc.).
 
 use godot::classes::EditorSettings;
-use godot::global::PropertyHint;
 use godot::prelude::*;
+use godot::register::info::PropertyHint;
 
 use super::{defaults, keys};
 
