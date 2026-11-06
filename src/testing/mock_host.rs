@@ -312,7 +312,8 @@ impl Harness {
         harness
     }
 
-    /// Feed keys in Vim notation, one engine pass per key.
+    /// Feed keys in Vim notation, one engine pass per key. Fails on an
+    /// empty complex operation, which would chain Godot's undo.
     pub(crate) fn feed(&mut self, keys: &str) {
         for key in parse_keys_from_string(keys) {
             let session = &mut self.session;
@@ -327,6 +328,11 @@ impl Harness {
             host.scrolloff = scrolloff;
             let _ = session.process_key(key);
             self.finish_undo_entry();
+            assert_eq!(
+                self.editor().empty_complex_pairs(),
+                0,
+                "empty complex operation"
+            );
         }
     }
 
@@ -377,6 +383,11 @@ impl Harness {
         );
         self.session.host_mut().invalidate_cache();
         self.sync_undo_nodes_after_external_edit(&old_text);
+    }
+
+    /// Ctrl+Z or Edit > Undo: Godot's own `undo()`, then `text_changed`.
+    pub(crate) fn godot_undo(&mut self) {
+        self.godot_edit_notified(MockTextEdit::undo);
     }
 
     /// A completion accepted through the overlay (Enter or Tab with the popup

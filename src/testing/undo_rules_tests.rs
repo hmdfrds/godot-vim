@@ -73,3 +73,28 @@ fn recycled_id_is_not_kept() {
     assert_eq!(h.text(), "abc");
     assert_eq!(h.orphaned_undo_groups(), 0);
 }
+
+/// `i<Esc>` makes a node that changes nothing; its `u` must push no Godot
+/// step, or Godot chains the second `x` to the first and Ctrl+Z takes both.
+#[test]
+fn identity_undo_pushes_no_godot_step() {
+    let mut h = Harness::new("abc");
+    h.feed("xxi<Esc>u");
+    assert_eq!(h.text(), "c");
+
+    h.godot_undo();
+    assert_eq!(h.text(), "bc", "only the second x undone");
+    assert_eq!(h.editor().empty_complex_pairs(), 0);
+}
+
+/// The same for `<C-r>` of a node that changes nothing.
+#[test]
+fn identity_redo_pushes_no_godot_step() {
+    let mut h = Harness::new("abc");
+    h.feed("xxi<Esc>u<C-r>");
+    assert_eq!(h.text(), "c");
+
+    h.godot_undo();
+    assert_eq!(h.text(), "bc", "only the second x undone");
+    assert_eq!(h.editor().empty_complex_pairs(), 0);
+}
