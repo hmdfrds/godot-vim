@@ -797,8 +797,10 @@ pub(crate) fn finish_engine_pass(session: &mut vim_core::execution::VimSession<G
 /// The host's undo bookkeeping at the end of an engine entry, balanced by
 /// the engine's own open group.
 pub(crate) fn finish_undo_entry(session: &mut vim_core::execution::VimSession<GodotHost>) {
-    let engine_pending = session.engine().undo_tree().has_pending_group();
-    session.host_mut().finish_undo_entry(engine_pending);
+    let (engine, host) = session.engine_and_host_mut();
+    let undolevels = engine.options().undolevels();
+    let tree = engine.undo_tree_mut();
+    host.finish_undo_entry(tree.has_pending_group(), tree, undolevels);
 }
 
 /// Gaps 1 & 5: Sync multi-cursor positions (and visual selections) to Godot

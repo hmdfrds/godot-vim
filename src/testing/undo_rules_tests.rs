@@ -56,3 +56,20 @@ fn insert_ctrl_o_keeps_the_session() {
     assert_eq!(h.text(), "afoobarc");
     assert_eq!(h.orphaned_undo_groups(), 0);
 }
+
+/// `:norm` reuses node 1's id after `:set ul=1` pruned it, for a `guu`
+/// that changed nothing: `u` must not replay the old node's `x`.
+#[test]
+fn recycled_id_is_not_kept() {
+    let mut h = Harness::new("abc");
+    h.feed("xu");
+    h.feed(":set ul=1<CR>");
+    h.feed(":norm xguu<CR>");
+    assert_eq!(h.text(), "bc");
+
+    h.feed("u");
+    assert_eq!(h.text(), "bc", "the guu node changes nothing");
+    h.feed("u");
+    assert_eq!(h.text(), "abc");
+    assert_eq!(h.orphaned_undo_groups(), 0);
+}

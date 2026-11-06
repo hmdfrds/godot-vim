@@ -265,8 +265,9 @@ impl Harness {
     pub(crate) fn new(text: &str) -> Self {
         let mut engine = VimEngine::new();
         engine.set_shadow_execution(true);
-        // `sync_indent_from_editor` with Godot's defaults.
         let opts = engine.options_mut();
+        opts.set_undolevels(Some(crate::state::undo_store::DEFAULT_UNDOLEVELS));
+        // `sync_indent_from_editor` with Godot's defaults.
         opts.set_expandtab(false);
         opts.set_shiftwidth(4);
         opts.set_tabstop(4);
@@ -331,15 +332,17 @@ impl Harness {
 
     /// `GodotHost::finish_undo_entry`, counted instead of logged.
     fn finish_undo_entry(&mut self) {
-        let engine_pending = self.session.engine().undo_tree().has_pending_group();
-        let host = self.session.host_mut();
-        if !engine_pending && host.has_pending_undo() {
-            host.state
-                .buffer(MockHost::editor_id())
-                .undo_store_mut()
-                .take_pending_text();
+        let (engine, host) = self.session.engine_and_host_mut();
+        let undolevels = engine.options().undolevels();
+        let tree = engine.undo_tree_mut();
+        let store = host.state.buffer(MockHost::editor_id()).undo_store_mut();
+        if !tree.has_pending_group() && store.has_pending() {
+            store.take_pending_text();
             self.orphaned_undo_groups += 1;
         }
+        store.set_undolevels(undolevels);
+        let pruned = tree.take_pruned_ids();
+        store.finish_entry(&pruned, |id| tree.node_info(id).map(|n| n.sequence()));
     }
 
     /// Move Godot's caret, as a click does, without telling the engine.

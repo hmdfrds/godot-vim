@@ -15,6 +15,7 @@ use vim_core::execution::{
     VimHost,
 };
 use vim_core::primitives::{Mode, Offset, Position, SelectionRange, VisualType};
+use vim_core::state::UndoTree;
 
 use super::clipboard::GodotClipboard;
 use super::code_edit_ext::CodeEditExt;
@@ -592,7 +593,13 @@ impl GodotHost {
     /// End of one engine entry. `engine_pending` is vim-core's
     /// `has_pending_group()`: the host keeps its start text exactly while the
     /// engine has a group open, in any mode (Insert `<C-o>` runs in Normal).
-    pub(crate) fn finish_undo_entry(&mut self, engine_pending: bool) {
+    /// Then the store follows the tree: pruned nodes leave, keeps are checked.
+    pub(crate) fn finish_undo_entry(
+        &mut self,
+        engine_pending: bool,
+        tree: &mut UndoTree,
+        undolevels: Option<usize>,
+    ) {
         let editor_id = self.editor.instance_id();
         let store = self.state.buffer(editor_id).undo_store_mut();
         if !engine_pending && store.has_pending() {
@@ -605,6 +612,10 @@ impl GodotHost {
                 .globals_mut()
                 .set_error("Internal: orphaned undo group recovered -- undo may be inconsistent");
         }
+        let store = self.state.buffer(editor_id).undo_store_mut();
+        store.set_undolevels(undolevels);
+        let pruned = tree.take_pruned_ids();
+        store.finish_entry(&pruned, |id| tree.node_info(id).map(|n| n.sequence()));
     }
 
     // ── Vimdebug support ───────────────────────────────────────────────
