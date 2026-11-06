@@ -334,6 +334,13 @@ impl DispatchCtx {
         );
     }
 
+    /// Whether the undo store holds a start text.
+    pub(super) fn undo_pending(&self) -> bool {
+        self.state
+            .buffer_ref(self.editor_id)
+            .is_some_and(|b| b.undo_store().has_pending())
+    }
+
     pub(super) fn dispatch_multi(
         &mut self,
         mock: &mut MockTextEdit,

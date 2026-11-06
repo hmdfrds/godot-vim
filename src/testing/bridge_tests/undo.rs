@@ -213,6 +213,66 @@ fn empty_undo_group_no_snapshot() {
     assert_editor!(mock, text: "hello");
 }
 
+// ── An empty Insert (`x`, `i<Esc>`, `u`) in both of vim-core's shapes ─────
+
+/// `x` on "hello": node 1.
+fn x_on_hello(ctx: &mut DispatchCtx, mock: &mut MockTextEdit) {
+    let fx = effects![
+        begin_undo;
+        delete(0, 1);
+        set_cursor(0);
+        end_undo(1)
+    ];
+    ctx.dispatch(mock, fx);
+    assert_editor!(mock, text: "ello");
+}
+
+/// vim-core v0.9.1 commits an empty Insert as a node of its own.
+#[test]
+fn empty_insert_as_a_node_with_no_change() {
+    let mut mock = MockTextEdit::new("hello");
+    let mut ctx = DispatchCtx::new();
+    x_on_hello(&mut ctx, &mut mock);
+
+    ctx.dispatch(&mut mock, effects![begin_undo; end_undo(2)]);
+    assert!(!ctx.undo_pending());
+
+    ctx.dispatch(&mut mock, effects![undo_steps(2, 0)]);
+    assert_editor!(mock, text: "ello");
+    ctx.dispatch(&mut mock, effects![undo_steps(1, 0)]);
+    assert_editor!(mock, text: "hello");
+}
+
+/// The shape vim-core v0.10.0 sends: no node, `EndUndoGroup { node_id: None }`.
+#[test]
+fn empty_insert_with_no_node() {
+    let mut mock = MockTextEdit::new("hello");
+    let mut ctx = DispatchCtx::new();
+    x_on_hello(&mut ctx, &mut mock);
+
+    ctx.dispatch(&mut mock, effects![begin_undo; end_undo]);
+    assert!(!ctx.undo_pending());
+
+    ctx.dispatch(&mut mock, effects![undo_steps(1, 0)]);
+    assert_editor!(mock, text: "hello");
+}
+
+/// An empty pair inside an open Insert session leaves the session's start.
+#[test]
+fn empty_pair_inside_a_session_keeps_its_start() {
+    let mut mock = MockTextEdit::new("hello");
+    let mut ctx = DispatchCtx::new();
+
+    ctx.dispatch(&mut mock, effects![begin_undo; insert(5, " world")]);
+    ctx.dispatch(&mut mock, effects![begin_undo; end_undo]);
+    assert!(ctx.undo_pending());
+    ctx.dispatch(&mut mock, effects![insert(11, "!"); end_undo(1)]);
+    assert_editor!(mock, text: "hello world!");
+
+    ctx.dispatch(&mut mock, effects![undo_steps(1, 0)]);
+    assert_editor!(mock, text: "hello");
+}
+
 // ── Undo with empty steps vector is a no-op ────────────────────────────
 
 #[test]

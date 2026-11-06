@@ -913,8 +913,7 @@ impl VimController {
         // carets can be stale and orphaned undo groups can leak.
         if let ControllerPhase::Attached { ref mut session } = self.phase {
             process::finish_engine_pass(session);
-            let mode = session.engine().mode();
-            session.host_mut().ensure_undo_balanced(mode);
+            process::finish_undo_entry(session);
         }
 
         true
@@ -1447,8 +1446,7 @@ impl VimController {
         }
 
         // Ensure undo groups are balanced after mouse selection processing.
-        let mode = session.engine().mode();
-        session.host_mut().ensure_undo_balanced(mode);
+        process::finish_undo_entry(session);
 
         result.consumed
     }

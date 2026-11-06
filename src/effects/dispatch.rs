@@ -557,8 +557,7 @@ pub(crate) fn dispatch(
                         .undo_store_mut()
                         .end_group(node_id, text_str);
                 } else {
-                    // Empty group (no edits) — discard pending text.
-                    state.buffer(editor_id).undo_store_mut().take_pending_text();
+                    state.buffer(editor_id).undo_store_mut().end_empty();
                 }
             }
             Effect::Undo { steps, .. } => {

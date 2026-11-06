@@ -237,9 +237,10 @@ impl VimHost for MockHost {
     }
 
     fn record_internal_undo_node(&mut self, node_id: NodeId, text_before: &str) {
-        let store = self.state.buffer(Self::editor_id()).undo_store_mut();
-        store.begin_group(text_before);
-        store.end_group(node_id, &self.text_cache);
+        self.state
+            .buffer(Self::editor_id())
+            .undo_store_mut()
+            .record(node_id, text_before, &self.text_cache);
     }
 
     fn handle_request(&mut self, request: &HostRequest) -> RequestDisposition {
@@ -254,7 +255,7 @@ impl VimHost for MockHost {
 /// the engine in `controller::process::process_cycle_impl`.
 pub(crate) struct Harness {
     session: VimSession<MockHost>,
-    /// Pending undo groups `ensure_undo_balanced` had to throw away.
+    /// Pending undo groups `finish_undo_entry` had to throw away.
     orphaned_undo_groups: usize,
 }
 
@@ -324,18 +325,15 @@ impl Harness {
             host.engine_auto_pairs_active = auto_pairs_active;
             host.scrolloff = scrolloff;
             let _ = session.process_key(key);
-            self.ensure_undo_balanced();
+            self.finish_undo_entry();
         }
     }
 
-    /// `GodotHost::ensure_undo_balanced`, counted instead of logged.
-    fn ensure_undo_balanced(&mut self) {
-        let mode = self.session.engine().mode();
-        if mode.is_insert() || mode.is_replace() {
-            return;
-        }
+    /// `GodotHost::finish_undo_entry`, counted instead of logged.
+    fn finish_undo_entry(&mut self) {
+        let engine_pending = self.session.engine().undo_tree().has_pending_group();
         let host = self.session.host_mut();
-        if host.has_pending_undo() {
+        if !engine_pending && host.has_pending_undo() {
             host.state
                 .buffer(MockHost::editor_id())
                 .undo_store_mut()
