@@ -582,6 +582,23 @@ fn single_caret_pass_takes_the_last_set_cursor() {
     assert_editor!(mock, text: "\tfoo\nhello\tbar", carets: 1, cursor: (1, 4));
 }
 
+/// Vim types an abbreviation's expansion and then the key that ended it, so
+/// the cursor ends after both (map.c, `check_abbr()`). The pass sets the
+/// cursor after the key, then after the expansion.
+#[test]
+fn an_abbreviation_that_changes_length_leaves_the_caret_after_it() {
+    let mut h = crate::testing::mock_host::Harness::new("\tvalue");
+    h.feed(":iabbrev abd alphabet<CR>:iabbrev ndash \u{2013}<CR>");
+    h.feed("A abd ");
+    assert_eq!(h.line(0), "\tvalue alphabet ");
+    assert_eq!(h.caret(), (0, 16));
+    h.feed("ndash.");
+    assert_eq!(h.line(0), "\tvalue alphabet \u{2013}.");
+    assert_eq!(h.caret(), (0, 18));
+    h.feed("<Esc>");
+    assert_eq!(h.caret(), (0, 17));
+}
+
 /// Feeds `keys` to a real engine and applies every effect through dispatch,
 /// as GodotHost does for one caret.
 fn type_into(mock: &mut MockTextEdit, keys: &str) {
