@@ -525,7 +525,8 @@ impl GodotHost {
 
     /// Re-derive Godot's completion popup from what this engine pass did.
     /// Runs once the engine's carets are in the editor, so caret 0 is final.
-    pub(crate) fn follow_completion(&mut self, insert_like: bool) {
+    /// `typed` is the character key of the pass, if it was one.
+    pub(crate) fn follow_completion(&mut self, insert_like: bool, typed: Option<char>) {
         let after_offset = self.line_index.line_col_to_byte(
             &self.text_cache,
             self.editor.get_caret_line(),
@@ -533,7 +534,7 @@ impl GodotHost {
         );
         let after = Caret::of(&self.text_cache, after_offset);
         let (before, version) = &self.pass_start;
-        let edit = Edit::classify(self.editor.get_version() != *version, before, &after);
+        let edit = Edit::classify(self.editor.get_version() != *version, before, &after, typed);
         crate::effects::completion::follow_engine_edit(
             &mut CodeEditPort(&mut self.editor, &mut self.pending_ui_actions),
             edit,
