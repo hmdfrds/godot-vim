@@ -42,8 +42,14 @@ impl Caret {
 
 impl Edit {
     /// Compares line heads, not offsets, so an indent shift (`<C-t>`, `<C-d>`)
-    /// that moves the caret is not mistaken for typing.
-    pub(crate) fn classify(text_changed: bool, before: &Caret, after: &Caret) -> Self {
+    /// that moves the caret is not mistaken for typing. `typed` is the
+    /// character key of the pass, if it was one.
+    pub(crate) fn classify(
+        text_changed: bool,
+        before: &Caret,
+        after: &Caret,
+        typed: Option<char>,
+    ) -> Self {
         if !text_changed {
             return if before.offset == after.offset {
                 Self::None
@@ -62,6 +68,9 @@ impl Edit {
             Some(c) if before.head[..before.head.len() - c.len_utf8()] == after.head => {
                 Self::Erased
             }
+            // An abbreviation: Vim types the expansion, then the key that
+            // ended it (map.c, `check_abbr()`).
+            _ if typed.is_some() && after.prev() == typed => Self::Inserted,
             _ => Self::Other,
         }
     }
@@ -284,7 +293,55 @@ mod tests {
             ),
         ];
         for (what, changed, before, after, want) in rows {
-            assert_eq!(Edit::classify(*changed, before, after), *want, "{what}");
+            assert_eq!(
+                Edit::classify(*changed, before, after, None),
+                *want,
+                "{what}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_abbreviation_is_typing_when_it_ends_with_the_typed_key() {
+        let rows: &[(&str, Option<char>, Caret, Caret, Edit)] = &[
+            (
+                "a longer expansion",
+                Some(' '),
+                at("\tvalue abd", 10),
+                at("\tvalue alphabet ", 16),
+                Edit::Inserted,
+            ),
+            (
+                "a shorter one ended by a prefix",
+                Some('.'),
+                at("\tx = position", 13),
+                at("\tx = pos.", 9),
+                Edit::Inserted,
+            ),
+            (
+                "a multibyte expansion",
+                Some(' '),
+                at("a ndash", 7),
+                at("a \u{2013} ", 6),
+                Edit::Inserted,
+            ),
+            (
+                "a typed key that left another character before the caret",
+                Some(' '),
+                at("\tvalue abd", 10),
+                at("\tvalue alphabet", 15),
+                Edit::Other,
+            ),
+            (
+                "no typed key",
+                None,
+                at("\tvalue abd", 10),
+                at("\tvalue alphabet ", 16),
+                Edit::Other,
+            ),
+        ];
+        for (what, typed, before, after, want) in rows {
+            assert_eq!(Edit::classify(true, before, after, *typed), *want, "{what}");
         }
     }
 

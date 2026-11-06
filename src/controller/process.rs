@@ -170,7 +170,7 @@ pub(super) fn process_cycle_impl(
 
     ctx.transient.operations_this_cycle = ctx.transient.operations_this_cycle.saturating_add(1);
 
-    finish_engine_pass(session);
+    finish_engine_pass(session, key.as_char());
 
     // ── Post-processing: deferred actions ───────────────────────────
     for action in &result.deferred_actions {
@@ -376,7 +376,7 @@ pub(super) fn resolve_mapping_timeout_impl(
         ctx.transient.operations_this_cycle = ctx.transient.operations_this_cycle.saturating_add(1);
     }
 
-    finish_engine_pass(session);
+    finish_engine_pass(session, None);
 
     // Handle any deferred actions produced during drain.
     let pending_actions = session.host_mut().take_pending_ui_actions();
@@ -785,13 +785,17 @@ fn import_godot_carets_into_engine(session: &mut vim_core::execution::VimSession
 }
 
 /// The last write of an engine pass into the CodeEdit: the engine's carets,
-/// then the completion popup derived from them.
-pub(crate) fn finish_engine_pass(session: &mut vim_core::execution::VimSession<GodotHost>) {
+/// then the completion popup derived from them. `typed` is the character key
+/// that started the pass, if it was one.
+pub(crate) fn finish_engine_pass(
+    session: &mut vim_core::execution::VimSession<GodotHost>,
+    typed: Option<char>,
+) {
     sync_multi_cursors_to_godot(session);
     let mode = session.engine().mode();
     session
         .host_mut()
-        .follow_completion(mode.is_insert() || mode.is_replace());
+        .follow_completion(mode.is_insert() || mode.is_replace(), typed);
 }
 
 /// The host's undo bookkeeping at the end of an engine entry, balanced by

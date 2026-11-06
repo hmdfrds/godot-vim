@@ -916,7 +916,7 @@ impl VimController {
         // pipeline-driven mode exit. Without this, multi-cursor Godot
         // carets can be stale and orphaned undo groups can leak.
         if let ControllerPhase::Attached { ref mut session } = self.phase {
-            process::finish_engine_pass(session);
+            process::finish_engine_pass(session, None);
             process::finish_undo_entry(session);
         }
 
