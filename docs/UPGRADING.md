@@ -3,6 +3,23 @@
 Notes for people arriving from an older release. Nothing here applies to a
 fresh install.
 
+## From v1.9.3
+
+**`u` after a macro that only moves undoes the change before it.** After
+`x`, a macro that changes nothing, such as one recorded with `qqjq` and
+played with `@q`, left the next `u` with nothing to undo. Now `u` restores
+the `x`.
+
+**Insert `<C-o>` no longer shows "Internal: orphaned undo group
+recovered".** The command after `<C-o>` runs while the Insert session is
+still open, and GodotVim took that for a lost undo group and dropped the
+session's start. `u` after such a session still leaves its text, until
+vim-core keeps what you type after the command in the session.
+
+**`undolevels` defaults to 10000**, the size of GodotVim's undo store. It
+was unlimited. A vimrc that sets it still wins, and a larger value also
+makes the store larger.
+
 ## From v1.9.2
 
 **Restart the editor after replacing the addon or rebuilding its library.**

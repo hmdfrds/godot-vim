@@ -15,6 +15,7 @@ use vim_core::execution::{
     VimHost,
 };
 use vim_core::primitives::{Mode, Offset, Position, SelectionRange, VisualType};
+use vim_core::state::UndoTree;
 
 use super::clipboard::GodotClipboard;
 use super::code_edit_ext::CodeEditExt;
@@ -307,9 +308,11 @@ impl VimHost for GodotHost {
         text_before: &str,
     ) {
         let editor_id = self.editor.instance_id();
-        let store = self.state.buffer(editor_id).undo_store_mut();
-        store.begin_group(text_before);
-        store.end_group(node_id, &self.text_cache);
+        self.state.buffer(editor_id).undo_store_mut().record(
+            node_id,
+            text_before,
+            &self.text_cache,
+        );
     }
 
     fn handle_request(&mut self, request: &HostRequest) -> RequestDisposition {
@@ -587,33 +590,32 @@ impl GodotHost {
 
     // ── Undo safety ─────────────────────────────────────────────────────
 
-    /// Check for orphaned `begin_group` calls left open by a bug or panic.
-    /// Insert/Replace legitimately hold a pending group across keystrokes
-    /// (opened on mode entry, closed on Esc); in other modes a pending
-    /// group indicates a bug.
-    pub(crate) fn ensure_undo_balanced(&mut self, mode: Mode) {
-        if mode.is_insert() || mode.is_replace() {
-            // Pending group is expected during insert/replace — the engine
-            // opens a group on mode entry and closes it on Esc.
-            return;
-        }
-
+    /// End of one engine entry. `engine_pending` is vim-core's
+    /// `has_pending_group()`: the host keeps its start text exactly while the
+    /// engine has a group open, in any mode (Insert `<C-o>` runs in Normal).
+    /// Then the store follows the tree: pruned nodes leave, keeps are checked.
+    pub(crate) fn finish_undo_entry(
+        &mut self,
+        engine_pending: bool,
+        tree: &mut UndoTree,
+        undolevels: Option<usize>,
+    ) {
         let editor_id = self.editor.instance_id();
-        let has_pending = self.state.buffer(editor_id).undo_store().has_pending();
-        if has_pending {
+        let store = self.state.buffer(editor_id).undo_store_mut();
+        if !engine_pending && store.has_pending() {
             log::warn!(
-                "ensure_undo_balanced: orphaned undo group in {} mode, editor=#{} — discarding pending text",
-                mode,
+                "finish_undo_entry: orphaned undo group, editor=#{}, discarding pending text",
                 editor_id.to_i64(),
             );
-            self.state
-                .buffer(editor_id)
-                .undo_store_mut()
-                .take_pending_text();
+            store.take_pending_text();
             self.state
                 .globals_mut()
                 .set_error("Internal: orphaned undo group recovered -- undo may be inconsistent");
         }
+        let store = self.state.buffer(editor_id).undo_store_mut();
+        store.set_undolevels(undolevels);
+        let pruned = tree.take_pruned_ids();
+        store.finish_entry(&pruned, |id| tree.node_info(id).map(|n| n.sequence()));
     }
 
     // ── Vimdebug support ───────────────────────────────────────────────

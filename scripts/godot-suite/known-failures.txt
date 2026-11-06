@@ -5,9 +5,13 @@
 4.5-stable::doc-k:log   # CanvasItem RID and ObjectDB instances leak at exit after K on 4.5; cause unknown
 4.5-stable::issue34-race 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
 4.5-stable::issue34-race-fast 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
+4.5-stable::undo-ctrl-o b5632be3   # vim-core types the text after Insert <C-o>x outside any undo group: u leaves afoobarc, not afoobc
 4.6.3-stable::issue34-race 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
 4.6.3-stable::issue34-race-fast 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
+4.6.3-stable::undo-ctrl-o b5632be3   # vim-core types the text after Insert <C-o>x outside any undo group: u leaves afoobarc, not afoobc
 4.7.2-stable::issue34-race 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
 4.7.2-stable::issue34-race-fast 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
+4.7.2-stable::undo-ctrl-o b5632be3   # vim-core types the text after Insert <C-o>x outside any undo group: u leaves afoobarc, not afoobc
 4.8-dev7::issue34-race 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
 4.8-dev7::issue34-race-fast 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
+4.8-dev7::undo-ctrl-o b5632be3   # vim-core types the text after Insert <C-o>x outside any undo group: u leaves afoobarc, not afoobc
