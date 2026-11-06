@@ -10,16 +10,17 @@
 //!
 //! ## Undo model
 //!
-//! The mock tracks `begin/end_complex_operation` nesting and records
-//! whether any text operations occurred within each outermost pair.
-//! Actual undo/redo replay is handled by the changeset-based `UndoStore`,
-//! not by the mock's undo stack.
+//! Godot's own history (`text_edit.cpp`, "Versioning"): one op per text
+//! change with `chain_forward`/`chain_backward` marking complex operations,
+//! the version counter, edit actions, and `undo()`/`redo()` with their caret
+//! restore and unhiding. `u` and `<C-r>` never use it: they go through the
+//! changeset-based `UndoStore`.
 //!
 //! Reference: `/reference/godot/scene/gui/text_edit.{h,cpp}`
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::bridge::port::TextEditorPort;
+use crate::bridge::port::{FoldCapable, TextEditorPort};
 
 // ─── Data structures ────────────────────────────────────────────────────────
 // These mirror Godot's internal structs (Caret, Selection) at the field level.
@@ -46,14 +47,57 @@ struct Caret {
     selection: Selection,
 }
 
-/// One atomic undo step. Corresponds to one outermost `begin/end_complex_operation`
-/// pair. Tracks the number of text operations so `end_complex_operation` can
-/// distinguish no-op groups from real edits. The actual undo/redo replay is
-/// handled by UndoStore (changeset-based), not by the mock's undo stack.
-#[derive(Clone, Debug)]
-struct UndoGroup {
-    op_count: usize,
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum OpKind {
+    None,
+    Insert,
+    Remove,
 }
+
+/// Godot's `TextOperation`.
+#[derive(Clone, Debug)]
+struct TextOp {
+    kind: OpKind,
+    from: (i32, i32),
+    to: (i32, i32),
+    text: String,
+    version: u32,
+    prev_version: u32,
+    chain_forward: bool,
+    chain_backward: bool,
+    start_carets: Vec<Caret>,
+    end_carets: Vec<Caret>,
+}
+
+impl TextOp {
+    fn none() -> Self {
+        Self {
+            kind: OpKind::None,
+            from: (0, 0),
+            to: (0, 0),
+            text: String::new(),
+            version: 0,
+            prev_version: 0,
+            chain_forward: false,
+            chain_backward: false,
+            start_carets: Vec::new(),
+            end_carets: Vec::new(),
+        }
+    }
+}
+
+/// Godot's `TextEdit::EditAction`, the two the mock needs.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum EditAction {
+    None,
+    Typing,
+}
+
+/// A caret's `(line, column, selection origin if active)`.
+pub(crate) type CaretReading = (i32, i32, Option<(i32, i32)>);
+
+/// `gui/common/text_edit_undo_stack_max_size`'s default.
+const UNDO_STACK_MAX: usize = 1024;
 
 // ─── MockTextEdit ───────────────────────────────────────────────────────────
 
@@ -71,15 +115,22 @@ pub(crate) struct MockTextEdit {
     /// Index 0 is the primary caret, never removed by `remove_secondary_carets`.
     carets: Vec<Caret>,
 
-    // ── Undo state ──
-    undo_stack: Vec<UndoGroup>,
-    /// Points past the last undone group. Equal to `undo_stack.len()` when
+    // ── Undo state, as Godot's fields ──
+    undo_stack: Vec<TextOp>,
+    /// Godot's `undo_stack_pos`: the first op of the redo area, `None` when
     /// there is nothing to redo.
-    undo_pos: usize,
-    /// The group being accumulated inside the current `begin/end` pair.
-    current_group: Option<UndoGroup>,
-    /// Nesting depth — only the outermost `end` finalizes the group.
+    undo_pos: Option<usize>,
+    /// The newest op, pushed onto the stack by the next `push_current_op`.
+    current_op: TextOp,
+    version: u32,
     complex_operation_count: u32,
+    next_operation_is_complex: bool,
+    current_action: EditAction,
+    in_action: bool,
+    pending_action_end: bool,
+    /// `version` at the outermost `begin_complex_operation`.
+    pair_start_version: u32,
+    empty_complex_pairs: usize,
 
     /// Multicaret edit nesting depth. `merge_overlapping_carets` is deferred
     /// to the outermost `end_multicaret_edit`.
@@ -118,9 +169,16 @@ impl MockTextEdit {
             lines,
             carets: vec![Caret::default()],
             undo_stack: Vec::new(),
-            undo_pos: 0,
-            current_group: None,
+            undo_pos: None,
+            current_op: TextOp::none(),
+            version: 0,
             complex_operation_count: 0,
+            next_operation_is_complex: false,
+            current_action: EditAction::None,
+            in_action: false,
+            pending_action_end: false,
+            pair_start_version: 0,
+            empty_complex_pairs: 0,
             multicaret_edit_count: 0,
             v_scroll: 0.0,
             h_scroll: 0,
@@ -442,38 +500,103 @@ impl MockTextEdit {
     }
 
     // ── Undo-recording wrappers ─────────────────────────────────────────
-    // These pair raw text mutation with undo recording, matching how Godot's
-    // `insert_text` and `remove_text` interact with the undo system.
+    // Godot's `_insert_text` and `_remove_text`.
 
     fn insert_text_record(&mut self, p_line: i32, p_col: i32, p_text: &str) -> (i32, i32) {
         self.clear_redo();
-
         let (end_line, end_col) = self.base_insert_text(p_line, p_col, p_text);
-        self.record_op();
+        self.record_op(OpKind::Insert, (p_line, p_col), (end_line, end_col), p_text);
         (end_line, end_col)
     }
 
     fn remove_text_record(&mut self, from_line: i32, from_col: i32, to_line: i32, to_col: i32) {
         self.clear_redo();
-
-        self.base_remove_text(from_line, from_col, to_line, to_col);
-        self.record_op();
+        let removed = self.base_remove_text(from_line, from_col, to_line, to_col);
+        self.record_op(
+            OpKind::Remove,
+            (from_line, from_col),
+            (to_line, to_col),
+            &removed,
+        );
     }
 
-    fn record_op(&mut self) {
-        if let Some(group) = &mut self.current_group {
-            group.op_count += 1;
-        }
-        // Ops outside a begin/end pair are silently dropped from undo history.
-        // Godot would record them in `current_op` and push on next `begin`, but
-        // the vim plugin never mutates text outside an undo group, so the
-        // simplified behavior is equivalent for our use case.
+    fn record_op(&mut self, kind: OpKind, from: (i32, i32), to: (i32, i32), text: &str) {
+        self.version += 1;
+        let start_carets = if self.next_operation_is_complex {
+            self.current_op.start_carets.clone()
+        } else {
+            self.carets.clone()
+        };
+        let op = TextOp {
+            kind,
+            from,
+            to,
+            text: text.to_owned(),
+            version: self.version,
+            prev_version: self.current_op.version,
+            chain_forward: false,
+            chain_backward: false,
+            start_carets,
+            end_carets: self.carets.clone(),
+        };
+        self.push_current_op();
+        self.current_op = op;
     }
 
-    /// Standard undo semantics: any new edit after an undo discards the redo future.
+    /// Godot's `_clear_redo`.
     fn clear_redo(&mut self) {
-        if self.undo_pos < self.undo_stack.len() {
-            self.undo_stack.truncate(self.undo_pos);
+        let Some(pos) = self.undo_pos else {
+            return;
+        };
+        self.push_current_op();
+        self.undo_stack.truncate(pos);
+        self.undo_pos = None;
+    }
+
+    /// Godot's `_push_current_op`.
+    fn push_current_op(&mut self) {
+        if self.pending_action_end {
+            self.start_action(EditAction::None);
+            return;
+        }
+        if self.current_op.kind == OpKind::None {
+            return;
+        }
+        if self.next_operation_is_complex {
+            self.current_op.chain_forward = true;
+            self.next_operation_is_complex = false;
+        }
+        self.undo_stack.push(self.current_op.clone());
+        self.current_op.kind = OpKind::None;
+        self.current_op.text.clear();
+        self.current_op.chain_forward = false;
+        if self.undo_stack.len() > UNDO_STACK_MAX {
+            self.undo_stack.remove(0);
+        }
+    }
+
+    /// Godot's `_do_text_op`.
+    fn do_text_op(&mut self, idx: usize, reverse: bool) {
+        let op = &self.undo_stack[idx];
+        let (from, to, text) = (op.from, op.to, op.text.clone());
+        if (op.kind == OpKind::Insert) != reverse {
+            self.base_insert_text(from.0, from.1, &text);
+        } else {
+            self.base_remove_text(from.0, from.1, to.0, to.1);
+        }
+    }
+
+    /// CodeEdit's `_unhide_carets`.
+    fn unhide_carets(&mut self) {
+        for i in 0..self.carets.len() {
+            let line = self.carets[i].line;
+            if self.is_line_hidden(line) {
+                FoldCapable::unfold_line(self, line);
+            }
+            let origin = self.carets[i].selection.origin_line;
+            if self.carets[i].selection.active && self.is_line_hidden(origin) {
+                FoldCapable::unfold_line(self, origin);
+            }
         }
     }
 
@@ -808,29 +931,38 @@ impl TextEditorPort for MockTextEdit {
     // ── Undo ────────────────────────────────────────────────────────────
 
     fn begin_complex_operation(&mut self) {
+        self.push_current_op();
         if self.complex_operation_count == 0 {
-            self.current_group = Some(UndoGroup { op_count: 0 });
+            self.next_operation_is_complex = true;
+            self.current_op.start_carets = self.carets.clone();
+            self.pair_start_version = self.version;
         }
         self.complex_operation_count += 1;
     }
 
+    /// An outermost end with no op since its begin marks the previous op
+    /// `chain_backward`, so Godot's next undo also takes the step before it.
     fn end_complex_operation(&mut self) {
-        if self.complex_operation_count == 0 {
+        self.push_current_op();
+        let outermost = self.complex_operation_count <= 1;
+        let empty = self.complex_operation_count == 0 || self.version == self.pair_start_version;
+        self.complex_operation_count = self.complex_operation_count.saturating_sub(1);
+        if !outermost {
             return;
         }
-        self.complex_operation_count -= 1;
-
-        if self.complex_operation_count == 0 {
-            if let Some(group) = self.current_group.take() {
-                // Only push groups that actually modified text — empty groups
-                // (e.g., a begin/end pair around a no-op command) are discarded.
-                if group.op_count > 0 {
-                    self.undo_stack.truncate(self.undo_pos);
-                    self.undo_stack.push(group);
-                    self.undo_pos = self.undo_stack.len();
-                }
-            }
+        if empty {
+            self.empty_complex_pairs += 1;
         }
+        let carets = self.carets.clone();
+        let Some(last) = self.undo_stack.last_mut() else {
+            return;
+        };
+        last.end_carets = carets;
+        if last.chain_forward {
+            last.chain_forward = false;
+            return;
+        }
+        last.chain_backward = true;
     }
 
     fn begin_multicaret_edit(&mut self) {
@@ -917,7 +1049,7 @@ impl TextEditorPort for MockTextEdit {
 // Folds act on the regions a test declares. Navigation is a default no-op.
 // The completion popup is a recorder: no candidates, only the order of calls.
 
-use crate::bridge::port::{FoldCapable, IdeCapable, NavigationCapable};
+use crate::bridge::port::{IdeCapable, NavigationCapable};
 
 impl FoldCapable for MockTextEdit {
     fn fold_line(&mut self, line: i32) {
@@ -984,6 +1116,126 @@ impl IdeCapable for MockTextEdit {
     }
 }
 impl NavigationCapable for MockTextEdit {}
+
+// ─── Godot's undo API ──────────────────────────────────────────────────────
+
+impl MockTextEdit {
+    /// `TextEdit::start_action`.
+    pub(crate) fn start_action(&mut self, action: EditAction) {
+        if self.current_action != action {
+            if self.current_action != EditAction::None {
+                self.in_action = false;
+                self.pending_action_end = false;
+                self.end_complex_operation();
+            }
+            if action != EditAction::None {
+                self.in_action = true;
+                self.begin_complex_operation();
+            }
+        } else if self.current_action != EditAction::None {
+            self.pending_action_end = false;
+        }
+        self.current_action = action;
+    }
+
+    /// `TextEdit::undo`, as Ctrl+Z and Edit > Undo call it.
+    pub(crate) fn undo(&mut self) {
+        if self.in_action {
+            self.pending_action_end = true;
+        }
+        self.push_current_op();
+        let mut pos = match self.undo_pos {
+            None if self.undo_stack.is_empty() => return,
+            None => self.undo_stack.len() - 1,
+            Some(0) => return,
+            Some(p) => p - 1,
+        };
+        self.deselect();
+        self.do_text_op(pos, true);
+        self.current_op.version = self.undo_stack[pos].prev_version;
+        if self.undo_stack[pos].chain_backward {
+            // Godot's ERR_BREAK at the front of the stack.
+            while pos > 0 {
+                pos -= 1;
+                self.do_text_op(pos, true);
+                self.current_op.version = self.undo_stack[pos].prev_version;
+                if self.undo_stack[pos].chain_forward {
+                    break;
+                }
+            }
+        }
+        self.undo_pos = Some(pos);
+        self.carets = self.undo_stack[pos].start_carets.clone();
+        self.unhide_carets();
+        self.adjust_viewport_to_caret();
+    }
+
+    /// `TextEdit::redo`.
+    pub(crate) fn redo(&mut self) {
+        if self.in_action {
+            self.pending_action_end = true;
+        }
+        self.push_current_op();
+        let Some(mut pos) = self.undo_pos else {
+            return;
+        };
+        self.deselect();
+        self.do_text_op(pos, false);
+        self.current_op.version = self.undo_stack[pos].version;
+        if self.undo_stack[pos].chain_forward {
+            while pos + 1 < self.undo_stack.len() {
+                pos += 1;
+                self.do_text_op(pos, false);
+                self.current_op.version = self.undo_stack[pos].version;
+                if self.undo_stack[pos].chain_backward {
+                    break;
+                }
+            }
+        }
+        self.carets = self.undo_stack[pos].end_carets.clone();
+        self.undo_pos = (pos + 1 < self.undo_stack.len()).then_some(pos + 1);
+        self.unhide_carets();
+        self.adjust_viewport_to_caret();
+    }
+
+    pub(crate) fn has_undo(&self) -> bool {
+        match self.undo_pos {
+            None => !self.undo_stack.is_empty() || self.current_op.kind != OpKind::None,
+            Some(pos) => pos != 0,
+        }
+    }
+
+    pub(crate) fn has_redo(&self) -> bool {
+        self.undo_pos.is_some()
+    }
+
+    pub(crate) fn get_version(&self) -> u32 {
+        self.current_op.version
+    }
+
+    /// Outermost complex operations that closed with no op inside.
+    pub(crate) fn empty_complex_pairs(&self) -> usize {
+        self.empty_complex_pairs
+    }
+
+    /// Every caret with its selection origin, if a selection is active.
+    pub(crate) fn carets_with_selection(&self) -> Vec<CaretReading> {
+        self.carets
+            .iter()
+            .map(|c| {
+                let origin = c
+                    .selection
+                    .active
+                    .then_some((c.selection.origin_line, c.selection.origin_column));
+                (c.line, c.column, origin)
+            })
+            .collect()
+    }
+
+    pub(crate) fn folded_lines(&self) -> Vec<i32> {
+        self.folded.iter().copied().collect()
+    }
+}
 
 // ─── Inherent methods for test assertions ───────────────────────────────────
 // These are NOT on the TextEditorPort trait because the production CodeEditPort
@@ -1187,5 +1439,104 @@ mod tests {
 
         assert_eq!(mock.get_text(), "aaa\nXXX\nbbb");
         assert_eq!(mock.carets[1].line, 2);
+    }
+
+    // ── Godot's undo history ──────────────────────────────────────────────
+
+    /// One `x` as godot-vim commits it: one op in one complex operation.
+    fn x_at(mock: &mut MockTextEdit, line: i32) {
+        mock.begin_complex_operation();
+        mock.remove_text(line, 0, line, 1);
+        mock.end_complex_operation();
+    }
+
+    #[test]
+    fn one_undo_takes_one_complex_operation() {
+        let mut mock = MockTextEdit::new("abc\ndef");
+        x_at(&mut mock, 0);
+        mock.begin_complex_operation();
+        mock.insert_text("1", 1, 0);
+        mock.insert_text("2", 1, 0);
+        mock.end_complex_operation();
+        assert_eq!(mock.get_text(), "bc\n21def");
+        assert_eq!(mock.get_version(), 3);
+
+        mock.undo();
+        assert_eq!(mock.get_text(), "bc\ndef");
+        assert_eq!(mock.get_version(), 1);
+        assert!(mock.has_undo() && mock.has_redo());
+        mock.redo();
+        assert_eq!(mock.get_text(), "bc\n21def");
+        assert!(!mock.has_redo());
+        assert_eq!(mock.empty_complex_pairs(), 0);
+    }
+
+    /// text_edit.cpp `end_complex_operation`: with no op since the begin,
+    /// the previous op gets `chain_backward`, so `undo()` walks past it.
+    #[test]
+    fn empty_pair_chains_the_previous_op_backward() {
+        let mut mock = MockTextEdit::new("abc\ndef\nghi");
+        x_at(&mut mock, 0);
+        x_at(&mut mock, 1);
+        mock.begin_complex_operation();
+        mock.end_complex_operation();
+        assert_eq!(mock.empty_complex_pairs(), 1);
+
+        mock.undo();
+        assert_eq!(mock.get_text(), "abc\ndef\nghi", "both x undone");
+        assert!(!mock.has_undo());
+    }
+
+    #[test]
+    fn undo_restores_the_start_carets_with_their_selection() {
+        let mut mock = MockTextEdit::new("abc\ndef");
+        mock.select(
+            crate::types::CharLineCol::new(0, 0),
+            crate::types::CharLineCol::new(0, 2),
+        );
+        mock.begin_complex_operation();
+        mock.remove_text(0, 0, 0, 2);
+        mock.end_complex_operation();
+        mock.deselect();
+        mock.set_caret_line(1);
+
+        mock.undo();
+        assert_eq!(mock.get_text(), "abc\ndef");
+        assert_eq!(mock.carets_with_selection(), vec![(0, 2, Some((0, 0)))]);
+    }
+
+    /// CodeEdit `_unhide_carets`: a restored caret inside a fold opens it.
+    #[test]
+    fn undo_unfolds_a_restored_caret() {
+        let mut mock = MockTextEdit::new("func a():\n\tx\n\ty\nfunc b():");
+        mock.add_fold_region(0, 2);
+        mock.set_caret_line(1);
+        x_at(&mut mock, 1);
+        mock.set_caret_line(0);
+        mock.fold_line(0);
+        assert_eq!(mock.folded_lines(), vec![0]);
+
+        mock.undo();
+        assert_eq!(mock.folded_lines(), Vec::<i32>::new());
+        assert_eq!(mock.get_caret_line(), 1);
+    }
+
+    /// Godot's typing is one action until `start_action(NONE)` or another
+    /// action closes it; `undo()` inside it closes it first.
+    #[test]
+    fn a_typing_action_is_one_undo_step() {
+        let mut mock = MockTextEdit::new("");
+        mock.start_action(EditAction::Typing);
+        mock.insert_text("a", 0, 0);
+        mock.insert_text("b", 0, 1);
+        assert!(mock.has_undo());
+        mock.start_action(EditAction::None);
+        mock.start_action(EditAction::Typing);
+        mock.insert_text("c", 0, 2);
+        mock.undo();
+        assert_eq!(mock.get_text(), "ab");
+        mock.undo();
+        assert_eq!(mock.get_text(), "");
+        assert_eq!(mock.empty_complex_pairs(), 0);
     }
 }

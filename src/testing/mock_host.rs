@@ -5,7 +5,7 @@
 //! Not modelled: the completion popup, syntax queries (all code), and the fold
 //! and indent providers (new lines get vim-core's autoindent). The
 //! `get_version()` check in `GodotHost::refresh_from_editor` is not exercised:
-//! `MockTextEdit` has no version counter.
+//! `MockHost` compares the text instead.
 
 use godot::prelude::InstanceId;
 use vim_core::document::{Document, Providers};
