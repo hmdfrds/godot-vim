@@ -2,7 +2,7 @@
 //!
 //! Trait hierarchy:
 //!
-//! - **`TextEditorPort`** (38 methods): core text editing (required).
+//! - **`TextEditorPort`** (39 methods): core text editing (required).
 //! - **`FoldCapable`** (5 methods, default no-ops) — code folding.
 //! - **`IdeCapable`** (7 methods, default no-ops): autocomplete/hints.
 //! - **`NavigationCapable`** (2 methods, default no-ops) — go-to-definition, hover docs.
@@ -76,6 +76,9 @@ pub(crate) trait TextEditorPort {
     /// Groups subsequent edits into a single undo step. Nesting is supported.
     fn begin_complex_operation(&mut self);
     fn end_complex_operation(&mut self);
+    /// `start_action(ACTION_NONE)`: closes Godot's open edit action, so its
+    /// next edit starts a new undo step. A no-op when none is open.
+    fn close_godot_action(&mut self);
 
     fn begin_multicaret_edit(&mut self);
     fn end_multicaret_edit(&mut self);

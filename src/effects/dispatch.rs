@@ -436,6 +436,9 @@ pub(crate) fn dispatch(
     };
     let mut commit_strategy = CommitStrategy::None;
     let mut deferred_undo_cursors: Option<Vec<Offset>> = None;
+    // A Vim undo boundary in this pass: Godot's next edit must not join
+    // an action open before it.
+    let mut undo_boundary = false;
 
     for effect in effects {
         match effect {
@@ -576,6 +579,7 @@ pub(crate) fn dispatch(
                 text_mutated = true;
             }
             Effect::BeginUndoGroup { .. } => {
+                undo_boundary = true;
                 let text_str: &str = &text;
                 state
                     .buffer(editor_id)
@@ -584,6 +588,7 @@ pub(crate) fn dispatch(
             }
             Effect::EndUndoGroup { node_id } => {
                 if let Some(node_id) = node_id {
+                    undo_boundary = true;
                     let text_str: &str = &text;
                     state
                         .buffer(editor_id)
@@ -621,6 +626,7 @@ pub(crate) fn dispatch(
                     commit_strategy = CommitStrategy::Diff;
                     deferred_undo_cursors = last_cursors;
                     text_mutated = true;
+                    undo_boundary = true;
                 }
             }
             Effect::UndoLine { count } => {
@@ -651,6 +657,7 @@ pub(crate) fn dispatch(
                     commit_strategy = CommitStrategy::Diff;
                     deferred_undo_cursors = last_cursors;
                     text_mutated = true;
+                    undo_boundary = true;
                 }
             }
             other => pass2.push(other),
@@ -688,6 +695,10 @@ pub(crate) fn dispatch(
                 "text mirror out of sync with editor after Phase 2 commit"
             );
         }
+    }
+
+    if undo_boundary {
+        editor.close_godot_action();
     }
 
     // ── Phase 3 (pass 2): cursor, selection, mode, scroll, etc. ────────

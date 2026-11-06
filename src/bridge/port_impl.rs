@@ -8,6 +8,7 @@
 
 use std::rc::Rc;
 
+use godot::classes::text_edit::EditAction;
 use godot::classes::{CodeEdit, EditorInterface, InputEventShortcut};
 use godot::prelude::*;
 
@@ -289,6 +290,10 @@ impl TextEditorPort for CodeEditPort<'_> {
 
     fn end_complex_operation(&mut self) {
         self.0.end_complex_operation();
+    }
+
+    fn close_godot_action(&mut self) {
+        self.0.start_action(EditAction::NONE);
     }
 
     fn begin_multicaret_edit(&mut self) {

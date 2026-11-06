@@ -131,6 +131,7 @@ pub(crate) struct MockTextEdit {
     /// `version` at the outermost `begin_complex_operation`.
     pair_start_version: u32,
     empty_complex_pairs: usize,
+    godot_action_closes: usize,
 
     /// Multicaret edit nesting depth. `merge_overlapping_carets` is deferred
     /// to the outermost `end_multicaret_edit`.
@@ -179,6 +180,7 @@ impl MockTextEdit {
             pending_action_end: false,
             pair_start_version: 0,
             empty_complex_pairs: 0,
+            godot_action_closes: 0,
             multicaret_edit_count: 0,
             v_scroll: 0.0,
             h_scroll: 0,
@@ -965,6 +967,11 @@ impl TextEditorPort for MockTextEdit {
         last.chain_backward = true;
     }
 
+    fn close_godot_action(&mut self) {
+        self.godot_action_closes += 1;
+        self.start_action(EditAction::None);
+    }
+
     fn begin_multicaret_edit(&mut self) {
         self.multicaret_edit_count += 1;
     }
@@ -1216,6 +1223,11 @@ impl MockTextEdit {
     /// Outermost complex operations that closed with no op inside.
     pub(crate) fn empty_complex_pairs(&self) -> usize {
         self.empty_complex_pairs
+    }
+
+    /// Calls to `close_godot_action`.
+    pub(crate) fn godot_action_closes(&self) -> usize {
+        self.godot_action_closes
     }
 
     /// Every caret with its selection origin, if a selection is active.
