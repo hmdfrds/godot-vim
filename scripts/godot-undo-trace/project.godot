@@ -1,0 +1,9 @@
+; scripts/godot-undo-trace.sh copies this project to a scratch directory.
+; Do not open it in place.
+
+config_version=5
+
+[application]
+
+config/name="godot-vim undo trace"
+config/features=PackedStringArray("4.5")
