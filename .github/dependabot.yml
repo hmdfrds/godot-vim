@@ -17,3 +17,5 @@ updates:
       # gdext upgrades change the bridge API surface and are deliberate
       # migration projects on their own branch, never a bot bump.
       - dependency-name: "godot"
+      # Our own git dependency, bumped by hand with its tag.
+      - dependency-name: "vim-core"

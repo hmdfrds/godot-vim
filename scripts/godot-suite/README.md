@@ -194,9 +194,10 @@ local binary can be updated by hand. If a canary (`canary-*`,
 ## Logs
 
 `allow-log.txt` lines are `<godot-prefix> <case or *> <regex>`; the prefix
-matches the start of the version, so `4.5` covers 4.5-stable and 4.5.2.
-`--record` writes the problem lines vanilla printed to `vanilla/<godot>.log`,
-and a plugin run allows exactly those lines for that case.
+matches the start of the version, so `4.5` covers 4.5-stable and any 4.5
+patch. `--record` writes the problem lines vanilla printed to
+`vanilla/<godot>.log`, and a plugin run allows exactly those lines for that
+case.
 
 ## Fixtures
 
@@ -228,14 +229,15 @@ and a plugin run allows exactly those lines for that case.
 
 ## Versions
 
-CI runs the suite and the smoke test on 4.5-stable (the floor), 4.6.1-stable,
-4.6.3-stable and 4.7.2-stable, the suite as advisory on the newest 4.8
-snapshot, and the smoke test alone on 4.5.2-stable. Each binary is pinned by
+CI runs the suite and the smoke test on 4.5-stable (the floor), the latest
+patch of each later minor (4.6.3-stable, 4.7.2-stable) and, as advisory, the
+newest 4.8 snapshot (4.8-dev7) until 4.8-stable. Each binary is pinned by
 SHA-512 in `.github/workflows/ci.yml`. Recordings and pins are keyed by the
 version the running editor reports.
 
-Moving a version: blocking rows move to a new stable patch at most monthly,
-in one change (record, bless, review the recording diff); the dev row moves
-at each beta or on demand; 4.5-stable stays while the plugin's minimum is
-4.5. Delete the old version's recording file and pin lines in the same
-change.
+Moving a version: a blocking row moves in place to its minor's new stable
+patch, at most monthly, in one change (record, bless, review the recording
+diff); the dev row moves at each beta or on demand; 4.5-stable stays while
+the plugin's minimum is 4.5. An older patch keeps a row only while it alone
+exercises a workaround. Delete the old version's recording file and pin
+lines in the same change.
