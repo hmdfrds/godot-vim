@@ -7,35 +7,21 @@
 use crate::bridge::codec::{DocumentView, LineIndex};
 use crate::bridge::port::TextEditorPort;
 
-/// Apply a set of `(from, to, Option<replacement>)` changes to a CodeEdit
-/// in reverse order so byte offsets remain valid.
-///
-/// All offsets must be absolute byte positions in the document described
-/// by `doc` — they are not adjusted for prior changes in this loop.
-/// Reverse-order application ensures higher-offset mutations never shift
-/// lower-offset positions.
-///
-/// Each `(from, to, replacement)` triple is processed back-to-front so that
-/// earlier byte offsets remain valid while later regions are modified.
-/// - `from < to` with `None` → pure deletion
-/// - `from == to` with `Some(text)` → pure insertion
-/// - `from < to` with `Some(text)` → replacement (delete then insert)
+/// Apply `(from, to, Option<replacement>)` changes to a CodeEdit, last
+/// first, so the byte offsets of `doc` stay valid for the ones before.
+/// - `None` deletes `from..to`;
+/// - `Some(text)` at `from == to` inserts;
+/// - `Some(text)` over `from < to` replaces (delete, then insert).
 pub(crate) fn apply_changes(
     editor: &mut impl TextEditorPort,
     doc: &DocumentView,
     changes: &[(usize, usize, Option<String>)],
 ) {
-    // Iterate in reverse so that mutations at higher offsets don't
-    // invalidate the byte positions of earlier changes.
-    for &(from, to, ref replacement) in changes.iter().rev() {
-        if from < to {
-            let from_pos = doc.line_index.byte_to_line_col(doc.text, from);
-            let to_pos = doc.line_index.byte_to_line_col(doc.text, to);
-            editor.remove_text(from_pos.line, from_pos.col, to_pos.line, to_pos.col);
-        }
-        if let Some(ref text) = replacement {
-            let pos = doc.line_index.byte_to_line_col(doc.text, from);
-            super::text::insert_at(editor, pos.line, pos.col, text);
+    for (from, to, replacement) in changes.iter().rev() {
+        match replacement {
+            None => super::text::handle_delete(editor, doc, *from, *to),
+            Some(text) if from == to => super::text::handle_insert(editor, doc, *from, text),
+            Some(text) => super::text::handle_replace(editor, doc, *from, *to, text),
         }
     }
 }

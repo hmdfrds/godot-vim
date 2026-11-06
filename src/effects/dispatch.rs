@@ -5,7 +5,8 @@
 //!
 //! Phase 2 atomically commits the accumulated mutations to CodeEdit using the
 //! [`CommitStrategy`], wrapped in [`ComplexOpGuard`] for deferred
-//! syntax/wrapping recomputation and unwind safety.
+//! syntax/wrapping recomputation and unwind safety. A pass that changes
+//! nothing opens no guard.
 //!
 //! Phase 3 (pass 2) processes everything else (cursor, selection, mode, scroll,
 //! messages) against the final document text.
@@ -21,7 +22,7 @@ use vim_core::primitives::Offset;
 use super::{
     auto_brace,
     compound::{CompoundAction, LineNumber, WindowNavAction},
-    cursor, messages, mode, navigation, registers, scroll, search, text, undo,
+    cursor, messages, mode, navigation, registers, scroll, search, undo,
 };
 use crate::bridge::codec::{usize_to_i32, DocumentView, LineIndex};
 use crate::bridge::port::{FoldCapable, IdeCapable, NavigationCapable, TextEditorPort};
@@ -98,8 +99,8 @@ impl<E: TextEditorPort + ?Sized> Drop for ComplexOpGuard<'_, E> {
 
 /// How accumulated Phase-1 mutations should be committed to CodeEdit in Phase 2.
 ///
-/// The common case (single insert during typing) uses `Insert` which maps to a
-/// single `text::handle_insert` call — zero overhead vs. the old two-pass model.
+/// The common case (single insert during typing) uses `Insert`, one change
+/// with no diff.
 /// Multi-mutation batches (auto-brace InsertWithClose, auto-brace extended delete)
 /// fall back to `Diff` which diffs the Cow mirror against `text_ref` and applies
 /// the resulting changeset.
@@ -134,6 +135,37 @@ impl CommitStrategy {
             _ => CommitStrategy::Diff,
         }
     }
+}
+
+/// Phase 1's mutations as `(from, to, replacement)` edits of `before`,
+/// without the ones that change nothing.
+fn change_list(
+    strategy: CommitStrategy,
+    before: &str,
+    after: &str,
+) -> Vec<(usize, usize, Option<String>)> {
+    let changes = match strategy {
+        CommitStrategy::None => Vec::new(),
+        CommitStrategy::Insert { offset, content } => vec![(offset, offset, Some(content))],
+        CommitStrategy::Delete { start, end } => vec![(start, end, None)],
+        CommitStrategy::Replace {
+            start,
+            end,
+            content,
+        } => vec![(start, end, Some(content))],
+        CommitStrategy::Diff => {
+            use vim_core::primitives::changeset::ChangeSet;
+            ChangeSet::from_diff(before, after)
+                .changes()
+                .map(|(from, to, repl)| (from, to, repl.map(String::from)))
+                .collect()
+        }
+    };
+    changes
+        .into_iter()
+        .map(|(from, to, repl)| (from, to, repl.filter(|r| !r.is_empty())))
+        .filter(|(from, to, repl)| before.get(*from..*to) != Some(repl.as_deref().unwrap_or("")))
+        .collect()
 }
 
 /// State machine tracking SetSelection → SetCursor effect pairing.
@@ -349,8 +381,9 @@ const HANDLED_EFFECTS: &[EffectKind] = &[
 ///
 /// **Phase 2** (atomic commit): After all Phase-1 effects are processed, the
 /// accumulated mutations are committed to CodeEdit in a single
-/// [`ComplexOpGuard`] scope using the [`CommitStrategy`]. This eliminates the
-/// class of "partially mutated CodeEdit" bugs.
+/// [`ComplexOpGuard`] scope using the [`CommitStrategy`], opened only when
+/// they change the text. This eliminates the class of "partially mutated
+/// CodeEdit" bugs.
 ///
 /// **Phase 3** (pass 2): Everything else (cursor, selection, mode, scroll,
 /// messages) against the final document text. `SetSelection` MUST appear
@@ -403,6 +436,9 @@ pub(crate) fn dispatch(
     };
     let mut commit_strategy = CommitStrategy::None;
     let mut deferred_undo_cursors: Option<Vec<Offset>> = None;
+    // A Vim undo boundary in this pass: Godot's next edit must not join
+    // an action open before it.
+    let mut undo_boundary = false;
 
     for effect in effects {
         match effect {
@@ -543,6 +579,7 @@ pub(crate) fn dispatch(
                 text_mutated = true;
             }
             Effect::BeginUndoGroup { .. } => {
+                undo_boundary = true;
                 let text_str: &str = &text;
                 state
                     .buffer(editor_id)
@@ -551,6 +588,7 @@ pub(crate) fn dispatch(
             }
             Effect::EndUndoGroup { node_id } => {
                 if let Some(node_id) = node_id {
+                    undo_boundary = true;
                     let text_str: &str = &text;
                     state
                         .buffer(editor_id)
@@ -588,6 +626,7 @@ pub(crate) fn dispatch(
                     commit_strategy = CommitStrategy::Diff;
                     deferred_undo_cursors = last_cursors;
                     text_mutated = true;
+                    undo_boundary = true;
                 }
             }
             Effect::UndoLine { count } => {
@@ -618,6 +657,7 @@ pub(crate) fn dispatch(
                     commit_strategy = CommitStrategy::Diff;
                     deferred_undo_cursors = last_cursors;
                     text_mutated = true;
+                    undo_boundary = true;
                 }
             }
             other => pass2.push(other),
@@ -625,43 +665,20 @@ pub(crate) fn dispatch(
     }
 
     // ── Phase 2: atomic commit to CodeEdit ─────────────────────────────
-    // Apply accumulated mutations using the CommitStrategy, wrapped in
-    // ComplexOpGuard for deferred syntax/wrapping recomputation.
+    // An empty complex operation marks Godot's previous op chain_backward
+    // (text_edit.cpp end_complex_operation), so the guard opens only around
+    // a change.
     if text_mutated {
-        let original_line_index = match &line_index_hint {
-            Some(hint) => hint.clone(),
-            None => LineIndex::new(text_ref),
-        };
-        let original_doc = DocumentView::new(text_ref, &original_line_index);
-
-        {
-            let _guard = ComplexOpGuard::new(editor);
-            match &commit_strategy {
-                CommitStrategy::None => {}
-                CommitStrategy::Insert { offset, content } => {
-                    text::handle_insert(_guard.editor, &original_doc, *offset, content);
-                }
-                CommitStrategy::Delete { start, end } => {
-                    text::handle_delete(_guard.editor, &original_doc, *start, *end);
-                }
-                CommitStrategy::Replace {
-                    start,
-                    end,
-                    content,
-                } => {
-                    text::handle_replace(_guard.editor, &original_doc, *start, *end, content);
-                }
-                CommitStrategy::Diff => {
-                    use vim_core::primitives::changeset::ChangeSet;
-                    let cs = ChangeSet::from_diff(text_ref, &text);
-                    let diff_changes: Vec<(usize, usize, Option<String>)> = cs
-                        .changes()
-                        .map(|(from, to, repl)| (from, to, repl.map(String::from)))
-                        .collect();
-                    undo::apply_changes(_guard.editor, &original_doc, &diff_changes);
-                }
-            }
-        } // _guard drops here, calling end_complex_operation()
+        let changes = change_list(commit_strategy, text_ref, &text);
+        if !changes.is_empty() {
+            let original_line_index = match &line_index_hint {
+                Some(hint) => hint.clone(),
+                None => LineIndex::new(text_ref),
+            };
+            let original_doc = DocumentView::new(text_ref, &original_line_index);
+            let guard = ComplexOpGuard::new(editor);
+            undo::apply_changes(guard.editor, &original_doc, &changes);
+        }
 
         // Restore undo cursors deferred from Phase 1.
         if let Some(ref cursors) = deferred_undo_cursors {
@@ -678,6 +695,10 @@ pub(crate) fn dispatch(
                 "text mirror out of sync with editor after Phase 2 commit"
             );
         }
+    }
+
+    if undo_boundary {
+        editor.close_godot_action();
     }
 
     // ── Phase 3 (pass 2): cursor, selection, mode, scroll, etc. ────────

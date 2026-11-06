@@ -16,6 +16,11 @@ still open, and GodotVim took that for a lost undo group and dropped the
 session's start. `u` after such a session still leaves its text, until
 vim-core keeps what you type after the command in the session.
 
+**Ctrl+Z after a `u` that changed nothing undoes one step.** After `x`,
+`x`, an Insert that typed nothing (`i<Esc>`) and `u`, Ctrl+Z also undid
+the first `x`, often more, and could log an error. Now it undoes the
+second `x` only.
+
 **`undolevels` defaults to 10000**, the size of GodotVim's undo store. It
 was unlimited. A vimrc that sets it still wins, and a larger value also
 makes the store larger.

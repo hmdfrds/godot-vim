@@ -1,0 +1,67 @@
+# godot 4.7.2-stable
+text func a():\n\tvar x = 1\n\tvar y = 2\nfunc b():\n\tpass | v=0 undo=0 redo=0 carets=0:0 folded=- text=func a():\n\tvar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+caret 1 1 | v=0 undo=0 redo=0 carets=1:1 folded=- text=func a():\n\tvar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+begin | v=0 undo=0 redo=0 carets=1:1 folded=- text=func a():\n\tvar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+remove 1 1 1 2 | v=1 undo=1 redo=0 carets=* folded=- text=func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+caret 1 1 | v=1 undo=1 redo=0 carets=1:1 folded=- text=func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+end | v=1 undo=1 redo=0 carets=1:1 folded=- text=func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+select 2 1 2 4 0 | v=1 undo=1 redo=0 carets=2:4/2:1 folded=- text=func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+begin | v=1 undo=1 redo=0 carets=2:4/2:1 folded=- text=func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+remove 2 1 2 4 | v=2 undo=1 redo=0 carets=* folded=- text=func a():\n\tar x = 1\n\t y = 2\nfunc b():\n\tpass
+insert 2 1 let | v=3 undo=1 redo=0 carets=* folded=- text=func a():\n\tar x = 1\n\tlet y = 2\nfunc b():\n\tpass
+select 2 4 2 1 0 | v=3 undo=1 redo=0 carets=2:1/2:4 folded=- text=func a():\n\tar x = 1\n\tlet y = 2\nfunc b():\n\tpass
+end | v=3 undo=1 redo=0 carets=2:1/2:4 folded=- text=func a():\n\tar x = 1\n\tlet y = 2\nfunc b():\n\tpass
+caret 0 0 | v=3 undo=1 redo=0 carets=0:0 folded=- text=func a():\n\tar x = 1\n\tlet y = 2\nfunc b():\n\tpass
+undo | v=1 undo=1 redo=1 carets=2:4/2:1 folded=- text=func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+redo | v=3 undo=1 redo=0 carets=2:1/2:4 folded=- text=func a():\n\tar x = 1\n\tlet y = 2\nfunc b():\n\tpass
+undo | v=1 undo=1 redo=1 carets=2:4/2:1 folded=- text=func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+caret 4 1 | v=1 undo=1 redo=1 carets=4:1 folded=- text=func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+begin | v=1 undo=1 redo=1 carets=4:1 folded=- text=func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+insert 4 1 # | v=4 undo=1 redo=0 carets=* folded=- text=func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\t#pass
+caret 4 2 | v=4 undo=1 redo=0 carets=4:2 folded=- text=func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\t#pass
+end | v=4 undo=1 redo=0 carets=4:2 folded=- text=func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\t#pass
+begin | v=4 undo=1 redo=0 carets=4:2 folded=- text=func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\t#pass
+insert 4 0 x | v=5 undo=1 redo=0 carets=* folded=- text=func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\nx\t#pass
+caret 4 3 | v=5 undo=1 redo=0 carets=4:3 folded=- text=func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\nx\t#pass
+end | v=5 undo=1 redo=0 carets=4:3 folded=- text=func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\nx\t#pass
+begin | v=5 undo=1 redo=0 carets=4:3 folded=- text=func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\nx\t#pass
+end | v=5 undo=1 redo=0 carets=4:3 folded=- text=func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\nx\t#pass
+undo | v=0 undo=0 redo=1 carets=1:1 folded=- text=func a():\n\tvar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+redo | v=1 undo=1 redo=1 carets=1:1 folded=- text=func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+begin | v=1 undo=1 redo=1 carets=1:1 folded=- text=func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+begin | v=1 undo=1 redo=1 carets=1:1 folded=- text=func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+insert 0 0 # | v=6 undo=1 redo=0 carets=* folded=- text=#func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+end | v=6 undo=1 redo=0 carets=1:1 folded=- text=#func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+end | v=6 undo=1 redo=0 carets=1:1 folded=- text=#func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+typing | v=6 undo=1 redo=0 carets=1:1 folded=- text=#func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+insert 3 0 a | v=7 undo=1 redo=0 carets=* folded=- text=#func a():\n\tar x = 1\n\tvar y = 2\nafunc b():\n\tpass
+insert 3 1 b | v=8 undo=1 redo=0 carets=* folded=- text=#func a():\n\tar x = 1\n\tvar y = 2\nabfunc b():\n\tpass
+close | v=8 undo=1 redo=0 carets=1:1 folded=- text=#func a():\n\tar x = 1\n\tvar y = 2\nabfunc b():\n\tpass
+close | v=8 undo=1 redo=0 carets=1:1 folded=- text=#func a():\n\tar x = 1\n\tvar y = 2\nabfunc b():\n\tpass
+typing | v=8 undo=1 redo=0 carets=1:1 folded=- text=#func a():\n\tar x = 1\n\tvar y = 2\nabfunc b():\n\tpass
+insert 3 2 c | v=9 undo=1 redo=0 carets=* folded=- text=#func a():\n\tar x = 1\n\tvar y = 2\nabcfunc b():\n\tpass
+undo | v=8 undo=1 redo=1 carets=1:1 folded=- text=#func a():\n\tar x = 1\n\tvar y = 2\nabfunc b():\n\tpass
+typing | v=8 undo=1 redo=1 carets=1:1 folded=- text=#func a():\n\tar x = 1\n\tvar y = 2\nabfunc b():\n\tpass
+close | v=8 undo=1 redo=1 carets=1:1 folded=- text=#func a():\n\tar x = 1\n\tvar y = 2\nabfunc b():\n\tpass
+undo | v=6 undo=1 redo=1 carets=1:1 folded=- text=#func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+caret 1 2 | v=6 undo=1 redo=1 carets=1:2 folded=- text=#func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+begin | v=6 undo=1 redo=1 carets=1:2 folded=- text=#func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+insert 1 2 z | v=10 undo=1 redo=0 carets=* folded=- text=#func a():\n\tazr x = 1\n\tvar y = 2\nfunc b():\n\tpass
+caret 1 3 | v=10 undo=1 redo=0 carets=1:3 folded=- text=#func a():\n\tazr x = 1\n\tvar y = 2\nfunc b():\n\tpass
+end | v=10 undo=1 redo=0 carets=1:3 folded=- text=#func a():\n\tazr x = 1\n\tvar y = 2\nfunc b():\n\tpass
+caret 0 0 | v=10 undo=1 redo=0 carets=0:0 folded=- text=#func a():\n\tazr x = 1\n\tvar y = 2\nfunc b():\n\tpass
+fold 0 | v=10 undo=1 redo=0 carets=0:0 folded=0 text=#func a():\n\tazr x = 1\n\tvar y = 2\nfunc b():\n\tpass
+undo | v=6 undo=1 redo=1 carets=1:2 folded=- text=#func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+fold 0 | v=6 undo=1 redo=1 carets=0:10 folded=0 text=#func a():\n\tar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+redo | v=10 undo=1 redo=0 carets=1:3 folded=- text=#func a():\n\tazr x = 1\n\tvar y = 2\nfunc b():\n\tpass
+caret 1 3 | v=10 undo=1 redo=0 carets=1:3 folded=- text=#func a():\n\tazr x = 1\n\tvar y = 2\nfunc b():\n\tpass
+add_caret 3 1 | v=10 undo=1 redo=0 carets=1:3,3:1 folded=- text=#func a():\n\tazr x = 1\n\tvar y = 2\nfunc b():\n\tpass
+begin | v=10 undo=1 redo=0 carets=1:3,3:1 folded=- text=#func a():\n\tazr x = 1\n\tvar y = 2\nfunc b():\n\tpass
+insert 3 1 ! | v=11 undo=1 redo=0 carets=* folded=- text=#func a():\n\tazr x = 1\n\tvar y = 2\nf!unc b():\n\tpass
+insert 0 1 ! | v=12 undo=1 redo=0 carets=* folded=- text=#!func a():\n\tazr x = 1\n\tvar y = 2\nf!unc b():\n\tpass
+caret 1 3 | v=12 undo=1 redo=0 carets=1:3 folded=- text=#!func a():\n\tazr x = 1\n\tvar y = 2\nf!unc b():\n\tpass
+add_caret 3 2 | v=12 undo=1 redo=0 carets=1:3,3:2 folded=- text=#!func a():\n\tazr x = 1\n\tvar y = 2\nf!unc b():\n\tpass
+end | v=12 undo=1 redo=0 carets=1:3,3:2 folded=- text=#!func a():\n\tazr x = 1\n\tvar y = 2\nf!unc b():\n\tpass
+caret 4 0 | v=12 undo=1 redo=0 carets=4:0 folded=- text=#!func a():\n\tazr x = 1\n\tvar y = 2\nf!unc b():\n\tpass
+undo | v=10 undo=1 redo=1 carets=1:3,3:1 folded=- text=#func a():\n\tazr x = 1\n\tvar y = 2\nfunc b():\n\tpass
+redo | v=12 undo=1 redo=0 carets=1:3,3:2 folded=- text=#!func a():\n\tazr x = 1\n\tvar y = 2\nf!unc b():\n\tpass

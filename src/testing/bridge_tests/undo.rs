@@ -189,6 +189,19 @@ fn identity_edit_undo_is_noop() {
     assert_editor!(mock, text: "hello");
 }
 
+/// No Godot step, but the step's cursor still lands.
+#[test]
+fn identity_undo_still_restores_the_cursor() {
+    let mut mock = MockTextEdit::new("hello");
+    let mut ctx = DispatchCtx::new();
+    ctx.dispatch(&mut mock, effects![begin_undo; end_undo(1)]);
+    mock.set_caret_column(4);
+
+    ctx.dispatch(&mut mock, effects![undo_steps(1, 2)]);
+    assert_editor!(mock, text: "hello", cursor: (0, 2));
+    assert!(!mock.has_undo());
+}
+
 // ── Empty undo group (EndUndoGroup with None node_id) ──────────────────
 
 #[test]
@@ -387,4 +400,38 @@ fn undo_clamps_cursor_beyond_text_length() {
     // The clamped offset is min(9999, 2-1) = 1 -> line 0, col 1.
     assert_eq!(line, 0);
     assert_eq!(col, 1);
+}
+
+// ── A change that changes nothing reaches Godot as nothing ─────────────
+
+#[test]
+fn noop_change_pushes_no_op() {
+    for fx in [
+        effects![begin_undo; replace(0, 3, "abc"); end_undo(1)],
+        effects![begin_undo; insert(1, ""); end_undo(1)],
+        effects![begin_undo; delete(2, 2); end_undo(1)],
+        effects![begin_undo; insert(1, "x"); delete(1, 2); end_undo(1)],
+    ] {
+        let mut mock = MockTextEdit::new("abc");
+        let mut ctx = DispatchCtx::new();
+        ctx.dispatch(&mut mock, fx);
+        assert_editor!(mock, text: "abc");
+        assert!(!mock.has_undo());
+    }
+}
+
+/// A replacement keeps its own Godot op even when part of it is unchanged.
+#[test]
+fn partial_replace_is_one_godot_step() {
+    let mut mock = MockTextEdit::new("abc");
+    let mut ctx = DispatchCtx::new();
+    ctx.dispatch(
+        &mut mock,
+        effects![begin_undo; replace(0, 3, "abd"); end_undo(1)],
+    );
+    assert_editor!(mock, text: "abd");
+
+    mock.undo();
+    assert_editor!(mock, text: "abc");
+    assert!(!mock.has_undo());
 }
