@@ -3,19 +3,92 @@
 # scripts/godot-suite.sh fails when the failing set of the running Godot
 # changes in either direction. Rewrite one version's lines with --bless.
 4.5-stable::abbrev-caret-vimrc b0f8dfb3   # the config loader of vim-core 0.9 skips iabbrev lines, so the vimrc abbreviation never loads; typed :iabbrev expands (abbrev-caret)
+4.5-stable::comp-pgdn-fast e81e4ff4   # PageDown in Insert before the popup opens goes to vim-core and does not move the caret down a page as TextEdit does, so Enter splits another line
+4.5-stable::comp-replace-fast f1c72395   # Shift+Enter with no popup types a newline (Vim's <S-CR>); Godot before 4.7 binds Shift+Enter to nothing outside the popup
+4.5-stable::ctrl-o-dd e088c1d5   # after Insert <C-o>dd the caret keeps its old column instead of the one dd leaves, so y lands mid-line: bayr, not ybar
+4.5-stable::ctrl-u-twice 1a8f0bb2   # a second <C-u> deletes nothing; Vim deletes the text before the Insert start back to the indent (insert.txt, i_CTRL-U)
+4.5-stable::ctrlz-insert-session f82d3186   # Ctrl+Z after an Insert session undoes its last character, not the session that u undoes
+4.5-stable::ctrlz-typing 59b63568   # Ctrl+Z in Insert undoes the last typed character; Godot undoes the whole typing run
+4.5-stable::ctrlz-typing-fast 59b63568   # Ctrl+Z in Insert undoes the last typed character; Godot undoes the whole typing run
 4.5-stable::doc-k:log   # CanvasItem RID and ObjectDB instances leak at exit after K on 4.5; cause unknown
+4.5-stable::dot-pair 2fd8f90d   # . after i( with Auto Brace Complete on repeats the ( without the closer Godot added
+4.5-stable::enter-after-comment 8f85a819   # Enter after if x: with a trailing comment does not indent; Godot finds the colon before the comment
+4.5-stable::enter-after-todo 59287276   # Enter after a comment that ends in a colon indents one level more; Godot ignores comments when it indents
+4.5-stable::enter-no-autoindent 950733fc   # Enter indents after if x: although Godot's Auto Indent is off
+4.5-stable::enter-no-autoindent-runtime 950733fc   # Enter indents after if x: although Godot's Auto Indent was turned off while the file is open
 4.5-stable::issue34-race 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
 4.5-stable::issue34-race-fast 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
+4.5-stable::pair-before-dot 7e878991   # ( typed right before .bar() gets no closer; Godot adds one
+4.5-stable::pair-docstring cd00a60f   # three double quotes give four quotes; Godot closes the docstring with three more
+4.5-stable::pair-in-comment 9ea60441   # ( typed in a comment gets a closer; Godot adds none in comments
+4.5-stable::pair-off-runtime a383fe59   # ( still gets a closer after Auto Brace Complete was turned off while the file is open
+4.5-stable::palette a1bd0bd4   # Ctrl+Shift+P in Insert does not reach Godot, so the Command Palette does not open
 4.5-stable::undo-ctrl-o b5632be3   # vim-core types the text after Insert <C-o>x outside any undo group: u leaves afoobarc, not afoobc
+4.5-stable::undo-insert-session 85cd9be1   # u after an append leaves the caret past the end of the line instead of on its last character
 4.6.3-stable::abbrev-caret-vimrc b0f8dfb3   # the config loader of vim-core 0.9 skips iabbrev lines, so the vimrc abbreviation never loads; typed :iabbrev expands (abbrev-caret)
+4.6.3-stable::comp-pgdn-fast e81e4ff4   # PageDown in Insert before the popup opens goes to vim-core and does not move the caret down a page as TextEdit does, so Enter splits another line
+4.6.3-stable::comp-replace-fast f1c72395   # Shift+Enter with no popup types a newline (Vim's <S-CR>); Godot before 4.7 binds Shift+Enter to nothing outside the popup
+4.6.3-stable::comp-replace-no-stab ebdea036   # after Shift+Tab dedents the line with the popup open, godot-vim opens the popup again at its first row; Godot keeps the highlighted row
+4.6.3-stable::ctrl-o-dd e088c1d5   # after Insert <C-o>dd the caret keeps its old column instead of the one dd leaves, so y lands mid-line: bayr, not ybar
+4.6.3-stable::ctrl-u-twice 1a8f0bb2   # a second <C-u> deletes nothing; Vim deletes the text before the Insert start back to the indent (insert.txt, i_CTRL-U)
+4.6.3-stable::ctrlz-insert-session f82d3186   # Ctrl+Z after an Insert session undoes its last character, not the session that u undoes
+4.6.3-stable::ctrlz-typing 59b63568   # Ctrl+Z in Insert undoes the last typed character; Godot undoes the whole typing run
+4.6.3-stable::ctrlz-typing-fast 59b63568   # Ctrl+Z in Insert undoes the last typed character; Godot undoes the whole typing run
+4.6.3-stable::dot-pair 2fd8f90d   # . after i( with Auto Brace Complete on repeats the ( without the closer Godot added
+4.6.3-stable::enter-after-comment 8f85a819   # Enter after if x: with a trailing comment does not indent; Godot finds the colon before the comment
+4.6.3-stable::enter-after-todo 59287276   # Enter after a comment that ends in a colon indents one level more; Godot ignores comments when it indents
+4.6.3-stable::enter-no-autoindent 950733fc   # Enter indents after if x: although Godot's Auto Indent is off
+4.6.3-stable::enter-no-autoindent-runtime 950733fc   # Enter indents after if x: although Godot's Auto Indent was turned off while the file is open
 4.6.3-stable::issue34-race 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
 4.6.3-stable::issue34-race-fast 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
+4.6.3-stable::pair-before-dot 7e878991   # ( typed right before .bar() gets no closer; Godot adds one
+4.6.3-stable::pair-docstring cd00a60f   # three double quotes give four quotes; Godot closes the docstring with three more
+4.6.3-stable::pair-in-comment 9ea60441   # ( typed in a comment gets a closer; Godot adds none in comments
+4.6.3-stable::pair-off-runtime a383fe59   # ( still gets a closer after Auto Brace Complete was turned off while the file is open
+4.6.3-stable::palette a1bd0bd4   # Ctrl+Shift+P in Insert does not reach Godot, so the Command Palette does not open
 4.6.3-stable::undo-ctrl-o b5632be3   # vim-core types the text after Insert <C-o>x outside any undo group: u leaves afoobarc, not afoobc
+4.6.3-stable::undo-insert-session 85cd9be1   # u after an append leaves the caret past the end of the line instead of on its last character
 4.7.2-stable::abbrev-caret-vimrc b0f8dfb3   # the config loader of vim-core 0.9 skips iabbrev lines, so the vimrc abbreviation never loads; typed :iabbrev expands (abbrev-caret)
+4.7.2-stable::comp-pgdn-fast e81e4ff4   # PageDown in Insert before the popup opens goes to vim-core and does not move the caret down a page as TextEdit does, so Enter splits another line
+4.7.2-stable::comp-replace-no-stab ebdea036   # after Shift+Tab dedents the line with the popup open, godot-vim opens the popup again at its first row; Godot keeps the highlighted row
+4.7.2-stable::ctrl-o-dd e088c1d5   # after Insert <C-o>dd the caret keeps its old column instead of the one dd leaves, so y lands mid-line: bayr, not ybar
+4.7.2-stable::ctrl-u-twice 1a8f0bb2   # a second <C-u> deletes nothing; Vim deletes the text before the Insert start back to the indent (insert.txt, i_CTRL-U)
+4.7.2-stable::ctrlz-insert-session f82d3186   # Ctrl+Z after an Insert session undoes its last character, not the session that u undoes
+4.7.2-stable::ctrlz-typing 59b63568   # Ctrl+Z in Insert undoes the last typed character; Godot undoes the whole typing run
+4.7.2-stable::ctrlz-typing-fast 59b63568   # Ctrl+Z in Insert undoes the last typed character; Godot undoes the whole typing run
+4.7.2-stable::dot-pair 2fd8f90d   # . after i( with Auto Brace Complete on repeats the ( without the closer Godot added
+4.7.2-stable::enter-after-comment 8f85a819   # Enter after if x: with a trailing comment does not indent; Godot finds the colon before the comment
+4.7.2-stable::enter-after-todo 59287276   # Enter after a comment that ends in a colon indents one level more; Godot ignores comments when it indents
+4.7.2-stable::enter-no-autoindent 950733fc   # Enter indents after if x: although Godot's Auto Indent is off
+4.7.2-stable::enter-no-autoindent-runtime 950733fc   # Enter indents after if x: although Godot's Auto Indent was turned off while the file is open
 4.7.2-stable::issue34-race 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
 4.7.2-stable::issue34-race-fast 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
+4.7.2-stable::pair-before-dot 7e878991   # ( typed right before .bar() gets no closer; Godot adds one
+4.7.2-stable::pair-docstring cd00a60f   # three double quotes give four quotes; Godot closes the docstring with three more
+4.7.2-stable::pair-in-comment 9ea60441   # ( typed in a comment gets a closer; Godot adds none in comments
+4.7.2-stable::pair-off-runtime a383fe59   # ( still gets a closer after Auto Brace Complete was turned off while the file is open
+4.7.2-stable::palette a1bd0bd4   # Ctrl+Shift+P in Insert does not reach Godot, so the Command Palette does not open
 4.7.2-stable::undo-ctrl-o b5632be3   # vim-core types the text after Insert <C-o>x outside any undo group: u leaves afoobarc, not afoobc
+4.7.2-stable::undo-insert-session 85cd9be1   # u after an append leaves the caret past the end of the line instead of on its last character
 4.8-dev7::abbrev-caret-vimrc b0f8dfb3   # the config loader of vim-core 0.9 skips iabbrev lines, so the vimrc abbreviation never loads; typed :iabbrev expands (abbrev-caret)
+4.8-dev7::comp-pgdn-fast e81e4ff4   # PageDown in Insert before the popup opens goes to vim-core and does not move the caret down a page as TextEdit does, so Enter splits another line
+4.8-dev7::comp-replace-no-stab ebdea036   # after Shift+Tab dedents the line with the popup open, godot-vim opens the popup again; Godot 4.8 closes it once the caret moved past its last filter
+4.8-dev7::ctrl-o-dd e088c1d5   # after Insert <C-o>dd the caret keeps its old column instead of the one dd leaves, so y lands mid-line: bayr, not ybar
+4.8-dev7::ctrl-u-twice 1a8f0bb2   # a second <C-u> deletes nothing; Vim deletes the text before the Insert start back to the indent (insert.txt, i_CTRL-U)
+4.8-dev7::ctrlz-insert-session f82d3186   # Ctrl+Z after an Insert session undoes its last character, not the session that u undoes
+4.8-dev7::ctrlz-typing 2bae2777   # Ctrl+Z in Insert undoes the last typed character; Godot undoes the whole typing run
+4.8-dev7::ctrlz-typing-fast 2bae2777   # Ctrl+Z in Insert undoes the last typed character; Godot undoes the whole typing run
+4.8-dev7::dot-pair 2fd8f90d   # . after i( with Auto Brace Complete on repeats the ( without the closer Godot added
+4.8-dev7::enter-after-comment 8f85a819   # Enter after if x: with a trailing comment does not indent; Godot finds the colon before the comment
+4.8-dev7::enter-after-todo 59287276   # Enter after a comment that ends in a colon indents one level more; Godot ignores comments when it indents
+4.8-dev7::enter-no-autoindent 950733fc   # Enter indents after if x: although Godot's Auto Indent is off
+4.8-dev7::enter-no-autoindent-runtime 950733fc   # Enter indents after if x: although Godot's Auto Indent was turned off while the file is open
 4.8-dev7::issue34-race 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
 4.8-dev7::issue34-race-fast 9ef5d99c   # completion accepted in the same frame as the next key: Esc u leaves greet(x), not the empty line
+4.8-dev7::pair-before-dot 7e878991   # ( typed right before .bar() gets no closer; Godot adds one
+4.8-dev7::pair-docstring cd00a60f   # three double quotes give four quotes; Godot closes the docstring with three more
+4.8-dev7::pair-in-comment 9ea60441   # ( typed in a comment gets a closer; Godot adds none in comments
+4.8-dev7::pair-off-runtime a383fe59   # ( still gets a closer after Auto Brace Complete was turned off while the file is open
+4.8-dev7::palette a1bd0bd4   # Ctrl+Shift+P in Insert does not reach Godot, so the Command Palette does not open
 4.8-dev7::undo-ctrl-o b5632be3   # vim-core types the text after Insert <C-o>x outside any undo group: u leaves afoobarc, not afoobc
+4.8-dev7::undo-insert-session 85cd9be1   # u after an append leaves the caret past the end of the line instead of on its last character

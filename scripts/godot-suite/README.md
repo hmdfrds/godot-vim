@@ -247,3 +247,162 @@ The same change records Godot's undo history on the new version with
 `scripts/godot-undo-trace/recorded/<godot>.txt`. A cargo test runs the same
 steps on `MockTextEdit` and fails where the mock reads differently from any
 recording; delete the old version's file with the rest.
+
+## Earlier ids
+
+Cases ported from the earlier live harnesses, with the ids they had there:
+`P-` and `V-` from the Insert-mode suite, the others from the completion
+set. Fast variants come from the old fast profile. A case named twice merges
+rows that were the same.
+
+| Case | Earlier ids |
+|---|---|
+| `type-word` | `P-type` |
+| `type-word-fast` | `P-type`, fast |
+| `enter-after-func` | `P-enter-func` |
+| `enter-after-func-fast` | `P-enter-func`, fast |
+| `enter-in-parens` | `P-enter-paren` |
+| `enter-in-braces` | `P-enter-brace` |
+| `enter-in-brackets` | `P-enter-bracket` |
+| `issue20-gd-typed` | `P-enter-typed-brace` |
+| `enter-after-todo` | `P-enter-todo` |
+| `enter-after-comment` | `P-enter-comment` |
+| `enter-mid-line` | `P-enter-mid` |
+| `enter-no-autoindent` | `P-enter-noai` |
+| `enter-no-autoindent-runtime` | `P-enter-noai-rt` |
+| `pair-paren` | `P-pair-paren` |
+| `pair-paren-fast` | `P-pair-paren`, fast |
+| `pair-bracket` | `P-pair-bracket` |
+| `pair-brace` | `P-pair-brace` |
+| `pair-dquote` | `P-pair-dquote` |
+| `pair-squote` | `P-pair-squote` |
+| `pair-overtype` | `P-pair-overtype` |
+| `pair-overtype-fast` | `P-pair-overtype`, fast |
+| `pair-overtype-x` | `P-pair-overtype-x` |
+| `pair-bs` | `P-pair-bs` |
+| `pair-before-dot` | `P-pair-before-dot` |
+| `pair-in-comment` | `P-pair-comment` |
+| `pair-docstring` | `P-pair-docstring` |
+| `pair-off` | `P-pair-off` |
+| `pair-off-runtime` | `P-pair-off-rt` |
+| `tab-indent` | `P-tab` |
+| `stab-indent` | `P-stab` |
+| `bs-indent` | `P-bs-tabs` |
+| `tab-indent-spaces` | `P-tab-spaces` |
+| `stab-indent-spaces` | `P-stab-spaces` |
+| `bs-indent-spaces` | `P-bs-spaces` |
+| `home-first-column` | `P-home` |
+| `home-twice` | `P-home2` |
+| `shift-left` | `P-sleft` |
+| `shift-right` | `P-sright` |
+| `ctrl-bs` | `P-cbs` |
+| `ctrlz-typing` | `P-undo-run` |
+| `ctrlz-typing-fast` | `P-undo-run`, fast |
+| `palette` | `P-palette` |
+| `comp-delay` | `P-comp-delay` |
+| `comp-delay-fast` | `P-comp-delay`, fast |
+| `comp-enter-at-once` | `P-comp-fast-enter`, completion `d3` |
+| `comp-enter-at-once-fast` | `P-comp-fast-enter`, fast |
+| `comp-enter` | `P-comp-enter`, completion `1` |
+| `comp-enter-fast` | `P-comp-enter`, fast |
+| `comp-down-enter` | `P-comp-down-enter`, completion `2` |
+| `comp-down-enter-fast` | `P-comp-down-enter`, fast |
+| `comp-tab` | `P-comp-tab`, completion `5` |
+| `comp-tab-fast` | `P-comp-tab`, fast |
+| `comp-replace` | `P-comp-replace`, completion `9` |
+| `comp-replace-fast` | `P-comp-replace`, fast |
+| `comp-replace-down` | `P-comp-replace-down`, completion `9b` |
+| `comp-enter-tail` | `P-comp-enter-tail`, completion `9c` |
+| `comp-pgdn` | `P-comp-pgdn`, completion `x7` |
+| `comp-pgdn-fast` | `P-comp-pgdn`, fast |
+| `comp-query` | `P-comp-query`, completion `x6` |
+| `comp-nodepath` | `P-comp-nodepath`, completion `10` |
+| `comp-accept-no-enter` | `P-comp-noenter` |
+| `comp-accept-no-enter-tab` | `P-comp-noenter-tab` |
+| `dot-insert` | `V-dot-insert` |
+| `count-insert` | `V-count-insert` |
+| `dot-pair` | `V-dot-pair` |
+| `dot-o` | `V-dot-o` |
+| `o-esc-indent` | `V-ai-strip` |
+| `dot-cw` | `V-dot-cw` |
+| `macro-insert` | `V-macro` |
+| `macro-accept-ctrl-y` | `V-macro-accept` |
+| `macro-accept-enter` | `V-macro-accept-cr` |
+| `jk-escape` | `V-jk` |
+| `jk-timeout` | `V-j-timeout` |
+| `abbrev-space` | `V-abbrev` |
+| `tw-comment` | `V-tw-comment` |
+| `tw-code` | `V-tw-code` |
+| `creg` | `V-creg` |
+| `ctrl-o-dd` | `V-co-dd` |
+| `cw` | `V-cw` |
+| `ctrl-u` | `V-cu` |
+| `ctrl-u-twice` | `V-cu2` |
+| `dot-replace` | `V-replace` |
+| `block-insert` | `V-block-I` |
+| `multicursor-gb` | `V-mc-gb` |
+| `multicursor-alt-click` | `V-mc-alt` |
+| `undo-insert-session` | `V-undo-session` |
+| `ctrlz-insert-session` | `V-ctrlz-session` |
+| `ctrl-n-popup` | `V-cn` |
+| `comp-down-early` | completion `2r` |
+| `comp-down-down-up` | completion `3` |
+| `comp-ctrl-n` | completion `4` |
+| `comp-down-tab` | completion `6` |
+| `comp-ctrl-y` | completion `7` |
+| `comp-exact-enter` | completion `8` |
+| `comp-sticky-row` | completion `11` |
+| `comp-down-kenter` | completion `x1` |
+| `comp-down-repeat` | completion `x2` |
+| `comp-ctrl-p` | completion `x3` |
+| `comp-filter-typed` | completion `x4` |
+| `comp-down-stab` | completion `x5` |
+| `comp-pgdn-pgup` | completion `x8` |
+| `comp-accept-tab-only-enter` | completion `t1` |
+| `comp-accept-tab-only-enter-tab` | completion `t2` |
+| `comp-accept-tab-only-tab` | completion `t3` |
+| `comp-accept-tab-only-down-enter` | completion `t4` |
+| `comp-accept-tab-only-kenter` | completion `t5` |
+| `comp-replace-no-stab` | completion `t6` |
+| `comp-accept-space` | completion `t7` |
+| `comp-query-alt-space` | completion `t8` |
+| `comp-accept-empty` | completion `t9` |
+| `comp-old-defaults-enter` | completion `r1` |
+| `comp-old-defaults-enter-tail` | completion `r2` |
+| `comp-old-defaults-senter-tail` | completion `r3` |
+| `comp-old-defaults-down-tab` | completion `r4` |
+| `comp-enter-before-delay` | completion `d1` |
+| `comp-esc-in-delay` | completion `d2` |
+| `comp-bs-closes` | completion `d4` |
+| `comp-query-at-once-enter` | completion `d5` |
+| `comp-bs-after-space` | completion `d6` |
+| `comp-esc-a-in-delay` | completion `d7` |
+| `comp-delay-short` | completion `d8` |
+| `comp-disabled-enter` | completion `d9` |
+| `comp-disabled-query` | completion `d10` |
+| `comp-ctrl-e-in-delay` | completion `d11` |
+| `comp-delay-long` | completion `d12` |
+| `comp-enter-dot` | completion `dot1` |
+| `comp-replace-dot` | completion `dot2` |
+| `comp-enter-macro` | completion `mac1` |
+| `comp-replace-macro` | completion `mac2` |
+| `comp-two-carets` | completion `m1` |
+| `comp-esc-open-next-frame` | completion `e15a` |
+| `comp-esc-in-delay-next-frame` | completion `e15b` |
+| `comp-esc-a-in-delay-next-frame` | completion `e15c` |
+| `comp-semicolon` | completion `e19` |
+| `comp-esc-open-shader` | completion `s15` |
+| `comp-semicolon-shader` | completion `s19` |
+| `comp-enter-shader` | completion `s1` |
+| `comp-query-at-once` | completion `q0` |
+| `jk-comp-enter` | completion `jk1` |
+| `jk-comp-ob-enter` | completion `jk2` |
+| `jk-comp-escape` | completion `jk3` |
+| `jk-comp-down-enter` | completion `jk4` |
+| `jk-comp-continue` | completion `jk5` |
+| `jk-comp-ob-tab` | completion `jk6` |
+| `comp-query-replace` | completion `q1` |
+| `comp-query-vreplace` | completion `q2` |
+| `comp-query-after-word` | completion `q3` |
+| `comp-replace-mode-enter` | completion `q4` |
+| `ctrl-at-inserts-last` | completion `q5` |
