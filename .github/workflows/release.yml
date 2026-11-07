@@ -273,6 +273,8 @@ jobs:
         with:
           draft: true
           tag_name: ${{ inputs.version }}
+          # Tag the gated, built commit, not main at publish time.
+          target_commitish: ${{ github.sha }}
           name: GodotVim ${{ inputs.version }}
           body: ${{ steps.body.outputs.RELEASE_BODY }}
           files: |
