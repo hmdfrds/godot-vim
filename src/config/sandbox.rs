@@ -277,13 +277,15 @@ const BLOCKED_SET_OPTIONS: &[&str] = &[
 ];
 
 /// Extract the option name from a `set` token, stripping value delimiters
-/// (`=`, `?`, `!`, etc.) and the `no` prefix (`noshell` -> `shell`).
+/// (`=`, `?`, `!`, etc.) and the `no` or `inv` prefix (`noshell` -> `shell`).
 fn extract_option_name_from_token(token: &str) -> &str {
     let name = token
         .split(['=', '?', '!', '+', '-', '^', ':'])
         .next()
         .unwrap_or("");
-    name.strip_prefix("no").unwrap_or(name)
+    name.strip_prefix("no")
+        .or_else(|| name.strip_prefix("inv"))
+        .unwrap_or(name)
 }
 
 /// Whether a `set` token, or an option name, names a blocked option.
@@ -1242,6 +1244,7 @@ fn is_unsafe_command(command: &vim_core::grammar::types::ExCommand) -> bool {
                 | SetAssignment::Append(name, _)
                 | SetAssignment::Remove(name, _)
                 | SetAssignment::Prepend(name, _) => is_blocked_option(name),
+                SetAssignment::InvertBool(name) => is_blocked_option(name),
                 _ => false,
             })
         }
@@ -3808,9 +3811,10 @@ imap jj <Esc>
         // recognise. Narrowing the split set to `['=']` alone whitelists
         // `set shell!` from a committed project vimrc.
         //
-        // One token per delimiter Vim accepts, plus the `no` prefix.
+        // One token per delimiter Vim accepts, plus the `no` and `inv` prefixes.
         for token in [
-            "shell=x", "shell?", "shell!", "shell:x", "shell+=x", "shell-=x", "shell^=x", "noshell",
+            "shell=x", "shell?", "shell!", "shell:x", "shell+=x", "shell-=x", "shell^=x",
+            "noshell", "invshell",
         ] {
             assert_eq!(
                 extract_option_name_from_token(token),
@@ -3849,6 +3853,22 @@ imap jj <Esc>
             "set nolnr",
             "set so=5 | set langmap=q:",
         ]);
+    }
+
+    /// `inv` before a boolean option's name inverts it (option.c,
+    /// `get_option_prefix()`), so `inv` hides a blocked name as `no` does.
+    #[test]
+    fn strips_a_blocked_option_behind_inv() {
+        assert_all_stripped(&[
+            "set invlangremap",
+            "set so=5 invlrm",
+            "setlocal invlnr",
+            "nnoremap x :set invlrm<CR>",
+            "nnoremap x :set so=5 invlangnoremap<CR>",
+        ]);
+        let mut trusted = vim_core::execution::VimEngine::new();
+        let _ = crate::config::source_text(&mut trusted, "set invlrm");
+        assert!(!trusted.options().langremap(), "inv inverts 'langremap'");
     }
 
     #[test]
