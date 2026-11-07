@@ -9,17 +9,33 @@ on:
         type: string
 
 jobs:
+  # Ships only a main commit whose push run of ci.yml passed; scheduled runs
+  # are left out because they compare recordings, not the release. A queued or
+  # running CI fails the gate: re-dispatch when it is green.
+  gate:
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ "$GITHUB_REF" = refs/heads/main ] || { echo '::error::release only from main'; exit 1; }
+          r=$(gh run list -R "$GITHUB_REPOSITORY" -w ci.yml --commit "$GITHUB_SHA" --event push --branch main -L 1 \
+            --json status,conclusion -q '.[] | "\(.status)/\(.conclusion)"')
+          [ "$r" = completed/success ] || { echo "::error::CI on $GITHUB_SHA is '${r:-missing}', not completed/success"; exit 1; }
+
   build-linux:
+    needs: gate
     # Pinned so the image that builds the shipped library changes only on purpose.
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8  # stable
-        with:
-          targets: x86_64-unknown-linux-gnu
+      # Installs the version rust-toolchain.toml names.
+      - run: rustup toolchain install --no-self-update
 
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32  # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0  # v2.9.3
         with:
           key: linux
 
@@ -37,15 +53,14 @@ jobs:
           path: staging/*
 
   build-windows:
+    needs: gate
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8  # stable
-        with:
-          targets: x86_64-pc-windows-msvc
+      - run: rustup toolchain install --no-self-update
 
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32  # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0  # v2.9.3
         with:
           key: windows
 
@@ -64,15 +79,16 @@ jobs:
           path: staging/*
 
   build-macos:
+    needs: gate
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8  # stable
-        with:
-          targets: aarch64-apple-darwin, x86_64-apple-darwin
+      - run: |
+          rustup toolchain install --no-self-update
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32  # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0  # v2.9.3
         with:
           key: macos
 
@@ -101,6 +117,7 @@ jobs:
           path: staging/*
 
   build-android:
+    needs: gate
     runs-on: ubuntu-24.04
     env:
       # Godot's platform/android/java/app/config.gradle (NDK) and minSdk.
@@ -109,11 +126,11 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
 
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8  # stable
-        with:
-          targets: aarch64-linux-android, x86_64-linux-android
+      - run: |
+          rustup toolchain install --no-self-update
+          rustup target add aarch64-linux-android x86_64-linux-android
 
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32  # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0  # v2.9.3
         with:
           key: android
 
@@ -256,6 +273,8 @@ jobs:
         with:
           draft: true
           tag_name: ${{ inputs.version }}
+          # Tag the gated, built commit, not main at publish time.
+          target_commitish: ${{ github.sha }}
           name: GodotVim ${{ inputs.version }}
           body: ${{ steps.body.outputs.RELEASE_BODY }}
           files: |

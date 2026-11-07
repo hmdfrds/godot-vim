@@ -161,7 +161,7 @@ pub(crate) fn execute(
             super::custom_commands::handle_custom_ex_command(request.id(), command.as_str(), editor)
         }
 
-        HostRequest::SyncCommandLine { meta: _, .. } => {
+        HostRequest::SyncCommandLine { .. } => {
             // No-op: command-line state is pulled from the engine via ui_snapshot()
             // (state-snapshot pattern), so there is nothing to push to the host.
             log::trace!("host::execute: SyncCommandLine no-op (state-snapshot pattern)");

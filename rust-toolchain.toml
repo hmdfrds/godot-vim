@@ -1,0 +1,7 @@
+# The one place the Rust version is set: CI, release.yml and local builds all
+# read it, and Dependabot bumps it as a reviewed PR. Cross targets are added
+# per CI job, so a local checkout does not download them.
+[toolchain]
+channel = "1.99.1"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
