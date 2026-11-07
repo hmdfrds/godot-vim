@@ -237,3 +237,21 @@ jobs:
             /^\+/ { if ($0 !~ /^\+#/) printf "::warning file=%s,line=%d::pin added or changed: %s\n", f, n, substr($0, 2); n++; next }
             /^-/ { if ($0 !~ /^-#/) printf "::notice file=%s::pin removed: %s\n", f, substr($0, 2) }
           '
+
+  # The one check branch protection requires; admins can still bypass, and
+  # release.yml re-checks CI on the commit it ships.
+  ok:
+    name: CI ok
+    # A skipped required check counts as passing, so this job always runs and
+    # passes only if every need is exactly success. pins only annotates.
+    # needs.godot is the whole matrix: continue-on-error absorbs a failed
+    # 4.8-dev row, but a timed-out one may still turn this red (re-run it).
+    if: always()
+    needs: [test, build, android, windows, godot]
+    runs-on: ubuntu-24.04
+    steps:
+      - env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<< "$NEEDS"
+          jq -e 'all(.[]; .result == "success")' <<< "$NEEDS" > /dev/null
