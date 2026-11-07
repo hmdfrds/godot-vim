@@ -1,11 +1,11 @@
 //! Undo/redo effect handlers using the changeset-based `UndoStore` pipeline.
 //!
 //! Applies `UndoApplyResult` changes to CodeEdit via targeted
-//! `insert_text`/`remove_text` calls and restores cursor positions
-//! from engine-computed offsets.
+//! `insert_text`/`remove_text` calls and places the carets from
+//! engine-computed offsets.
 
 use crate::bridge::codec::{DocumentView, LineIndex};
-use crate::bridge::port::TextEditorPort;
+use crate::bridge::port::{FoldCapable, TextEditorPort};
 
 /// Apply `(from, to, Option<replacement>)` changes to a CodeEdit, last
 /// first, so the byte offsets of `doc` stay valid for the ones before.
@@ -26,37 +26,44 @@ pub(crate) fn apply_changes(
     }
 }
 
-/// Restore cursor positions from engine-computed byte offsets.
+/// Place the carets of `u` or `<C-r>` from engine-computed byte offsets,
+/// clamped to the text, and follow the primary one keeping `scrolloff`.
 ///
-/// Removes secondary carets, then sets the primary cursor from `cursors[0]`
-/// and adds secondary carets from `cursors[1..]`. Byte offsets are clamped
-/// to the text length to handle edge cases.
-pub(crate) fn restore_cursors(
-    editor: &mut impl TextEditorPort,
+/// A closed fold hiding the primary caret's line opens, as Godot's own undo
+/// does (code_edit.cpp `_unhide_carets`). A folded header stays closed: its
+/// change is visible without opening it. Vim opens that one too (undo.c
+/// `u_undo_end`, fold.c `foldOpenCursor`), but Godot draws the header
+/// outside its fold.
+pub(crate) fn place_undo_caret(
+    editor: &mut impl FoldCapable,
     new_text: &str,
     cursors: &[vim_core::primitives::Offset],
+    scrolloff: i32,
 ) {
-    if cursors.is_empty() {
+    let Some((primary, secondary)) = cursors.split_first() else {
         return;
-    }
-
+    };
     let line_index = LineIndex::new(new_text);
-    let text_len = new_text.len();
+    let last_byte = new_text.len().saturating_sub(1);
+    let pos = |offset: &vim_core::primitives::Offset| {
+        line_index.byte_to_line_col(new_text, offset.get().min(last_byte))
+    };
 
     editor.remove_secondary_carets();
 
-    // Primary cursor.
-    let primary_byte = cursors[0].get().min(text_len.saturating_sub(1));
-    let primary_pos = line_index.byte_to_line_col(new_text, primary_byte);
-    editor.set_caret_line(primary_pos.line);
-    editor.set_caret_column(primary_pos.col);
-
-    // Secondary cursors.
-    for cursor in &cursors[1..] {
-        let byte = cursor.get().min(text_len.saturating_sub(1));
-        let pos = line_index.byte_to_line_col(new_text, byte);
-        editor.add_caret(pos.line, pos.col);
+    let primary = pos(primary);
+    if !editor.is_line_folded(primary.line) {
+        editor.unfold_line(primary.line);
     }
+    editor.set_caret_line(primary.line);
+    editor.set_caret_column(primary.col);
+    for cursor in secondary {
+        let at = pos(cursor);
+        editor.add_caret(at.line, at.col);
+    }
+
+    editor.adjust_viewport_to_caret();
+    super::cursor::enforce_scrolloff(editor, scrolloff);
 }
 
 /// `U` (per-line undo) — not supported by Godot's CodeEdit.

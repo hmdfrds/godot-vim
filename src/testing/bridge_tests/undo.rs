@@ -7,7 +7,7 @@
 //! apply the stored changesets to restore/re-apply text.
 
 use super::macros::DispatchCtx;
-use crate::bridge::port::TextEditorPort;
+use crate::bridge::port::{FoldCapable, TextEditorPort};
 use crate::testing::MockTextEdit;
 use smallvec::smallvec;
 use vim_core::primitives::{NodeId, Offset, UndoNavStep};
@@ -387,7 +387,7 @@ fn undo_clamps_cursor_beyond_text_length() {
     assert_editor!(mock, text: "ab");
 
     // Cursor should be clamped to a valid position within the text.
-    // restore_cursors clamps to text_len.saturating_sub(1) = 1,
+    // place_undo_caret clamps to text_len.saturating_sub(1) = 1,
     // which is line 0, col 1.
     let line = mock.get_caret_line();
     let col = mock.get_caret_column();
@@ -434,4 +434,86 @@ fn partial_replace_is_one_godot_step() {
     mock.undo();
     assert_editor!(mock, text: "abc");
     assert!(!mock.has_undo());
+}
+
+// ── The caret after u: folds and scrolloff ──────────────────────────────
+
+fn numbered(lines: usize) -> String {
+    (0..lines)
+        .map(|i| format!("line {i}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn offset_of(mock: &MockTextEdit, line: i32) -> usize {
+    let text = mock.get_text();
+    crate::bridge::codec::LineIndex::new(&text).line_col_to_byte(&text, line, 0)
+}
+
+/// `x` at the start of `line` as undo node 1, then `fold` closes and the
+/// view goes back to the top, so `u` must find the line again.
+fn change_then_leave(lines: usize, fold: (i32, i32), line: i32) -> (MockTextEdit, DispatchCtx) {
+    let mut mock = MockTextEdit::new(&numbered(lines));
+    mock.set_visible_line_count(15);
+    mock.add_fold_region(fold.0, fold.1);
+    let mut ctx = DispatchCtx::new().with_scrolloff(5);
+    let at = offset_of(&mock, line);
+    ctx.dispatch(
+        &mut mock,
+        effects![begin_undo; delete(at, at + 1); set_cursor(at); end_undo(1)],
+    );
+    mock.fold_line(fold.0);
+    mock.set_caret_line(0);
+    mock.set_v_scroll(0.0);
+    (mock, ctx)
+}
+
+/// Godot's own undo opens a fold that hides a caret (code_edit.cpp
+/// `_unhide_carets`); `u` does the same and keeps `scrolloff`.
+#[test]
+fn u_into_closed_fold_opens_it() {
+    let (mut mock, mut ctx) = change_then_leave(40, (5, 14), 12);
+    let at = offset_of(&mock, 12);
+    ctx.dispatch(&mut mock, effects![undo_steps(1, at)]);
+    assert_eq!(mock.get_line(12), "line 12");
+    assert_editor!(mock, cursor: (12, 0));
+    assert!(mock.folded_lines().is_empty());
+    // Row 12 of 15 is past the bottom margin of 5: the caret goes to row 9.
+    assert_eq!(mock.get_first_visible_line(), 3);
+}
+
+/// A folded header is drawn outside its fold, so a change on it shows
+/// without opening the fold, and Ctrl+Z leaves it closed too.
+#[test]
+fn u_on_folded_header_keeps_it_closed() {
+    let (mut mock, mut ctx) = change_then_leave(40, (5, 14), 5);
+    assert_eq!(mock.folded_lines(), [5]);
+    let at = offset_of(&mock, 5);
+    ctx.dispatch(&mut mock, effects![undo_steps(1, at)]);
+    assert_eq!(mock.get_line(5), "line 5");
+    assert_editor!(mock, cursor: (5, 0));
+    assert_eq!(mock.folded_lines(), [5]);
+}
+
+/// The margin counts screen rows: the closed fold above is one row.
+#[test]
+fn u_below_closed_fold_keeps_scrolloff_in_rows() {
+    let (mut mock, mut ctx) = change_then_leave(60, (5, 14), 40);
+    let at = offset_of(&mock, 40);
+    ctx.dispatch(&mut mock, effects![undo_steps(1, at)]);
+    assert_editor!(mock, cursor: (40, 0));
+    assert_eq!(mock.folded_lines(), [5]);
+    // Line 40 is row 31; on screen row 9 the top row is 22, line 31.
+    assert_eq!(mock.get_first_visible_line(), 31);
+}
+
+#[test]
+fn u_above_the_view_keeps_scrolloff() {
+    let (mut mock, mut ctx) = change_then_leave(60, (50, 55), 20);
+    mock.set_caret_line(45);
+    mock.set_v_scroll(40.0);
+    let at = offset_of(&mock, 20);
+    ctx.dispatch(&mut mock, effects![undo_steps(1, at)]);
+    assert_editor!(mock, cursor: (20, 0));
+    assert_eq!(mock.get_first_visible_line(), 15);
 }
