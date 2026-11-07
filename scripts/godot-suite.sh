@@ -293,6 +293,7 @@ run_case() {
     [ ! -d "$fd/res" ] || cp -a "$fd/res/." "$cd/project/"
     [ ! -d "$fd/user" ] || { mkdir -p "$cd/$USERDIR"; cp -a "$fd/user/." "$cd/$USERDIR/"; }
     [ ! -d "$fd/home" ] || cp -a "$fd/home/." "$cd/home/"
+    [ ! -f "$fd/project.godot" ] || cat "$fd/project.godot" >> "$cd/project/project.godot"
     if [ -f "$fd/config/editor_settings.tres" ]; then
       cp "$fd/config/editor_settings.tres" "$cd/config/godot/editor_settings-$MINOR.tres"
     fi

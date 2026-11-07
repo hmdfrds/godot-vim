@@ -208,6 +208,7 @@ case.
 | `res/` | files in the project root, such as `res://.godot-vimrc` (loaded under the Sandbox) |
 | `user/` | files in `user://`, such as the trusted `user://.godot-vimrc` |
 | `home/` | files in HOME |
+| `project.godot` | appended to the project's `project.godot`, such as an `[editor_overrides]` section |
 | `config/settings.txt` | `key = value` lines in Godot's text format, merged into the settings file; every key must be a registered setting. The way to set godot-vim's settings at startup |
 | `config/editor_settings.tres` | a whole settings file, only for `upgrade-*` cases; made once by an old release (`upgrade-textwidth`: godot-vim 1.8.0 on Godot 4.5-stable) |
 
