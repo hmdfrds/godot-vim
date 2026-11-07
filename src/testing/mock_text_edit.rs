@@ -1075,6 +1075,10 @@ impl FoldCapable for MockTextEdit {
         });
     }
 
+    fn is_line_folded(&self, line: i32) -> bool {
+        line < self.last_line() && !self.is_line_hidden(line) && self.is_line_hidden(line + 1)
+    }
+
     fn toggle_foldable_line(&mut self, line: i32) {
         if self.folded.contains(&line) {
             self.unfold_line(line);

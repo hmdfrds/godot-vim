@@ -680,9 +680,9 @@ pub(crate) fn dispatch(
             undo::apply_changes(guard.editor, &original_doc, &changes);
         }
 
-        // Restore undo cursors deferred from Phase 1.
+        // Place the undo carets deferred from Phase 1.
         if let Some(ref cursors) = deferred_undo_cursors {
-            undo::restore_cursors(editor, &text, cursors);
+            undo::place_undo_caret(editor, &text, cursors, scrolloff);
         }
 
         // Debug-only: verify the Cow mirror matches CodeEdit after Phase 2.
