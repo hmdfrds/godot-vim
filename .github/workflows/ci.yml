@@ -40,7 +40,7 @@ jobs:
         run: cargo fmt --all --check
 
   build:
-    name: release build
+    name: Linux build
     # Same image as release.yml's Linux build.
     runs-on: ubuntu-24.04
     steps:
@@ -103,6 +103,23 @@ jobs:
           ./scripts/check-android-lib.sh \
             target/aarch64-linux-android/release/libgodot_vim.so \
             target/x86_64-linux-android/release/libgodot_vim.so
+
+  windows:
+    name: Windows build
+    # Built only, as release.yml builds it, so a Windows-only break shows on
+    # the PR instead of on release day.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - run: rustup toolchain install --no-self-update
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: windows
+
+      - name: Build
+        run: cargo build --release --locked --target x86_64-pc-windows-msvc
 
   godot:
     name: Godot ${{ matrix.godot }}
