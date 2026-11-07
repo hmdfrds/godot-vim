@@ -4,3 +4,10 @@
 # godot-vim's notice that 4.5 has no EditorSettings.get_shortcut, printed
 # once per editor by whichever case first needs a shortcut.
 4.5 * ^WARNING: GodotVim: EditorSettings\.get_shortcut is unavailable
+
+# godot-vim's notice that it ignores a project's editor_overrides for a
+# user-only setting, printed at startup by the cases that set one.
+4 override-project-vimrc ^WARNING: GodotVim ignores this project's editor_overrides for plugins/GodotVim/security/project_vimrc\.
+4 override-config-path ^WARNING: GodotVim ignores this project's editor_overrides for plugins/GodotVim/mapping/config_file_path\.
+4 override-file-access ^WARNING: GodotVim ignores this project's editor_overrides for plugins/GodotVim/security/file_access_scope\.
+4 override-shell ^WARNING: GodotVim ignores this project's editor_overrides for plugins/GodotVim/security/shell_execution\.

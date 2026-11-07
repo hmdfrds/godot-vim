@@ -1,0 +1,1 @@
+nnoremap H iHOME<Esc>

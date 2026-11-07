@@ -1,0 +1,4 @@
+
+[editor_overrides]
+
+plugins/GodotVim/mapping/config_file_path="res://named.vim"

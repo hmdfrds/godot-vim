@@ -252,9 +252,10 @@ recording; delete the old version's file with the rest.
 ## Earlier ids
 
 Cases ported from the earlier live harnesses, with the ids they had there:
-`P-` and `V-` from the Insert-mode suite, the others from the completion
-set. Fast variants come from the old fast profile. A case named twice merges
-rows that were the same.
+`P-` and `V-` from the Insert-mode suite; `a`, `b`, `c`, `d` and `s` from
+the `:source` sets, `vimrc` and `configpath` from the editor_overrides
+checks; the others from the completion set. Fast variants come from the old
+fast profile. A case named twice merges rows that were the same.
 
 | Case | Earlier ids |
 |---|---|
@@ -407,3 +408,34 @@ rows that were the same.
 | `comp-query-after-word` | completion `q3` |
 | `comp-replace-mode-enter` | completion `q4` |
 | `ctrl-at-inserts-last` | completion `q5` |
+| `vimrc-user-startup` | `s11` |
+| `source-unmapped` | `s6` |
+| `source-bare` | `a1`, `s1` |
+| `source-myvimrc` | `a2`, `s2` |
+| `source-res-file` | `a3`, `s3` |
+| `source-missing` | `a4`, `s4` |
+| `source-bang-file` | `a5`, `s5` |
+| `source-range` | `a6`, `s7` |
+| `source-bang-alone` | `a7`, `s8` |
+| `source-range-file` | `a8`, `s9` |
+| `source-comment` | `a9`, `s10` |
+| `source-user-file` | `a10` |
+| `source-home-refused` | `a11` |
+| `source-current-script` | `a12` |
+| `source-shader-tab` | `a13`, in the shader editor |
+| `source-panelmap` | `a14` |
+| `source-project-bare` | `b1` |
+| `source-project-colon-map` | `b2` |
+| `source-project-myvimrc` | `b3` |
+| `source-project-disabled` | `b4` |
+| `source-project-trusted` | `b5` |
+| `source-project-disabled-file` | `b6` |
+| `source-home-unrestricted` | `c1` |
+| `source-abs-project` | `c2` |
+| `source-dotdot-project` | `c3` |
+| `source-relative` | `c5` |
+| `source-project-cmd-map` | `d1` |
+| `source-project-home-map` | `d2` |
+| `source-project-bs-map` | `d3` |
+| `override-project-vimrc` | `vimrc` |
+| `override-config-path` | `configpath` |

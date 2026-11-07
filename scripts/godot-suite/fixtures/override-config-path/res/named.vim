@@ -1,0 +1,1 @@
+nnoremap X iNAMED<Esc>

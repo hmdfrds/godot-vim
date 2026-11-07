@@ -23,6 +23,7 @@
 4.5-stable::pair-in-comment 9ea60441   # ( typed in a comment gets a closer; Godot adds none in comments
 4.5-stable::pair-off-runtime a383fe59   # ( still gets a closer after Auto Brace Complete was turned off while the file is open
 4.5-stable::palette a1bd0bd4   # Ctrl+Shift+P in Insert does not reach Godot, so the Command Palette does not open
+4.5-stable::source-nested-user 63ad01f1   # a :source line in a sourced file is not run, so the inner file never loads and textwidth stays 0; Vim sources it (scriptfile.c, do_source())
 4.5-stable::undo-ctrl-o b5632be3   # vim-core types the text after Insert <C-o>x outside any undo group: u leaves afoobarc, not afoobc
 4.5-stable::undo-insert-session 85cd9be1   # u after an append leaves the caret past the end of the line instead of on its last character
 4.6.3-stable::abbrev-caret-vimrc b0f8dfb3   # the config loader of vim-core 0.9 skips iabbrev lines, so the vimrc abbreviation never loads; typed :iabbrev expands (abbrev-caret)
@@ -46,6 +47,7 @@
 4.6.3-stable::pair-in-comment 9ea60441   # ( typed in a comment gets a closer; Godot adds none in comments
 4.6.3-stable::pair-off-runtime a383fe59   # ( still gets a closer after Auto Brace Complete was turned off while the file is open
 4.6.3-stable::palette a1bd0bd4   # Ctrl+Shift+P in Insert does not reach Godot, so the Command Palette does not open
+4.6.3-stable::source-nested-user 63ad01f1   # a :source line in a sourced file is not run, so the inner file never loads and textwidth stays 0; Vim sources it (scriptfile.c, do_source())
 4.6.3-stable::undo-ctrl-o b5632be3   # vim-core types the text after Insert <C-o>x outside any undo group: u leaves afoobarc, not afoobc
 4.6.3-stable::undo-insert-session 85cd9be1   # u after an append leaves the caret past the end of the line instead of on its last character
 4.7.2-stable::abbrev-caret-vimrc b0f8dfb3   # the config loader of vim-core 0.9 skips iabbrev lines, so the vimrc abbreviation never loads; typed :iabbrev expands (abbrev-caret)
@@ -68,6 +70,7 @@
 4.7.2-stable::pair-in-comment 9ea60441   # ( typed in a comment gets a closer; Godot adds none in comments
 4.7.2-stable::pair-off-runtime a383fe59   # ( still gets a closer after Auto Brace Complete was turned off while the file is open
 4.7.2-stable::palette a1bd0bd4   # Ctrl+Shift+P in Insert does not reach Godot, so the Command Palette does not open
+4.7.2-stable::source-nested-user 63ad01f1   # a :source line in a sourced file is not run, so the inner file never loads and textwidth stays 0; Vim sources it (scriptfile.c, do_source())
 4.7.2-stable::undo-ctrl-o b5632be3   # vim-core types the text after Insert <C-o>x outside any undo group: u leaves afoobarc, not afoobc
 4.7.2-stable::undo-insert-session 85cd9be1   # u after an append leaves the caret past the end of the line instead of on its last character
 4.8-dev7::abbrev-caret-vimrc b0f8dfb3   # the config loader of vim-core 0.9 skips iabbrev lines, so the vimrc abbreviation never loads; typed :iabbrev expands (abbrev-caret)
@@ -90,5 +93,6 @@
 4.8-dev7::pair-in-comment 9ea60441   # ( typed in a comment gets a closer; Godot adds none in comments
 4.8-dev7::pair-off-runtime a383fe59   # ( still gets a closer after Auto Brace Complete was turned off while the file is open
 4.8-dev7::palette a1bd0bd4   # Ctrl+Shift+P in Insert does not reach Godot, so the Command Palette does not open
+4.8-dev7::source-nested-user 63ad01f1   # a :source line in a sourced file is not run, so the inner file never loads and textwidth stays 0; Vim sources it (scriptfile.c, do_source())
 4.8-dev7::undo-ctrl-o b5632be3   # vim-core types the text after Insert <C-o>x outside any undo group: u leaves afoobarc, not afoobc
 4.8-dev7::undo-insert-session 85cd9be1   # u after an append leaves the caret past the end of the line instead of on its last character
