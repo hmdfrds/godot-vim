@@ -423,7 +423,8 @@ if [ "$MODE" = record ]; then
     [ -n "$line" ] || continue
     echo "$line" >> "$WORK/rec.jsonl"
     echo "{\"id\":\"$id\"," >> "$WORK/rec.ids"
-    problems_of "$id" | sed '/^$/d' | sed "s|^|$id |" >> "$WORK/rec.log"
+    # problems_of ends without a newline, which would join two cases' lines.
+    { problems_of "$id"; echo; } | sed '/^$/d' | sed "s|^|$id |" >> "$WORK/rec.log"
   done
   # Lines of cases not recorded now stay, unless the header changed, which
   # makes every old line stale.
