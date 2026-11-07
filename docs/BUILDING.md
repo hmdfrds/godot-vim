@@ -72,9 +72,7 @@ because the release profile uses fat LTO with a single codegen unit. One warning
 Build with `--release`: a debug build of this library is about 190 MB and its
 `target/` runs into gigabytes.
 
-**What not to change.** Keep `--locked` and do not run `cargo update`.
-`compact_str` is pinned to 0.7 to match the version vim-core exports across the
-API boundary, and the reason is written above the dependency in `Cargo.toml`. Do
+**What not to change.** Keep `--locked` and do not run `cargo update`. Do
 not change `panic = "unwind"` in `[profile.release]`; `src/safety.rs` catches
 panics at every signal-handler boundary so a Rust panic cannot unwind across the
 FFI into Godot, and that needs unwinding to exist.
