@@ -414,7 +414,8 @@ if [ "$MODE" = record ]; then
   dest=${OUT:-$SUITE/vanilla}
   mkdir -p "$dest"
   jsonl="$dest/$LABEL.jsonl"; vlog="$dest/$LABEL.log"
-  header=$(grep -h -m1 '^SUITE-HEADER ' "$WORK"/cases/*/log | sed 's/^SUITE-HEADER //' | head -n 1)
+  # Not grep | head: under pipefail, head closing the pipe early fails the run.
+  header=$(awk 'sub(/^SUITE-HEADER /, "") { print; exit }' "$WORK"/cases/*/log)
   [ -n "$header" ] || die "no case printed a header"
   : > "$WORK/rec.jsonl"; : > "$WORK/rec.log"; : > "$WORK/rec.ids"
   for id in "${SEL[@]}"; do
