@@ -54,12 +54,13 @@ mod tests {
 
     #[test]
     fn guard_resets_on_early_return() {
-        let mut flag = false;
-        let result = (|| -> Option<()> {
-            let guard = ProcessingKeyGuard::new(&mut flag);
+        fn returns_early(flag: &mut bool) -> Option<()> {
+            let guard = ProcessingKeyGuard::new(flag);
             assert!(guard.is_active());
-            None // simulate early return
-        })();
+            None
+        }
+        let mut flag = false;
+        let result = returns_early(&mut flag);
         assert!(result.is_none());
         assert!(!flag, "flag should be false after early return");
     }

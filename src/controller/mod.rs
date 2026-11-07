@@ -150,6 +150,10 @@ impl VimController {
     pub(crate) fn new() -> Self {
         let mut engine = VimEngine::new();
         engine.set_shadow_execution(true);
+        // The undo store's size, unless a vimrc sets another.
+        engine
+            .options_mut()
+            .set_undolevels(Some(crate::state::undo_store::DEFAULT_UNDOLEVELS));
         Self {
             phase: ControllerPhase::Detached {
                 engine,
@@ -912,9 +916,8 @@ impl VimController {
         // pipeline-driven mode exit. Without this, multi-cursor Godot
         // carets can be stale and orphaned undo groups can leak.
         if let ControllerPhase::Attached { ref mut session } = self.phase {
-            process::finish_engine_pass(session);
-            let mode = session.engine().mode();
-            session.host_mut().ensure_undo_balanced(mode);
+            process::finish_engine_pass(session, None);
+            process::finish_undo_entry(session);
         }
 
         true
@@ -1447,8 +1450,7 @@ impl VimController {
         }
 
         // Ensure undo groups are balanced after mouse selection processing.
-        let mode = session.engine().mode();
-        session.host_mut().ensure_undo_balanced(mode);
+        process::finish_undo_entry(session);
 
         result.consumed
     }
@@ -1509,6 +1511,24 @@ mod tests {
                 filetype: _,                   // config
             } = ctx;
         }
+    }
+
+    // ── undolevels ────────────────────────────────────────────────────
+
+    #[test]
+    fn undolevels_defaults_to_the_undo_store_size() {
+        let c = VimController::new();
+        assert_eq!(
+            c.engine().options().undolevels(),
+            Some(crate::state::undo_store::DEFAULT_UNDOLEVELS)
+        );
+    }
+
+    #[test]
+    fn a_vimrc_undolevels_replaces_the_default() {
+        let mut c = VimController::new();
+        c.source_config("set undolevels=20000");
+        assert_eq!(c.engine().options().undolevels(), Some(20_000));
     }
 
     // ── Settings push ─────────────────────────────────────────────────

@@ -309,29 +309,20 @@ impl DispatchCtx {
     /// Run effects through the full bridge dispatch pipeline, including text
     /// cache invalidation, undo/redo via UndoStore, and selection/cursor interplay.
     /// This is the closest to production behavior achievable without Godot.
+    /// Fails on an empty complex operation, which would chain Godot's undo.
     pub(super) fn dispatch(
         &mut self,
         mock: &mut MockTextEdit,
         effects: Vec<vim_core::effects::Effect>,
     ) {
-        let text = mock.get_text();
-        crate::effects::dispatch(
-            effects,
-            mock,
-            crate::effects::DispatchContext {
-                state: &mut self.state,
-                editor_id: self.editor_id,
-                auto_brace: crate::effects::dispatch::AutoBraceMode::Ineligible,
-                auto_brace_snapshot: crate::bridge::AutoBraceSnapshot::disabled(),
-                line_index_hint: None,
-                scrolloff: self.scrolloff,
-                highlight_yank_duration_ms: 150,
-                syntax_query: Box::new(|_, _| crate::bridge::SyntaxRegion::code()),
-                clipboard: &mut self.clipboard,
-                cursor_count: 1,
-            },
-            &text,
-        );
+        self.dispatch_multi(mock, effects, 1);
+    }
+
+    /// Whether the undo store holds a start text.
+    pub(super) fn undo_pending(&self) -> bool {
+        self.state
+            .buffer_ref(self.editor_id)
+            .is_some_and(|b| b.undo_store().has_pending())
     }
 
     pub(super) fn dispatch_multi(
@@ -358,6 +349,7 @@ impl DispatchCtx {
             },
             &text,
         );
+        assert_eq!(mock.empty_complex_pairs(), 0, "empty complex operation");
     }
 }
 

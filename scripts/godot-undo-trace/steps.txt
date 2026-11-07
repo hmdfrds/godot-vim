@@ -1,0 +1,84 @@
+# Godot's undo history step by step. One line is one CodeEdit call;
+# trace.gd and the mock both write a reading after each. fold_region is the
+# mock's: Godot finds the same folds from the indentation. Carets are set
+# before every end and not read after an insert or remove: how an edit moves
+# the carets around it is not part of the history.
+text func a():\n\tvar x = 1\n\tvar y = 2\nfunc b():\n\tpass
+fold_region 0 2
+fold_region 3 4
+# one op in a complex operation, as godot-vim commits x; until its end
+# the op is pending and counts for has_undo
+caret 1 1
+begin
+remove 1 1 1 2
+caret 1 1
+end
+# two ops, started and ended on a selection: undo restores the first, redo
+# the second
+select 2 1 2 4 0
+begin
+remove 2 1 2 4
+insert 2 1 let
+select 2 4 2 1 0
+end
+caret 0 0
+undo
+redo
+undo
+# a new edit clears the redo area
+caret 4 1
+begin
+insert 4 1 #
+caret 4 2
+end
+begin
+insert 4 0 x
+caret 4 3
+end
+# an empty pair chains the op before it to the one before that
+begin
+end
+undo
+redo
+# nested pairs are one step
+begin
+begin
+insert 0 0 #
+end
+end
+# Godot's typing is one step until an action ends it
+typing
+insert 3 0 a
+insert 3 1 b
+close
+close
+typing
+insert 3 2 c
+undo
+# an action with no op is an empty pair too
+typing
+close
+undo
+# undo and redo unfold the caret they restore
+caret 1 2
+begin
+insert 1 2 z
+caret 1 3
+end
+caret 0 0
+fold 0
+undo
+fold 0
+redo
+# every caret is restored
+caret 1 3
+add_caret 3 1
+begin
+insert 3 1 !
+insert 0 1 !
+caret 1 3
+add_caret 3 2
+end
+caret 4 0
+undo
+redo

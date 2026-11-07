@@ -176,6 +176,48 @@ mod tests {
         );
     }
 
+    /// Godot binds `end_action` to `end_complex_operation` (text_edit.cpp
+    /// `_bind_methods`), so a call closes whatever complex operation is open.
+    #[test]
+    fn no_end_action_in_src() {
+        let needle = ["end", "_action("].concat();
+        let users: Vec<String> = rust_sources()
+            .into_iter()
+            .filter(|(_, src)| src.contains(&needle))
+            .map(|(path, _)| path.display().to_string())
+            .collect();
+        assert!(users.is_empty(), "{needle} in {users:?}");
+    }
+
+    /// An empty complex operation chains Godot's undo, so the one guard
+    /// opens only after a non-empty change list.
+    #[test]
+    fn one_complex_op_guard_site_after_a_change_list() {
+        let needle = ["ComplexOpGuard", "::new("].concat();
+        let mut sites = Vec::new();
+        for (path, src) in rust_sources() {
+            let lines: Vec<&str> = src.lines().collect();
+            for (i, line) in lines.iter().enumerate() {
+                if line.contains(&needle) {
+                    let enclosing_if = lines[..i]
+                        .iter()
+                        .rev()
+                        .map(|l| l.trim())
+                        .find(|l| l.starts_with("if "))
+                        .map(str::to_owned);
+                    sites.push((format!("{}:{}", path.display(), i + 1), enclosing_if));
+                }
+            }
+        }
+        assert_eq!(sites.len(), 1, "{needle} sites: {sites:?}");
+        assert_eq!(
+            sites[0].1,
+            Some("if !changes.is_empty() {".to_owned()),
+            "{needle} at {}",
+            sites[0].0
+        );
+    }
+
     /// `godot::sys` is gdext's private API and is renamed without notice.
     #[test]
     fn godot_sys_is_used_only_by_safety_engine_loaded() {

@@ -17,8 +17,12 @@ use vim_core::primitives::{ChangeSet, ChangeSetError, NodeId};
 /// Store a full text checkpoint every N entries.
 const CHECKPOINT_INTERVAL: u32 = 64;
 
-/// Maximum entries before oldest are evicted.
-const MAX_ENTRIES: usize = 10_000;
+/// `undolevels` when no vimrc sets it; also the store's smallest limit.
+pub(crate) const DEFAULT_UNDOLEVELS: usize = 10_000;
+
+/// Room above `undolevels` for nodes the tree pruned during an entry, which
+/// leave the store only at the drain in `finish_entry`.
+const DRAIN_HEADROOM: usize = 64;
 
 // ── Data Structures ─────────────────────────────────────────────────────────
 
@@ -34,6 +38,9 @@ struct UndoSnapshot {
     checkpoint: Option<String>,
     /// Monotonic ordering for eviction.
     sequence: u64,
+    /// vim-core's sequence for the node, stamped by `finish_entry`. vim-core
+    /// reuses a pruned node's id but never its sequence.
+    node_sequence: Option<u64>,
 }
 
 /// Result of applying a changeset during undo/redo.
@@ -52,8 +59,15 @@ pub(crate) struct UndoApplyResult {
 pub(crate) struct UndoStore {
     /// Forward/inverse changeset pairs keyed by undo tree node ID.
     snapshots: HashMap<NodeId, UndoSnapshot>,
-    /// T0 text captured at `begin_group`, consumed by `end_group`.
+    /// T0 text captured at the outermost `begin_group`, consumed by `end_group`.
     pending_text: Option<String>,
+    /// Open `begin_group` calls.
+    depth: u32,
+    /// Ids an unchanged bracket kept this entry, with the text length, for
+    /// `finish_entry` to check against the tree.
+    kept: Vec<(NodeId, usize)>,
+    /// Ids written this entry, for `finish_entry` to stamp.
+    unstamped: Vec<NodeId>,
     /// Next sequence number to assign.
     next_sequence: u64,
     /// How often to store full text checkpoints.
@@ -69,44 +83,91 @@ impl UndoStore {
         Self {
             snapshots: HashMap::new(),
             pending_text: None,
+            depth: 0,
+            kept: Vec::new(),
+            unstamped: Vec::new(),
             next_sequence: 0,
             checkpoint_interval: CHECKPOINT_INTERVAL,
-            max_entries: MAX_ENTRIES,
+            max_entries: entry_limit(None),
         }
     }
 
-    /// Capture T0 text snapshot. Called on `BeginUndoGroup`.
-    ///
-    /// If a previous group was not ended (programming error or crash),
-    /// the old pending text is silently replaced.
+    /// `BeginUndoGroup`: only the outermost one captures T0.
     pub fn begin_group(&mut self, text: &str) {
-        self.pending_text = Some(text.to_string());
+        if self.depth == 0 {
+            self.pending_text = Some(text.to_string());
+        }
+        self.depth = self.depth.saturating_add(1);
     }
 
-    /// Compute diff, store forward + inverse. Called on `EndUndoGroup`.
+    /// `EndUndoGroup { node_id: Some(id) }`: commit T0 to `text_after` under
+    /// `node_id`, at any depth.
     ///
-    /// Uses `ChangeSet::from_diff(T0, T1)` to compute the forward changeset,
-    /// then `forward.invert(T0)` for the inverse. Every `checkpoint_interval`-th
-    /// entry stores `text_after` as a full checkpoint.
-    ///
-    /// No-op if `begin_group` was not called first.
+    /// A bracket that changed nothing keeps the snapshot `node_id` already
+    /// has: a motion-only macro reports the node it did not create. So does
+    /// an End with nothing pending, such as `:norm`'s after its keys closed
+    /// their own groups. `finish_entry` replaces a kept snapshot if the id now
+    /// names another node.
     pub fn end_group(&mut self, node_id: NodeId, text_after: &str) {
-        let text_before = match self.pending_text.take() {
-            Some(t) => t,
-            None => {
-                log::warn!(
-                    "undo_store: end_group({}) without begin_group — ignoring",
-                    node_id
-                );
-                return;
+        self.depth = 0;
+        match self.pending_text.take() {
+            Some(before) if before != text_after || !self.snapshots.contains_key(&node_id) => {
+                self.store(node_id, &before, text_after);
             }
-        };
+            _ => self.kept.push((node_id, text_after.len())),
+        }
+    }
 
-        let forward = ChangeSet::from_diff(&text_before, text_after);
+    /// `EndUndoGroup { node_id: None }`: the engine committed nothing.
+    pub fn end_empty(&mut self) {
+        self.depth = self.depth.saturating_sub(1);
+        if self.depth == 0 {
+            self.pending_text = None;
+        }
+    }
 
-        // Identity edit (no actual change) — still record it so the node
-        // has an entry and undo/redo can traverse through it cleanly.
-        let inverse = match forward.invert(&text_before) {
+    /// Store a node the engine made outside the effect stream; the pending
+    /// group is left alone.
+    pub fn record(&mut self, node_id: NodeId, text_before: &str, text_after: &str) {
+        self.store(node_id, text_before, text_after);
+    }
+
+    /// End of one engine entry: drop the nodes the tree pruned, check every
+    /// keep against the node's vim-core sequence, and stamp what was written.
+    pub fn finish_entry(
+        &mut self,
+        pruned: &[NodeId],
+        node_sequence: impl Fn(NodeId) -> Option<u64>,
+    ) {
+        for id in pruned {
+            self.snapshots.remove(id);
+        }
+        for (id, len) in std::mem::take(&mut self.kept) {
+            let stale = self.snapshots.get(&id).is_some_and(|snap| {
+                snap.node_sequence
+                    .is_some_and(|seq| node_sequence(id) != Some(seq))
+            });
+            if stale {
+                let identity = ChangeSet::identity(len);
+                self.insert(id, identity.clone(), identity, None);
+            }
+        }
+        for id in std::mem::take(&mut self.unstamped) {
+            if let Some(snap) = self.snapshots.get_mut(&id) {
+                snap.node_sequence = node_sequence(id);
+            }
+        }
+    }
+
+    /// Follow `undolevels`, so the store never evicts a node the tree keeps.
+    pub fn set_undolevels(&mut self, undolevels: Option<usize>) {
+        self.max_entries = entry_limit(undolevels);
+    }
+
+    /// Store `forward` and its inverse under `node_id`, overwriting.
+    fn store(&mut self, node_id: NodeId, text_before: &str, text_after: &str) {
+        let forward = ChangeSet::from_diff(text_before, text_after);
+        let inverse = match forward.invert(text_before) {
             Ok(inv) => inv,
             Err(e) => {
                 log::error!(
@@ -117,17 +178,27 @@ impl UndoStore {
                 return;
             }
         };
+        self.insert(node_id, forward, inverse, Some(text_after));
+    }
 
-        // Evict oldest entries if at capacity.
+    /// Every `checkpoint_interval`-th entry also stores `text_after`.
+    fn insert(
+        &mut self,
+        node_id: NodeId,
+        forward: ChangeSet,
+        inverse: ChangeSet,
+        text_after: Option<&str>,
+    ) {
         self.evict_if_needed();
 
         let seq = self.next_sequence;
         self.next_sequence += 1;
 
-        let checkpoint = if seq > 0 && seq.is_multiple_of(u64::from(self.checkpoint_interval)) {
-            Some(text_after.to_string())
-        } else {
-            None
+        let checkpoint = match text_after {
+            Some(text) if seq > 0 && seq.is_multiple_of(u64::from(self.checkpoint_interval)) => {
+                Some(text.to_string())
+            }
+            _ => None,
         };
 
         self.snapshots.insert(
@@ -137,8 +208,10 @@ impl UndoStore {
                 inverse,
                 checkpoint,
                 sequence: seq,
+                node_sequence: None,
             },
         );
+        self.unstamped.push(node_id);
     }
 
     /// Apply inverse changeset (undo). Returns changes for `CodeEdit` application.
@@ -199,8 +272,9 @@ impl UndoStore {
         self.pending_text.is_some()
     }
 
-    /// Consume and return pending T0 text. Used for panic recovery.
+    /// Consume and return pending T0 text, closing every open group.
     pub fn take_pending_text(&mut self) -> Option<String> {
+        self.depth = 0;
         self.pending_text.take()
     }
 
@@ -212,6 +286,9 @@ impl UndoStore {
     pub fn clear(&mut self) {
         self.snapshots.clear();
         self.pending_text = None;
+        self.depth = 0;
+        self.kept.clear();
+        self.unstamped.clear();
         self.next_sequence = 0;
     }
 
@@ -355,6 +432,14 @@ impl UndoStore {
 
         false
     }
+}
+
+/// The store's size for this `undolevels` (`None`: unlimited).
+fn entry_limit(undolevels: Option<usize>) -> usize {
+    undolevels
+        .unwrap_or(0)
+        .max(DEFAULT_UNDOLEVELS)
+        .saturating_add(DRAIN_HEADROOM)
 }
 
 /// Internal direction tag for checkpoint fallback.
@@ -794,17 +879,175 @@ mod tests {
         assert_eq!(undo.text, "hello");
     }
 
-    // ── begin_group replaces old pending ─────────────────────────────────
+    // ── Nesting: the outermost begin_group wins ─────────────────────────
 
     #[test]
-    fn double_begin_replaces_pending() {
+    fn nested_begin_keeps_outer() {
         let mut store = UndoStore::new();
 
         store.begin_group("first");
         store.begin_group("second");
 
         let text = store.take_pending_text();
-        assert_eq!(text, Some("second".to_string()));
+        assert_eq!(text, Some("first".to_string()));
+    }
+
+    #[test]
+    fn end_group_commits_from_the_outer_begin_at_any_depth() {
+        let mut store = UndoStore::new();
+        store.begin_group("a");
+        store.begin_group("ab");
+        store.end_group(nid(1), "abc");
+
+        assert!(!store.has_pending());
+        assert_eq!(store.undo_step(nid(1), "abc").unwrap().text, "a");
+
+        // Depth went back to 0: the next Begin captures again.
+        store.begin_group("abc");
+        assert_eq!(store.take_pending_text(), Some("abc".to_string()));
+    }
+
+    #[test]
+    fn end_empty_drops_pending_only_at_depth_zero() {
+        let mut store = UndoStore::new();
+        store.begin_group("session start");
+        store.begin_group("inner");
+        store.end_empty();
+        assert!(store.has_pending(), "an inner empty pair keeps the session");
+
+        store.end_empty();
+        assert!(!store.has_pending());
+    }
+
+    #[test]
+    fn end_empty_at_depth_zero_saturates() {
+        let mut store = UndoStore::new();
+        store.end_empty();
+        store.begin_group("a");
+        assert_eq!(store.take_pending_text(), Some("a".to_string()));
+    }
+
+    #[test]
+    fn take_pending_text_and_clear_reset_depth() {
+        let mut store = UndoStore::new();
+        store.begin_group("a");
+        store.begin_group("a");
+        store.take_pending_text();
+        store.begin_group("b");
+        assert_eq!(store.take_pending_text(), Some("b".to_string()));
+
+        store.begin_group("c");
+        store.begin_group("c");
+        store.clear();
+        store.begin_group("d");
+        assert_eq!(store.take_pending_text(), Some("d".to_string()));
+    }
+
+    #[test]
+    fn record_leaves_the_pending_group_alone() {
+        let mut store = UndoStore::new();
+        store.begin_group("a");
+        store.record(nid(5), "a", "ab");
+
+        assert_eq!(store.undo_step(nid(5), "ab").unwrap().text, "a");
+        assert_eq!(store.take_pending_text(), Some("a".to_string()));
+    }
+
+    #[test]
+    fn unchanged_bracket_keeps_the_snapshot() {
+        let mut store = UndoStore::new();
+        store.begin_group("abc");
+        store.end_group(nid(1), "bc");
+        store.finish_entry(&[], |_| Some(1));
+
+        // A macro that only moves reports the current node again.
+        store.begin_group("bc");
+        store.end_group(nid(1), "bc");
+        store.finish_entry(&[], |_| Some(1));
+
+        assert_eq!(store.undo_step(nid(1), "bc").unwrap().text, "abc");
+    }
+
+    #[test]
+    fn end_without_pending_keeps_the_snapshot() {
+        let mut store = UndoStore::new();
+        store.begin_group("abc");
+        store.end_group(nid(1), "bc");
+        store.finish_entry(&[], |_| Some(1));
+
+        store.end_group(nid(1), "bc");
+        store.finish_entry(&[], |_| Some(1));
+
+        assert_eq!(store.undo_step(nid(1), "bc").unwrap().text, "abc");
+    }
+
+    /// vim-core reuses a pruned node's id, and drops it from the prune list,
+    /// before the host drains it (`UndoTree::end_group`); the sequence differs.
+    #[test]
+    fn recycled_id_is_not_kept() {
+        let mut store = UndoStore::new();
+        store.begin_group("abc");
+        store.end_group(nid(1), "bc");
+        store.finish_entry(&[], |_| Some(1));
+
+        // Node 1 pruned and its id reused by an identity change, in one entry.
+        store.begin_group("bc");
+        store.end_group(nid(1), "bc");
+        store.finish_entry(&[], |_| Some(3));
+
+        assert_eq!(store.undo_step(nid(1), "bc").unwrap().text, "bc");
+        assert_eq!(store.snapshots[&nid(1)].node_sequence, Some(3));
+    }
+
+    #[test]
+    fn recycled_id_reported_without_pending_is_not_kept() {
+        let mut store = UndoStore::new();
+        store.begin_group("abc");
+        store.end_group(nid(1), "bc");
+        store.finish_entry(&[], |_| Some(1));
+
+        store.end_group(nid(1), "bc");
+        store.finish_entry(&[], |_| Some(3));
+
+        assert_eq!(store.undo_step(nid(1), "bc").unwrap().text, "bc");
+    }
+
+    #[test]
+    fn changed_bracket_is_stamped_at_finish() {
+        let mut store = UndoStore::new();
+        store.begin_group("a");
+        store.end_group(nid(1), "ab");
+        assert_eq!(store.snapshots[&nid(1)].node_sequence, None);
+
+        store.finish_entry(&[], |_| Some(4));
+        assert_eq!(store.snapshots[&nid(1)].node_sequence, Some(4));
+    }
+
+    #[test]
+    fn finish_entry_drops_pruned_ids() {
+        let mut store = UndoStore::new();
+        store.begin_group("a");
+        store.end_group(nid(1), "ab");
+        store.begin_group("ab");
+        store.end_group(nid(2), "abc");
+
+        store.finish_entry(&[nid(1)], |_| Some(1));
+
+        assert!(!store.snapshots.contains_key(&nid(1)));
+        assert!(store.snapshots.contains_key(&nid(2)));
+    }
+
+    #[test]
+    fn undolevels_above_the_default_raise_the_limit() {
+        let mut store = UndoStore::new();
+        store.set_undolevels(Some(20_000));
+        assert_eq!(store.max_entries, 20_000 + DRAIN_HEADROOM);
+
+        // Smaller, or unlimited: the store keeps its default size.
+        store.set_undolevels(Some(5));
+        assert_eq!(store.max_entries, DEFAULT_UNDOLEVELS + DRAIN_HEADROOM);
+        store.set_undolevels(None);
+        assert_eq!(store.max_entries, DEFAULT_UNDOLEVELS + DRAIN_HEADROOM);
     }
 
     // ── Checkpoint fallback on desync ────────────────────────────────────
@@ -870,7 +1113,7 @@ mod tests {
         assert!(!store.has_pending());
         assert_eq!(store.next_sequence, 0);
         assert_eq!(store.checkpoint_interval, CHECKPOINT_INTERVAL);
-        assert_eq!(store.max_entries, MAX_ENTRIES);
+        assert_eq!(store.max_entries, DEFAULT_UNDOLEVELS + DRAIN_HEADROOM);
     }
 
     // ── Checkpoint fallback on undo desync ──────────────────────────────

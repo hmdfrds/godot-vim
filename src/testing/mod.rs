@@ -16,4 +16,10 @@ mod bridge_tests;
 mod history_tests;
 
 #[cfg(test)]
+mod undo_rules_tests;
+
+#[cfg(test)]
+mod undo_trace_tests;
+
+#[cfg(test)]
 pub(crate) use mock_text_edit::MockTextEdit;

@@ -70,7 +70,7 @@ pub(super) fn process_cycle_impl(
 
     // The overlay fold, at the source line try_handle_completion occupied.
     // The return point does not move, which preserves four obligations:
-    // ensure_undo_balanced fires on the same two branches;
+    // finish_undo_entry runs on the same two branches;
     // CompletionConsumed.may_have_moved_cursor() stays true (Fix 4C); the
     // early return still precedes import_godot_carets_into_engine and
     // finish_engine_pass, so the multi-cursor gap neither widens nor moves;
@@ -96,8 +96,7 @@ pub(super) fn process_cycle_impl(
             ctx.transient
                 .pending_ui_actions
                 .push(crate::bridge::godot_host::PendingUiAction::DisarmCompletion);
-            let mode = session.engine().mode();
-            session.host_mut().ensure_undo_balanced(mode);
+            finish_undo_entry(session);
             return outcome;
         }
     }
@@ -114,8 +113,7 @@ pub(super) fn process_cycle_impl(
             "process_cycle: godot completion key={key} -> {}",
             outcome.log_label()
         );
-        let mode = session.engine().mode();
-        session.host_mut().ensure_undo_balanced(mode);
+        finish_undo_entry(session);
         return outcome;
     }
 
@@ -172,7 +170,7 @@ pub(super) fn process_cycle_impl(
 
     ctx.transient.operations_this_cycle = ctx.transient.operations_this_cycle.saturating_add(1);
 
-    finish_engine_pass(session);
+    finish_engine_pass(session, key.as_char());
 
     // ── Post-processing: deferred actions ───────────────────────────
     for action in &result.deferred_actions {
@@ -196,8 +194,7 @@ pub(super) fn process_cycle_impl(
     }
 
     // ── Post-processing: ensure undo balanced ───────────────────────
-    let mode = session.engine().mode();
-    session.host_mut().ensure_undo_balanced(mode);
+    finish_undo_entry(session);
 
     let total_elapsed = total_start.elapsed();
 
@@ -379,7 +376,7 @@ pub(super) fn resolve_mapping_timeout_impl(
         ctx.transient.operations_this_cycle = ctx.transient.operations_this_cycle.saturating_add(1);
     }
 
-    finish_engine_pass(session);
+    finish_engine_pass(session, None);
 
     // Handle any deferred actions produced during drain.
     let pending_actions = session.host_mut().take_pending_ui_actions();
@@ -387,8 +384,7 @@ pub(super) fn resolve_mapping_timeout_impl(
         handle_host_pending_ui_action(session, ctx, action, editor);
     }
 
-    let mode = session.engine().mode();
-    session.host_mut().ensure_undo_balanced(mode);
+    finish_undo_entry(session);
 }
 
 // ── Key passthrough ──────────────────────────────────────────────
@@ -789,13 +785,26 @@ fn import_godot_carets_into_engine(session: &mut vim_core::execution::VimSession
 }
 
 /// The last write of an engine pass into the CodeEdit: the engine's carets,
-/// then the completion popup derived from them.
-pub(crate) fn finish_engine_pass(session: &mut vim_core::execution::VimSession<GodotHost>) {
+/// then the completion popup derived from them. `typed` is the character key
+/// that started the pass, if it was one.
+pub(crate) fn finish_engine_pass(
+    session: &mut vim_core::execution::VimSession<GodotHost>,
+    typed: Option<char>,
+) {
     sync_multi_cursors_to_godot(session);
     let mode = session.engine().mode();
     session
         .host_mut()
-        .follow_completion(mode.is_insert() || mode.is_replace());
+        .follow_completion(mode.is_insert() || mode.is_replace(), typed);
+}
+
+/// The host's undo bookkeeping at the end of an engine entry, balanced by
+/// the engine's own open group.
+pub(crate) fn finish_undo_entry(session: &mut vim_core::execution::VimSession<GodotHost>) {
+    let (engine, host) = session.engine_and_host_mut();
+    let undolevels = engine.options().undolevels();
+    let tree = engine.undo_tree_mut();
+    host.finish_undo_entry(tree.has_pending_group(), tree, undolevels);
 }
 
 /// Gaps 1 & 5: Sync multi-cursor positions (and visual selections) to Godot

@@ -189,6 +189,19 @@ fn identity_edit_undo_is_noop() {
     assert_editor!(mock, text: "hello");
 }
 
+/// No Godot step, but the step's cursor still lands.
+#[test]
+fn identity_undo_still_restores_the_cursor() {
+    let mut mock = MockTextEdit::new("hello");
+    let mut ctx = DispatchCtx::new();
+    ctx.dispatch(&mut mock, effects![begin_undo; end_undo(1)]);
+    mock.set_caret_column(4);
+
+    ctx.dispatch(&mut mock, effects![undo_steps(1, 2)]);
+    assert_editor!(mock, text: "hello", cursor: (0, 2));
+    assert!(!mock.has_undo());
+}
+
 // ── Empty undo group (EndUndoGroup with None node_id) ──────────────────
 
 #[test]
@@ -210,6 +223,66 @@ fn empty_undo_group_no_snapshot() {
     // Use undo(1) with empty steps — this is the old form that exercises
     // the empty-steps-vector path in dispatch.
     ctx.dispatch(&mut mock, effects![undo(1)]);
+    assert_editor!(mock, text: "hello");
+}
+
+// ── An empty Insert (`x`, `i<Esc>`, `u`) in both of vim-core's shapes ─────
+
+/// `x` on "hello": node 1.
+fn x_on_hello(ctx: &mut DispatchCtx, mock: &mut MockTextEdit) {
+    let fx = effects![
+        begin_undo;
+        delete(0, 1);
+        set_cursor(0);
+        end_undo(1)
+    ];
+    ctx.dispatch(mock, fx);
+    assert_editor!(mock, text: "ello");
+}
+
+/// vim-core v0.9.1 commits an empty Insert as a node of its own.
+#[test]
+fn empty_insert_as_a_node_with_no_change() {
+    let mut mock = MockTextEdit::new("hello");
+    let mut ctx = DispatchCtx::new();
+    x_on_hello(&mut ctx, &mut mock);
+
+    ctx.dispatch(&mut mock, effects![begin_undo; end_undo(2)]);
+    assert!(!ctx.undo_pending());
+
+    ctx.dispatch(&mut mock, effects![undo_steps(2, 0)]);
+    assert_editor!(mock, text: "ello");
+    ctx.dispatch(&mut mock, effects![undo_steps(1, 0)]);
+    assert_editor!(mock, text: "hello");
+}
+
+/// The shape vim-core v0.10.0 sends: no node, `EndUndoGroup { node_id: None }`.
+#[test]
+fn empty_insert_with_no_node() {
+    let mut mock = MockTextEdit::new("hello");
+    let mut ctx = DispatchCtx::new();
+    x_on_hello(&mut ctx, &mut mock);
+
+    ctx.dispatch(&mut mock, effects![begin_undo; end_undo]);
+    assert!(!ctx.undo_pending());
+
+    ctx.dispatch(&mut mock, effects![undo_steps(1, 0)]);
+    assert_editor!(mock, text: "hello");
+}
+
+/// An empty pair inside an open Insert session leaves the session's start.
+#[test]
+fn empty_pair_inside_a_session_keeps_its_start() {
+    let mut mock = MockTextEdit::new("hello");
+    let mut ctx = DispatchCtx::new();
+
+    ctx.dispatch(&mut mock, effects![begin_undo; insert(5, " world")]);
+    ctx.dispatch(&mut mock, effects![begin_undo; end_undo]);
+    assert!(ctx.undo_pending());
+    ctx.dispatch(&mut mock, effects![insert(11, "!"); end_undo(1)]);
+    assert_editor!(mock, text: "hello world!");
+
+    ctx.dispatch(&mut mock, effects![undo_steps(1, 0)]);
     assert_editor!(mock, text: "hello");
 }
 
@@ -327,4 +400,38 @@ fn undo_clamps_cursor_beyond_text_length() {
     // The clamped offset is min(9999, 2-1) = 1 -> line 0, col 1.
     assert_eq!(line, 0);
     assert_eq!(col, 1);
+}
+
+// ── A change that changes nothing reaches Godot as nothing ─────────────
+
+#[test]
+fn noop_change_pushes_no_op() {
+    for fx in [
+        effects![begin_undo; replace(0, 3, "abc"); end_undo(1)],
+        effects![begin_undo; insert(1, ""); end_undo(1)],
+        effects![begin_undo; delete(2, 2); end_undo(1)],
+        effects![begin_undo; insert(1, "x"); delete(1, 2); end_undo(1)],
+    ] {
+        let mut mock = MockTextEdit::new("abc");
+        let mut ctx = DispatchCtx::new();
+        ctx.dispatch(&mut mock, fx);
+        assert_editor!(mock, text: "abc");
+        assert!(!mock.has_undo());
+    }
+}
+
+/// A replacement keeps its own Godot op even when part of it is unchanged.
+#[test]
+fn partial_replace_is_one_godot_step() {
+    let mut mock = MockTextEdit::new("abc");
+    let mut ctx = DispatchCtx::new();
+    ctx.dispatch(
+        &mut mock,
+        effects![begin_undo; replace(0, 3, "abd"); end_undo(1)],
+    );
+    assert_editor!(mock, text: "abd");
+
+    mock.undo();
+    assert_editor!(mock, text: "abc");
+    assert!(!mock.has_undo());
 }

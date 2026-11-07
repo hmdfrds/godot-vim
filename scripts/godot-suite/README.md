@@ -241,3 +241,9 @@ diff); the dev row moves at each beta or on demand; 4.5-stable stays while
 the plugin's minimum is 4.5. An older patch keeps a row only while it alone
 exercises a workaround. Delete the old version's recording file and pin
 lines in the same change.
+
+The same change records Godot's undo history on the new version with
+`scripts/godot-undo-trace.sh --godot BIN --record`, which writes
+`scripts/godot-undo-trace/recorded/<godot>.txt`. A cargo test runs the same
+steps on `MockTextEdit` and fails where the mock reads differently from any
+recording; delete the old version's file with the rest.
