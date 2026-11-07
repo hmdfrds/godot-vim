@@ -100,6 +100,23 @@ fn identity_redo_pushes_no_godot_step() {
     assert_eq!(h.editor().empty_complex_pairs(), 0);
 }
 
+/// An Insert that types nothing makes no undo step (undo.c: only
+/// `u_savecommon()`, before a change, starts one), so `u` undoes the `x`.
+#[test]
+fn u_after_an_empty_insert_undoes_the_change_before_it() {
+    let mut h = Harness::new("abc");
+    h.feed("xi<Esc>");
+    assert_eq!(h.text(), "bc");
+
+    h.feed("u");
+    assert_eq!(h.text(), "abc");
+    assert_eq!(h.orphaned_undo_groups(), 0);
+    assert_eq!(h.editor().empty_complex_pairs(), 0);
+
+    h.godot_undo();
+    assert_eq!(h.text(), "bc", "Ctrl+Z takes back the u alone");
+}
+
 /// A pass that opens or closes a Vim undo group, or moves through the tree,
 /// ends Godot's edit action after its commit; a motion does not.
 #[test]
