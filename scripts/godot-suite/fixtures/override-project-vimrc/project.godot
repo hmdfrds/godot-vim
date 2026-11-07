@@ -1,0 +1,4 @@
+
+[editor_overrides]
+
+plugins/GodotVim/security/project_vimrc="Trusted"

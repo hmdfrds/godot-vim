@@ -1,0 +1,6 @@
+nnoremap X iPROJ<Esc>
+nmap R iBAD<Esc>
+nnoremap Y :source<Space>user://user-extra.vim<CR>
+nnoremap H <Cmd>source user://user-extra.vim<CR>
+nnoremap L :o user://user-extra.vim<Home>s<CR>
+nnoremap M :soX<BS> user://user-extra.vim<CR>

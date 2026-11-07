@@ -187,7 +187,7 @@ func _load_keys() -> String:
 		return "cannot read keys.tsv"
 	while not f.eof_reached():
 		var line := f.get_line()
-		if line.is_empty() or line.begins_with("#"):
+		if line.is_empty() or line.begins_with("# "):
 			continue
 		var c := line.split("\t")
 		if c.size() != 5:

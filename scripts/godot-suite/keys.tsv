@@ -3,6 +3,7 @@
 # Modifier prefixes such as <C-x> or <S-Tab> are added from the token.
 # A cargo test feeds every row to translate_key and compares the result
 # with vim-core's parse of the token.
+# Comments start with "# "; the row of the # key starts with a tab.
 a	65	65	97	-
 b	66	66	98	-
 c	67	67	99	-
@@ -67,7 +68,7 @@ Z	90	90	90	S
 9	57	57	57	-
 !	49	49	33	S
 "	39	39	34	S
-#	51	35	S
+#	51	51	35	S
 $	52	52	36	S
 %	53	53	37	S
 &	55	55	38	S

@@ -1,0 +1,1 @@
+plugins/GodotVim/security/file_access_scope = "Unrestricted"

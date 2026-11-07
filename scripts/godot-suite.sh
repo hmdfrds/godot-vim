@@ -293,6 +293,7 @@ run_case() {
     [ ! -d "$fd/res" ] || cp -a "$fd/res/." "$cd/project/"
     [ ! -d "$fd/user" ] || { mkdir -p "$cd/$USERDIR"; cp -a "$fd/user/." "$cd/$USERDIR/"; }
     [ ! -d "$fd/home" ] || cp -a "$fd/home/." "$cd/home/"
+    [ ! -f "$fd/project.godot" ] || cat "$fd/project.godot" >> "$cd/project/project.godot"
     if [ -f "$fd/config/editor_settings.tres" ]; then
       cp "$fd/config/editor_settings.tres" "$cd/config/godot/editor_settings-$MINOR.tres"
     fi
@@ -414,7 +415,8 @@ if [ "$MODE" = record ]; then
   dest=${OUT:-$SUITE/vanilla}
   mkdir -p "$dest"
   jsonl="$dest/$LABEL.jsonl"; vlog="$dest/$LABEL.log"
-  header=$(grep -h -m1 '^SUITE-HEADER ' "$WORK"/cases/*/log | sed 's/^SUITE-HEADER //' | head -n 1)
+  # Not grep | head: under pipefail, head closing the pipe early fails the run.
+  header=$(awk 'sub(/^SUITE-HEADER /, "") { print; exit }' "$WORK"/cases/*/log)
   [ -n "$header" ] || die "no case printed a header"
   : > "$WORK/rec.jsonl"; : > "$WORK/rec.log"; : > "$WORK/rec.ids"
   for id in "${SEL[@]}"; do
@@ -422,7 +424,8 @@ if [ "$MODE" = record ]; then
     [ -n "$line" ] || continue
     echo "$line" >> "$WORK/rec.jsonl"
     echo "{\"id\":\"$id\"," >> "$WORK/rec.ids"
-    problems_of "$id" | sed '/^$/d' | sed "s|^|$id |" >> "$WORK/rec.log"
+    # problems_of ends without a newline, which would join two cases' lines.
+    { problems_of "$id"; echo; } | sed '/^$/d' | sed "s|^|$id |" >> "$WORK/rec.log"
   done
   # Lines of cases not recorded now stay, unless the header changed, which
   # makes every old line stale.

@@ -1,0 +1,2 @@
+inoremap jk <Esc>
+inoremap ;<CR> ;X
