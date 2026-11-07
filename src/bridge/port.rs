@@ -3,7 +3,7 @@
 //! Trait hierarchy:
 //!
 //! - **`TextEditorPort`** (39 methods): core text editing (required).
-//! - **`FoldCapable`** (5 methods, default no-ops) — code folding.
+//! - **`FoldCapable`** (6 methods, default no-ops): code folding.
 //! - **`IdeCapable`** (7 methods, default no-ops): autocomplete/hints.
 //! - **`NavigationCapable`** (2 methods, default no-ops) — go-to-definition, hover docs.
 //!
@@ -120,6 +120,10 @@ pub(crate) trait TextEditorPort {
 pub(crate) trait FoldCapable: TextEditorPort {
     fn fold_line(&mut self, _line: i32) {}
     fn unfold_line(&mut self, _line: i32) {}
+    /// A visible line whose next line is hidden: the header of a closed fold.
+    fn is_line_folded(&self, _line: i32) -> bool {
+        false
+    }
     fn toggle_foldable_line(&mut self, _line: i32) {}
     fn fold_all_lines(&mut self) {}
     fn unfold_all_lines(&mut self) {}

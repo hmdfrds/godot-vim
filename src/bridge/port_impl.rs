@@ -373,6 +373,10 @@ impl FoldCapable for CodeEditPort<'_> {
         self.0.unfold_line(line);
     }
 
+    fn is_line_folded(&self, line: i32) -> bool {
+        self.0.is_line_folded(line)
+    }
+
     fn toggle_foldable_line(&mut self, line: i32) {
         self.0.toggle_foldable_line(line);
     }
