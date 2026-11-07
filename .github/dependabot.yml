@@ -1,14 +1,21 @@
 # Automated dependency updates.
 version: 2
 updates:
+  # Monthly and grouped: one PR per ecosystem a month instead of one per bump.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+    groups:
+      github-actions:
+        patterns: ["*"]
   - package-ecosystem: "cargo"
     directory: "/"
     schedule:
-      interval: "weekly"
+      interval: "monthly"
+    groups:
+      cargo:
+        patterns: ["*"]
     ignore:
       # vim-core exports compact_str 0.7 types across its public API, so this
       # crate must match. Bumping it produces 28 type-mismatch errors; PR #62
