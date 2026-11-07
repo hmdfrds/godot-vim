@@ -18,7 +18,7 @@ jobs:
       # Installs the version rust-toolchain.toml names.
       - run: rustup toolchain install --no-self-update
 
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32  # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0  # v2.9.3
         with:
           key: linux
 
@@ -42,7 +42,7 @@ jobs:
 
       - run: rustup toolchain install --no-self-update
 
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32  # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0  # v2.9.3
         with:
           key: windows
 
@@ -69,7 +69,7 @@ jobs:
           rustup toolchain install --no-self-update
           rustup target add aarch64-apple-darwin x86_64-apple-darwin
 
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32  # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0  # v2.9.3
         with:
           key: macos
 
@@ -110,7 +110,7 @@ jobs:
           rustup toolchain install --no-self-update
           rustup target add aarch64-linux-android x86_64-linux-android
 
-      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32  # v2
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0  # v2.9.3
         with:
           key: android
 
