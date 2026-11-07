@@ -2582,7 +2582,8 @@ mod tests {
 
     /// `scripts/godot-suite/keys.tsv` is how the behaviour suite types keys.
     /// Each row must decode to what its Vim notation names, and a Ctrl chord
-    /// the same with or without the character X11 may send along.
+    /// the same with or without the character X11 may send along. Every
+    /// printable ASCII character has a row.
     #[test]
     fn suite_key_table_decodes_as_its_notation() {
         use godot::obj::EngineEnum;
@@ -2594,12 +2595,14 @@ mod tests {
                 .unwrap_or_else(|| panic!("no Godot key {s}"))
         };
         let mut rows = 0;
+        let mut tokens = std::collections::HashSet::new();
         for line in table
             .lines()
-            .filter(|l| !l.is_empty() && !l.starts_with('#'))
+            .filter(|l| !l.is_empty() && !l.starts_with("# "))
         {
             let cols: Vec<&str> = line.split('\t').collect();
             assert_eq!(cols.len(), 5, "keys.tsv row {line:?}");
+            tokens.insert(cols[0]);
             let (token, keycode, physical) = (cols[0], key(cols[1]), key(cols[2]));
             let unicode: u32 = cols[3].parse().expect("unicode");
             let shift = cols[4].contains('S');
@@ -2625,5 +2628,12 @@ mod tests {
             rows += 1;
         }
         assert!(rows > 100, "keys.tsv has only {rows} rows");
+        // `<` is typed as <lt>, as in Vim notation.
+        for c in ('!'..='~').filter(|&c| c != '<') {
+            assert!(
+                tokens.contains(c.to_string().as_str()),
+                "keys.tsv has no row for {c}"
+            );
+        }
     }
 }
