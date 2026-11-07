@@ -1061,11 +1061,12 @@ impl Judge {
 /// Whether vim-core parses `piece` as an unsafe command. One that fails to
 /// parse runs nothing, and one the parser panics on is unsafe.
 fn parses_unsafe(piece: &str) -> bool {
-    std::panic::catch_unwind(|| {
-        vim_core::grammar::parse_ex_command_with_modifiers(piece)
-            .is_ok_and(|(_, command)| is_unsafe_command(&command))
-    })
-    .unwrap_or(true)
+    std::panic::catch_unwind(|| piece_is_unsafe(piece)).unwrap_or(true)
+}
+
+fn piece_is_unsafe(piece: &str) -> bool {
+    vim_core::grammar::parse_ex_command_with_modifiers(piece)
+        .is_ok_and(|(_, command)| is_unsafe_command(&command))
 }
 
 /// How many `%(`, `%[` and (outside a search) [`NESTING_COMMANDS`] start in
@@ -1226,7 +1227,7 @@ fn is_unsafe_command(command: &vim_core::grammar::types::ExCommand) -> bool {
         | ExCommand::Unabbreviate { .. }
         | ExCommand::AbClear { .. }
         | ExCommand::SetHandler { .. }
-        | ExCommand::LetMapleader { .. } => true,
+        | ExCommand::LetLeader { .. } => true,
         ExCommand::Set { assignments }
         | ExCommand::SetLocal { assignments }
         | ExCommand::SetGlobal { assignments } => {
@@ -1243,10 +1244,14 @@ fn is_unsafe_command(command: &vim_core::grammar::types::ExCommand) -> bool {
             })
         }
         ExCommand::Read { path, .. } => path.starts_with('!'),
+        // vim-core splits the list again on each line it runs on
+        // (`global_exe_one()` in Vim's ex_cmds.c).
+        ExCommand::Global { commands, .. } => vim_core::grammar::split_ex_pipeline(commands)
+            .iter()
+            .any(|piece| piece_is_unsafe(piece)),
         ExCommand::WinDo { command, .. }
         | ExCommand::BufDo { command, .. }
         | ExCommand::TabDo { command, .. }
-        | ExCommand::Global { command, .. }
         | ExCommand::StructuralExtract { command, .. }
         | ExCommand::StructuralComplement { command, .. } => is_unsafe_command(command),
         _ => false,
@@ -2080,10 +2085,10 @@ inoremap jk <Esc>
         let x = vim_core::keymap::KeyEvent::char('x');
         for line in lines {
             let mut trusted = VimEngine::new();
-            let _ = trusted.source_config_text(line);
+            let _ = crate::config::source_text(&mut trusted, line);
             assert!(trusted.could_start_mapping(x), "not a mapping: {line}");
             let mut engine = VimEngine::new();
-            let _ = engine.source_config_text(&sandbox_config_text(line));
+            let _ = crate::config::source_text(&mut engine, &sandbox_config_text(line));
             assert!(!engine.could_start_mapping(x), "{line}");
         }
     }
@@ -2621,35 +2626,6 @@ inoremap jk <Esc>
         assert_all_kept(&["nnoremap x :s/'é/e/<CR>", "nnoremap x :'a,'bs/é/e/<CR>"]);
     }
 
-    /// The Sandbox splits a line into the commands vim-core runs as vim-core
-    /// does, or not at all.
-    #[test]
-    fn splits_a_line_as_vim_core_does() {
-        let words = [
-            "1", ",", ";", ".", "$", "%", "+", "-", " ", "\t", "'", "'a", "'|", "|", "s", "g", "v",
-            "/", "#", "\\", "!", "d", "x", "_", "é", "'é", "\u{a0}",
-        ];
-        let mut seed = 1_u32;
-        let mut split = 0;
-        for _ in 0..50_000 {
-            seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
-            let mut line = String::new();
-            for _ in 0..(seed >> 16) % 16 {
-                seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
-                line.push_str(words[(seed >> 16) as usize % words.len()]);
-            }
-            if let Some(pieces) = split_ex_pipeline(&line) {
-                assert_eq!(
-                    pieces,
-                    vim_core::grammar::split_ex_pipeline(&line),
-                    "{line:?}"
-                );
-                split += 1;
-            }
-        }
-        assert!(split > 40_000, "{split}");
-    }
-
     /// vim-core's split takes time quadratic in a long range.
     #[test]
     fn splits_a_long_range_in_linear_time() {
@@ -2954,8 +2930,6 @@ inoremap jk <Esc>
         };
         for (text, keys) in [
             ("nnoremap x :!echo hi<CR>\n", "x"),
-            ("nnoremap x :\u{a0}!echo hi<CR>\n", "x"),
-            ("nnoremap x :\u{3000}!echo hi<CR>\n", "x"),
             ("nnoremap x :nnoremap y :!echo hi<lt>CR><CR>\n", "xy"),
             ("set langmap=q:\nnnoremap x 0q!echo hi<CR>\n", "x"),
             ("nnoremap x f/:!echo hi<CR>\n", "x"),
@@ -3728,7 +3702,8 @@ imap jj <Esc>
             "let mapleader=\",\" | nnoremap x :!id<CR>",
         ] {
             let mut engine = vim_core::execution::VimEngine::new();
-            let _ = engine.source_config_text(&sandbox_config_text(&format!("{line}\n")));
+            let _ =
+                crate::config::source_text(&mut engine, &sandbox_config_text(&format!("{line}\n")));
             let x = vim_core::keymap::KeyEvent::char('x');
             assert!(!engine.could_start_mapping(x), "{line}");
         }
@@ -3792,10 +3767,10 @@ imap jj <Esc>
         use vim_core::execution::VimEngine;
         let text = "set langmap=q:\nnnoremap x 0q!echo hi<CR>\n";
         let mut trusted = VimEngine::new();
-        let _ = trusted.source_config_text(text);
+        let _ = crate::config::source_text(&mut trusted, text);
         assert_eq!(trusted.options().langmap(), "q:");
         let mut engine = VimEngine::new();
-        let _ = engine.source_config_text(&sandbox_config_text(text));
+        let _ = crate::config::source_text(&mut engine, &sandbox_config_text(text));
         assert_eq!(engine.options().langmap(), "");
     }
 

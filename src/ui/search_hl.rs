@@ -20,9 +20,9 @@
 //! A future custom renderer could support full regex highlighting using per-match
 //! ranges from the engine's `Effect::HighlightMatches`.
 
-use compact_str::CompactString;
 use godot::classes::CodeEdit;
 use godot::prelude::*;
+use vim_core::VimString;
 
 use vim_core::primitives::Direction;
 
@@ -55,7 +55,7 @@ impl SearchHighlighter {
     pub(crate) fn update(
         &mut self,
         editor: &mut Gd<CodeEdit>,
-        search_pattern: Option<&(CompactString, Direction)>,
+        search_pattern: Option<&(VimString, Direction)>,
         hlsearch_enabled: bool,
     ) {
         // Two cases collapse to "no highlight": (1) :noh disables hlsearch,

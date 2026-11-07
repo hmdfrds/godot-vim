@@ -41,8 +41,8 @@
 //!
 //! See `DESIGN-rebindable-nav.md` (design notes, kept outside this repo) §5.6 through §5.9.
 
-use compact_str::CompactString;
 use vim_core::keymap::{KeyEvent, MappingEntry, TrieLookup};
+use vim_core::VimString;
 
 use super::action::{ActionId, ActionRegistry, ActionSpec, Params, RuleTarget};
 use super::bind::{BindingIndex, Consumption, Repeat};
@@ -75,7 +75,7 @@ pub(crate) enum CandidateTarget {
     /// the registry so no registry borrow survives into `run`.
     Action(ActionId, &'static ActionSpec),
     /// One of Godot's own registered editor shortcuts, by path.
-    Shortcut(CompactString),
+    Shortcut(VimString),
 }
 
 /// Compared by identity, not structurally: `ActionSpec` holds a `fn` pointer,

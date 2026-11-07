@@ -88,20 +88,20 @@ impl OwnedGodotIndentProvider {
 
 impl IndentProvider for OwnedGodotIndentProvider {
     fn indent_for_new_line(&self, line: LineNumber) -> IndentResult {
-        use compact_str::CompactString;
+        use vim_core::VimString;
 
         let line_i32 = codec::usize_to_i32(usize::from(line));
         let line_count = self.editor.get_line_count();
         if line_i32 >= line_count {
             return IndentResult::Simple {
-                indent: CompactString::default(),
+                indent: VimString::default(),
                 append: None,
             };
         }
 
         let line_text = self.editor.get_line(line_i32).to_string();
 
-        let indent: CompactString = line_text
+        let indent: VimString = line_text
             .chars()
             .take_while(|&c| c == ' ' || c == '\t')
             .collect();
@@ -124,9 +124,9 @@ impl IndentProvider for OwnedGodotIndentProvider {
             let use_spaces = self.editor.is_indent_using_spaces();
             let indent_size = self.editor.safe_indent_size();
             if use_spaces {
-                compact_str::format_compact!("{indent}{}", " ".repeat(indent_size))
+                vim_core::format_vim!("{indent}{}", " ".repeat(indent_size))
             } else {
-                compact_str::format_compact!("{indent}\t")
+                vim_core::format_vim!("{indent}\t")
             }
         } else {
             indent

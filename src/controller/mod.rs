@@ -27,13 +27,13 @@ pub(crate) use pipeline_outcome::PipelineOutcome;
 
 use std::collections::HashSet;
 
-use compact_str::CompactString;
 use godot::classes::CodeEdit;
 use godot::prelude::*;
 use vim_core::document::Document;
 use vim_core::execution::{VimEngine, VimHost, VimSession};
 use vim_core::keymap::KeyEvent;
 use vim_core::primitives::Direction;
+use vim_core::VimString;
 
 use crate::bridge::godot_host::{GodotHost, PendingUiAction};
 use crate::host::SecurityPolicy;
@@ -425,7 +425,7 @@ impl VimController {
         } else {
             None
         };
-        let cmdline_input = CompactString::from(self.engine().state().command_line().input());
+        let cmdline_input = VimString::from(self.engine().state().command_line().input());
         let cmdline_cursor = self.engine().state().command_line().cursor();
         let recording_register = self
             .engine()
@@ -435,7 +435,7 @@ impl VimController {
             .map(|r| r.char());
         let search_pattern = self.engine().state().search().pattern().map(|p| {
             (
-                CompactString::from(p),
+                VimString::from(p),
                 Direction::from(self.engine().state().search().direction()),
             )
         });
@@ -976,7 +976,8 @@ impl VimController {
         // Seed editor-idiom multi-cursor bindings as defaults.
         // These are sourced BEFORE the user's .godot-vimrc, so user config
         // overrides them (later `nmap` on the same key wins).
-        let _ = self.engine_mut().source_config_text(
+        let _ = crate::config::source_text(
+            self.engine_mut(),
             "nmap <C-S-Down> :addcursor below<CR>\n\
              vmap <C-S-Down> :addcursor below<CR>\n\
              nmap <C-S-Up> :addcursor above<CR>\n\
@@ -1010,8 +1011,11 @@ impl VimController {
             }
         }
 
-        let mut response = self.engine_mut().source_config_text(text);
-        let effects = response.take_effects();
+        let mut response = crate::config::source_text(self.engine_mut(), text);
+        let mut effects = response.take_effects();
+        effects.push(vim_core::effects::Effect::show_message(
+            "Config file sourced",
+        ));
         // When detached (no session), config effects are logged but cannot
         // be routed to shell state. This happens during initial enter_tree
         // before any editor is attached.
@@ -1538,7 +1542,7 @@ mod tests {
         let mut c = VimController::new();
         let snap = SettingsSnapshot::for_tests(5, 100, 1000);
         c.apply_settings(&snap);
-        let _ = c.engine_mut().source_config_text("set tw=0");
+        let _ = crate::config::source_text(c.engine_mut(), "set tw=0");
 
         let mut next = snap.clone();
         next.ignorecase = true;
@@ -1562,7 +1566,7 @@ mod tests {
         let mut c = VimController::new();
         let snap = SettingsSnapshot::for_tests(5, 100, 1000);
         c.apply_settings(&snap);
-        let _ = c.engine_mut().source_config_text("set tw=20");
+        let _ = crate::config::source_text(c.engine_mut(), "set tw=20");
         assert_eq!(effective_tw(&c), OptionValue::Unsigned(20));
 
         let mut next = snap.clone();
@@ -1577,7 +1581,7 @@ mod tests {
         let mut c = VimController::new();
         let snap = SettingsSnapshot::for_tests(5, 100, 1000);
         c.apply_settings(&snap);
-        let _ = c.engine_mut().source_config_text("set tw=20");
+        let _ = crate::config::source_text(c.engine_mut(), "set tw=20");
         let id = InstanceId::from_i64(7);
         let saved = c.engine_mut().on_buffer_leave(0);
         c.shell_state_mut().buffer(id).set_engine_state(saved);
@@ -1598,7 +1602,7 @@ mod tests {
         let mut c = VimController::new();
         let snap = SettingsSnapshot::for_tests(5, 100, 1000);
         c.apply_settings(&snap);
-        let _ = c.engine_mut().source_config_text("set tw=20");
+        let _ = crate::config::source_text(c.engine_mut(), "set tw=20");
         c.forget_applied_settings();
         c.apply_settings(&snap);
         assert_eq!(effective_tw(&c), OptionValue::Unsigned(20));
@@ -1609,7 +1613,7 @@ mod tests {
         use vim_core::primitives::{OptionId, OptionValue};
         let mut c = VimController::new();
         c.sync_indent(true, 4, 4);
-        let _ = c.engine_mut().source_config_text("set ts=8 sw=8");
+        let _ = crate::config::source_text(c.engine_mut(), "set ts=8 sw=8");
         assert!(c.sync_indent_if_changed(true, 4, 2));
         let e = c.engine();
         assert_eq!(
@@ -1777,7 +1781,8 @@ mod tests {
     #[test]
     fn the_engine_ignores_filetype_lines() {
         let mut engine = vim_core::execution::VimEngine::new();
-        let mut response = engine.source_config_text("filetype plugin off\nfiletype on");
+        let mut response =
+            crate::config::source_text(&mut engine, "filetype plugin off\nfiletype on");
         let errors = response
             .take_effects()
             .into_iter()
@@ -1877,24 +1882,22 @@ mod tests {
     }
 
     /// `:filetype` takes a trailing `"` comment and a `|`, and a leading
-    /// colon, as in Vim.
+    /// colon, as in Vim. It is `EX_TRLBAR` (Vim's `ex_cmds.h`), so the
+    /// command after its `|` runs.
     #[test]
     fn vimrc_filetype_lines_take_comments_bars_and_a_colon() {
-        for line in [
-            "filetype plugin off \" no plugins",
-            "filetype plugin off | set tw=10",
-            ":filetype plugin off",
-            "  :filetype plugin off",
+        for (line, after_bar) in [
+            ("filetype plugin off \" no plugins", false),
+            ("filetype plugin off | set tw=10", true),
+            (":filetype plugin off", false),
+            ("  :filetype plugin off", false),
         ] {
             let mut c = VimController::new();
             let tw = c.engine().options().textwidth();
             c.reload_config(line);
             assert!(!c.ctx.filetype.plugins_run(), "{line}");
-            assert_eq!(
-                c.engine().options().textwidth(),
-                tw,
-                "{line}: after | is not run"
-            );
+            let expected = if after_bar { 10 } else { tw };
+            assert_eq!(c.engine().options().textwidth(), expected, "{line}");
         }
     }
 
@@ -2054,7 +2057,7 @@ mod tests {
         let snap = SettingsSnapshot::for_tests(5, 100, 1000);
         c.apply_settings(&snap);
         c.sync_indent(true, 4, 4);
-        let _ = c.engine_mut().source_config_text("set tw=0 ts=8");
+        let _ = crate::config::source_text(c.engine_mut(), "set tw=0 ts=8");
 
         // What recover_controller_from_panic does with no editor attached.
         assert!(!c.take_replaced_engine());
@@ -2093,7 +2096,7 @@ mod tests {
     fn indent_resync_skips_an_unchanged_code_edit() {
         let mut c = VimController::new();
         c.sync_indent(true, 4, 4);
-        let _ = c.engine_mut().source_config_text("set ts=8 sw=2 noet");
+        let _ = crate::config::source_text(c.engine_mut(), "set ts=8 sw=2 noet");
 
         assert!(!c.sync_indent_if_changed(true, 4, 4));
         let opts = c.engine().options();
@@ -2108,7 +2111,7 @@ mod tests {
     fn indent_resync_follows_a_changed_code_edit() {
         let mut c = VimController::new();
         c.sync_indent(true, 4, 4);
-        let _ = c.engine_mut().source_config_text("set ts=8");
+        let _ = crate::config::source_text(c.engine_mut(), "set ts=8");
 
         assert!(c.sync_indent_if_changed(false, 2, 2));
         let opts = c.engine().options();
@@ -2127,7 +2130,7 @@ mod tests {
         c.sync_indent(true, 4, 4);
         // NOTIFICATION_EDITOR_SETTINGS_CHANGED: the CodeEdit now reports 2.
         assert!(c.sync_indent_if_changed(true, 2, 4));
-        let _ = c.engine_mut().source_config_text("set sw=8");
+        let _ = crate::config::source_text(c.engine_mut(), "set sw=8");
         // settings_changed for an Output filter toggle.
         assert!(!c.sync_indent_if_changed(true, 2, 4));
         assert_eq!(c.engine().options().shiftwidth(), 8);
@@ -2138,7 +2141,7 @@ mod tests {
         let mut c = VimController::new();
         c.sync_indent(true, 4, 4);
         c.forget_applied_settings();
-        let _ = c.engine_mut().source_config_text("set ts=8");
+        let _ = crate::config::source_text(c.engine_mut(), "set ts=8");
 
         assert!(c.sync_indent_if_changed(true, 4, 4));
         assert_eq!(c.engine().options().tabstop(), 4);

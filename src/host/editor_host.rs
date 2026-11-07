@@ -80,13 +80,13 @@ pub(crate) fn attached_script_path(
 }
 
 mod godot_impl {
-    use compact_str::CompactString;
     use godot::classes::file_access::ModeFlags;
     use godot::classes::{
         CodeEdit, EditorInterface, FileAccess, InputEventShortcut, MenuButton, ResourceLoader,
         ResourceSaver, Script, ScriptEditorBase, Shortcut, Viewport,
     };
     use godot::prelude::*;
+    use vim_core::VimString;
 
     use super::EditorHost;
     use crate::bridge::godot_calls::{self, SHORTCUT_CLOSE_FILE};
@@ -212,15 +212,15 @@ mod godot_impl {
     fn read_via_godot(path: &str) -> Result<String, HostError> {
         let file = FileAccess::open(&GString::from(path), ModeFlags::READ).ok_or_else(|| {
             HostError::CantOpenFile {
-                path: CompactString::from(path),
+                path: VimString::from(path),
                 detail: None,
             }
         })?;
         let length = usize::try_from(file.get_length()).unwrap_or(usize::MAX);
         if length > MAX_READ_FILE_SIZE {
             return Err(HostError::CantOpenFile {
-                path: CompactString::from(path),
-                detail: Some(CompactString::from(format!(
+                path: VimString::from(path),
+                detail: Some(VimString::from(format!(
                     "File too large (>10MB): {} bytes",
                     length
                 ))),
@@ -291,8 +291,8 @@ mod godot_impl {
                 .done();
             if err != godot::global::Error::OK {
                 return Err(HostError::WriteFailed {
-                    path: CompactString::from(&save_path),
-                    detail: Some(CompactString::from(format!("{err:?}"))),
+                    path: VimString::from(&save_path),
+                    detail: Some(VimString::from(format!("{err:?}"))),
                 });
             }
 
@@ -315,13 +315,13 @@ mod godot_impl {
                         Ok(())
                     } else {
                         Err(HostError::CantOpenFile {
-                            path: CompactString::from(path),
-                            detail: Some(CompactString::from("Resource is not a script")),
+                            path: VimString::from(path),
+                            detail: Some(VimString::from("Resource is not a script")),
                         })
                     }
                 }
                 None => Err(HostError::CantOpenFile {
-                    path: CompactString::from(path),
+                    path: VimString::from(path),
                     detail: None,
                 }),
             }
@@ -333,8 +333,8 @@ mod godot_impl {
             } else {
                 crate::host::file::check_fs_file_size(path)?;
                 std::fs::read_to_string(path).map_err(|e| HostError::CantOpenFile {
-                    path: CompactString::from(path),
-                    detail: Some(CompactString::from(e.to_string())),
+                    path: VimString::from(path),
+                    detail: Some(VimString::from(e.to_string())),
                 })
             }
         }
@@ -353,8 +353,8 @@ pub(crate) use godot_impl::GodotEditorHost;
 pub(super) mod mock {
     use super::EditorHost;
     use crate::host::error::HostError;
-    use compact_str::CompactString;
     use std::collections::HashMap;
+    use vim_core::VimString;
 
     /// Lifecycle state of the mock buffer, replacing three booleans
     /// (`modified`, `saved`, `closed`) whose 8 combinations included 5
@@ -524,12 +524,12 @@ pub(super) mod mock {
             if !path.starts_with("res://") && !path.starts_with("user://") {
                 crate::host::file::check_fs_file_size(path)?;
                 std::fs::read_to_string(path).map_err(|e| HostError::CantOpenFile {
-                    path: CompactString::from(path),
-                    detail: Some(CompactString::from(e.to_string())),
+                    path: VimString::from(path),
+                    detail: Some(VimString::from(e.to_string())),
                 })
             } else {
                 Err(HostError::CantOpenFile {
-                    path: CompactString::from(path),
+                    path: VimString::from(path),
                     detail: None,
                 })
             }

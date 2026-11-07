@@ -7,11 +7,11 @@
 
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use compact_str::CompactString;
 use godot::classes::{CodeEdit, Os};
 use godot::prelude::*;
 use vim_core::execution::{HostRequestId, HostResult};
 use vim_core::primitives::Range;
+use vim_core::VimString;
 
 use crate::bridge::code_edit_ext::CodeEditExt;
 
@@ -145,7 +145,7 @@ pub(super) fn handle_external_command(id: HostRequestId, command: &str) -> HostR
 
     HostResult::Data {
         id,
-        data: CompactString::from(output),
+        data: VimString::from(output),
         offset: None,
     }
 }
@@ -180,14 +180,14 @@ pub(super) fn handle_filter(id: HostRequestId, input_text: &str, command: &str) 
 
     let stderr = if exit_code != 0 {
         log::warn!("Filter command exited with code {exit_code}: {command}");
-        Some(CompactString::from(format!("shell returned {exit_code}")))
+        Some(VimString::from(format!("shell returned {exit_code}")))
     } else {
         None
     };
 
     HostResult::FilteredRange {
         id,
-        replacement: CompactString::from(output),
+        replacement: VimString::from(output),
         cursor_offset: None,
         stderr,
         mark_dot_offset: None,
@@ -246,7 +246,7 @@ pub(super) fn handle_reindent(
 
     HostResult::FilteredRange {
         id,
-        replacement: CompactString::from(replacement),
+        replacement: VimString::from(replacement),
         cursor_offset: None,
         stderr: None,
         mark_dot_offset: None,

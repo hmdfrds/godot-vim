@@ -2,12 +2,12 @@
 //! buffer navigation, shell commands, custom Godot commands) with security
 //! policy enforcement.
 
-use compact_str::CompactString;
 use godot::classes::{CodeEdit, EditorInterface, InputEventShortcut};
 use godot::prelude::*;
 use vim_core::execution::{
     CmdlineCompletionEntry, CmdlineCompletionKind, HostRequest, HostRequestId, HostResult,
 };
+use vim_core::VimString;
 
 use super::{host_failure, host_success};
 use crate::settings::{FileAccessScope, ShellExecution};
@@ -45,7 +45,7 @@ fn eval_to_host_result(id: HostRequestId, expr: &str, mode_str: &str) -> HostRes
     match super::eval::eval_simple_expression(expr, mode_str) {
         Ok(value) => HostResult::Data {
             id,
-            data: CompactString::from(value.as_ref()),
+            data: VimString::from(value.as_ref()),
             offset: None,
         },
         Err(e) => host_failure(id, e),
@@ -252,7 +252,7 @@ pub(crate) fn execute(
                 .join("\n");
             HostResult::Success {
                 id: request.id(),
-                message: Some(CompactString::from(text)),
+                message: Some(VimString::from(text)),
             }
         }
 
@@ -307,7 +307,7 @@ pub(crate) fn execute(
             };
             HostResult::Data {
                 id: request.id(),
-                data: CompactString::from(text),
+                data: VimString::from(text),
                 offset: None,
             }
         }
@@ -509,7 +509,7 @@ pub(crate) fn execute(
                                 let name = s.to_string();
                                 if !name.is_empty() && name.starts_with(prefix.as_str()) {
                                     candidates.push(CmdlineCompletionEntry {
-                                        text: CompactString::from(name),
+                                        text: VimString::from(name),
                                         description: None,
                                         detail: None,
                                     });
@@ -523,7 +523,7 @@ pub(crate) fn execute(
                 for cmd in super::custom_commands::list_all_commands() {
                     if cmd.starts_with(prefix.as_str()) {
                         candidates.push(CmdlineCompletionEntry {
-                            text: CompactString::from(*cmd),
+                            text: VimString::from(*cmd),
                             description: None,
                             detail: None,
                         });
@@ -563,7 +563,7 @@ pub(crate) fn execute(
             match crate::config::writer::write_text_to_file(path, &content) {
                 Ok(()) => HostResult::Success {
                     id: request.id(),
-                    message: Some(CompactString::from(format!("Wrote {path}"))),
+                    message: Some(VimString::from(format!("Wrote {path}"))),
                 },
                 Err(e) => host_failure(request.id(), e),
             }

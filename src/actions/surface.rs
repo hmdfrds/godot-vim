@@ -27,8 +27,8 @@
 //! See `DESIGN-rebindable-nav.md` (design notes, kept outside this repo) §3.3, §3.7, §4.4 and §5.4.
 
 use bitflags::bitflags;
-use compact_str::CompactString;
 use godot::prelude::{Gd, InstanceId};
+use vim_core::VimString;
 
 use super::action::ActionCtx;
 use super::caps::Caps;
@@ -106,8 +106,8 @@ pub(crate) struct ChainNode {
     /// The concrete class name, e.g. `"FileSystemTree"`. Used for ancestor
     /// lookups and diagnostics; **not** for widget identification, which goes
     /// through [`ChainNode::classes`] so subclasses answer correctly.
-    pub(crate) class: CompactString,
-    pub(crate) name: CompactString,
+    pub(crate) class: VimString,
+    pub(crate) name: VimString,
     pub(crate) instance: InstanceId,
     /// Recorded `is_class` answers over the closed vocabulary.
     pub(crate) classes: ClassMask,
@@ -121,8 +121,8 @@ impl ChainNode {
              `foreign` miss a non-attached CodeEdit"
         );
         Self {
-            class: CompactString::from(class),
-            name: CompactString::from(name),
+            class: VimString::from(class),
+            name: VimString::from(name),
             instance,
             classes,
         }

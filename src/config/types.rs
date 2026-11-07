@@ -449,6 +449,7 @@ const HANDLED_MAP_MODE_PREFIXES: &[vim_core::primitives::MapModePrefix] = &[
     vim_core::primitives::MapModePrefix::Command,
     vim_core::primitives::MapModePrefix::VisualOnly,
     vim_core::primitives::MapModePrefix::SelectOnly,
+    vim_core::primitives::MapModePrefix::InsertCommand,
 ];
 
 #[cfg(test)]

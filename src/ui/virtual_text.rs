@@ -9,9 +9,9 @@
 
 use std::collections::HashMap;
 
-use compact_str::CompactString;
 use godot::classes::{CodeEdit, Control, IControl};
 use godot::prelude::*;
+use vim_core::VimString;
 
 use crate::bridge::code_edit_ext::CodeEditExt;
 use crate::safety::panic_guard;
@@ -41,8 +41,8 @@ pub(crate) enum VirtualTextStyle {
 pub(crate) struct VirtualTextEntry {
     pub(crate) line: i32,
     pub(crate) col: i32,
-    pub(crate) text: CompactString,
-    pub(crate) namespace: CompactString,
+    pub(crate) text: VimString,
+    pub(crate) namespace: VimString,
     pub(crate) style: VirtualTextStyle,
 }
 
@@ -65,7 +65,7 @@ struct DrawCmd {
 pub(crate) struct VirtualTextOverlay {
     base: Base<Control>,
     /// Logical entries keyed by namespace for independent clear/update.
-    entries: HashMap<CompactString, Vec<VirtualTextEntry>>,
+    entries: HashMap<VimString, Vec<VirtualTextEntry>>,
     /// Pre-computed pixel rectangles consumed by `_draw()`.
     draw_list: Vec<DrawCmd>,
 }

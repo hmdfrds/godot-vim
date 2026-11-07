@@ -11,10 +11,10 @@
 //! id can be carried inside a `KeyEvent` as `Key::Action(u32)` and flow
 //! through machinery that knows nothing about Godot.
 
-use compact_str::CompactString;
 use godot::classes::Control;
 use godot::prelude::*;
 use vim_core::keymap::KeyEvent;
+use vim_core::VimString;
 
 use super::bind::Consumption;
 use super::caps::Caps;
@@ -59,7 +59,7 @@ pub(crate) const MAX_ACTION_COUNT: i64 = 100;
 /// `:source`, or a recursive mapping chain, so a binding read from a
 /// project-level vimrc cannot become code execution.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub(crate) struct Params(Vec<(CompactString, i64)>);
+pub(crate) struct Params(Vec<(VimString, i64)>);
 
 impl Params {
     pub(crate) fn new() -> Self {
@@ -81,7 +81,7 @@ impl Params {
     pub(crate) fn set_int(&mut self, key: &str, value: i64) {
         match self.0.iter_mut().find(|(k, _)| k.as_str() == key) {
             Some((_, v)) => *v = value,
-            None => self.0.push((CompactString::from(key), value)),
+            None => self.0.push((VimString::from(key), value)),
         }
     }
 
@@ -176,7 +176,7 @@ pub(crate) enum RuleTarget {
     /// Hand the key back to Godot untouched.
     Native,
     /// Delegate to one of Godot's own registered editor shortcuts.
-    Shortcut(CompactString),
+    Shortcut(VimString),
 }
 
 /// A named verb: what it is called, what it needs, and what it does.

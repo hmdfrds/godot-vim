@@ -624,7 +624,7 @@ mod tests {
         prev.apply_delta(None, engine.options_mut());
         assert_eq!(engine.options().textwidth(), 100);
 
-        let _ = engine.source_config_text("set tw=0");
+        let _ = crate::config::source_text(&mut engine, "set tw=0");
         assert_eq!(engine.options().textwidth(), 0);
 
         let mut next = prev.clone();
@@ -642,7 +642,7 @@ mod tests {
         let mut engine = vim_core::execution::VimEngine::new();
         let prev = make_snapshot(5, 100, 1000);
         prev.apply_delta(None, engine.options_mut());
-        let _ = engine.source_config_text("set tw=0");
+        let _ = crate::config::source_text(&mut engine, "set tw=0");
 
         let mut next = prev.clone();
         next.textwidth = 60;

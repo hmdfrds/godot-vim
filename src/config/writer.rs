@@ -12,7 +12,7 @@ use godot::prelude::*;
 use super::types::{mapping_to_vim_command, ConfigDocument, ConfigLine};
 
 /// Serialize a `ConfigDocument` to `.godot-vimrc` text. The output is
-/// consumable by both `source_config_text()` (for the engine) and
+/// consumable by both `source_script()` (for the engine) and
 /// `parse_config()` (for roundtrip fidelity).
 pub(crate) fn serialize(doc: &ConfigDocument) -> String {
     let mut output = String::new();

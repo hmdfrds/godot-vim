@@ -172,11 +172,11 @@ impl VimHost for MockHost {
     }
 
     fn viewport(&self) -> ViewportInfo {
-        ViewportInfo {
-            first_line: codec::i32_to_usize(self.editor.get_first_visible_line()),
-            height: codec::i32_to_usize(self.editor.get_visible_line_count()),
-            width: 80,
-        }
+        ViewportInfo::new(
+            codec::i32_to_usize(self.editor.get_first_visible_line()),
+            codec::i32_to_usize(self.editor.get_visible_line_count()),
+            80,
+        )
     }
 
     fn selection(&self) -> Option<SelectionRange> {
