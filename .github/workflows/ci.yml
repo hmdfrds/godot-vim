@@ -23,9 +23,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
+      # Installs the version and components rust-toolchain.toml names.
+      - run: rustup toolchain install --no-self-update
 
       - uses: Swatinem/rust-cache@v2
 
@@ -63,7 +62,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: dtolnay/rust-toolchain@stable
+      - run: rustup toolchain install --no-self-update
 
       - uses: Swatinem/rust-cache@v2
 
@@ -89,9 +88,9 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-linux-android, x86_64-linux-android
+      - run: |
+          rustup toolchain install --no-self-update
+          rustup target add aarch64-linux-android x86_64-linux-android
 
       - uses: Swatinem/rust-cache@v2
         with:

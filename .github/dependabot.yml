@@ -19,3 +19,9 @@ updates:
       - dependency-name: "godot"
       # Our own git dependency, bumped by hand with its tag.
       - dependency-name: "vim-core"
+  # The Rust version in rust-toolchain.toml, so a bump arrives as a PR that CI
+  # checks, new clippy lints included.
+  - package-ecosystem: "rust-toolchain"
+    directory: "/"
+    schedule:
+      interval: "monthly"
