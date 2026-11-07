@@ -28,29 +28,13 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
 
-      # `-D warnings` here covers rustc only. It is deliberately NOT global:
-      # promoting clippy lints to errors would defeat the counting step below,
-      # which is what actually holds the line on pre-existing debt.
       - name: Test
         env:
           RUSTFLAGS: -D warnings
         run: cargo test --all-targets --locked
 
-      # Deliberately NOT `-D warnings` for the whole crate: four pre-existing
-      # lint sites predate this workflow and are tracked separately. What must
-      # not regress is the count, so the step fails only if a NEW site appears.
-      - name: Clippy (no new lint sites)
-        shell: bash
-        run: |
-          cargo clippy --all-targets --message-format=short 2>&1 \
-            | grep -E '^[^ ]+\.rs:[0-9]+:[0-9]+: warning' \
-            | sed 's/: warning.*//' | sort -u > /tmp/lints.txt || true
-          echo "lint sites:"; cat /tmp/lints.txt
-          count=$(wc -l < /tmp/lints.txt)
-          if [ "$count" -gt 4 ]; then
-            echo "::error::clippy lint sites rose to $count (baseline 4)"
-            exit 1
-          fi
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
 
       - name: Rustfmt
         run: cargo fmt --all --check
