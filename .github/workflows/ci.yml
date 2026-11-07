@@ -9,8 +9,10 @@ on:
   schedule:
     - cron: "23 5 * * 1"
 
+# A new push to a PR cancels its older run. Every other run gets its own group,
+# so no main commit loses its verdict, which release.yml's gate needs.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: true
 
 env:
