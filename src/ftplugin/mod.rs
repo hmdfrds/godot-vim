@@ -77,8 +77,7 @@ pub(crate) fn parse_filetype_command(line: &str) -> Option<FiletypeCommand> {
 }
 
 /// [`parse_filetype_command`], plus the text after a `|` that ends the
-/// command, if any. The host runs only the `:filetype` part; the sandbox
-/// uses the rest to judge the whole line.
+/// command, if any.
 ///
 /// `:filetype` is `EX_TRLBAR` in Vim: its arguments end at the first `"`,
 /// which starts a comment that runs to the end of the line, or at the first

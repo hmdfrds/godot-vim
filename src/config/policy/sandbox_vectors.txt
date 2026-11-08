@@ -4,10 +4,10 @@ S	set shell!
 S	set kp?
 S	set ep+=x
 S	set noshell
-R	nnoremap x :'é<CR>
-R	nnoremap x :1,'éd<CR>
-R	nnoremap x <Cmd>'é<CR>
-R	nnoremap x :'é
+R	nnoremap x :'é<CR>	an unknown mark: an error
+R	nnoremap x :1,'éd<CR>	an unknown mark: an error
+R	nnoremap x <Cmd>'é<CR>	an unknown mark: an error
+R	nnoremap x :'é	an unknown mark: an error
 K	nnoremap x :s/'é/e/<CR>
 K	nnoremap x :'a,'bs/é/e/<CR>
 K	panelmap dock j native
@@ -57,7 +57,7 @@ K	nnoremap x :<Bar><CR>
 S	nnoremap x :so fs/a/b/v/a/v/a/<CR>
 N	nnoremap x :\\so fnormal !lsnormal \\<CR>
 K	nnoremap x :<Bar>//" /s/a/b/<CR>
-R	nnoremap x :1,so fg/<CR>
+R	nnoremap x :1,so fg/<CR>	a range before :so: an error
 K	nnoremap x :normal <CR>
 S	nnoremap x :v/a/!ls<CR>
 S	nnoremap x : so f<Bar>so fsil <CR>
@@ -120,7 +120,7 @@ N	nnoremap x :sil sil / !lsso f<CR>
 K	nnoremap x :"g/a//g/<CR>
 K	nnoremap x :  <CR>
 S	nnoremap x :nnoremap y Zd<CR>
-R	nnoremap x :s/a/b/s/a/b/<Bar>so f<CR>
+R	nnoremap x :s/a/b/s/a/b/<Bar>so f<CR>	:s with trailing characters: an error
 K	nnoremap x :1,1,"sil d<CR>
 N	nnoremap x :\\'a!lssil <CR>
 K	nnoremap x :"'anormal so f"/g/<CR>
@@ -138,7 +138,7 @@ N	nnoremap x :g/édsil s/a/b/!ls"<CR>
 S	nnoremap x :so fdddé<CR>
 N	nnoremap x :g/a//!ls<CR>
 K	nnoremap x :1,1,ds/a/b//d<CR>
-R	nnoremap x :1,so f<CR>
+R	nnoremap x :1,so f<CR>	a range before :so: an error
 K	nnoremap x :v/a/\\ <CR>
 K	nnoremap x :'a1,\\so fg/dg/<CR>
 K	nnoremap x :\\<Bar><CR>
@@ -219,7 +219,7 @@ K	nnoremap x :g/<Bar>ég/a/sil \\<CR>
 N	nnoremap x :sil s/a/b/nnoremap y Z nnoremap y Zg/!ls<CR>
 K	nnoremap x :dsil d/g/a/so fg/<CR>
 S	nnoremap x :nnoremap y Zg/a/ s/a/b/<CR>
-R	nnoremap x :'aso fv/a/"<CR>
+R	nnoremap x :'aso fv/a/"<CR>	a mark before :so: E481
 K	nnoremap x :/<Bar><CR>
 S	nnoremap x :so f\\/d<Bar>"\\<CR>
 K	nnoremap x :énormal nnoremap y Zg/so fés/a/b/<CR>
@@ -256,7 +256,7 @@ K	nnoremap x :/sil <CR>
 N	nnoremap x :normal <Bar>d<CR>
 S	nnoremap x :nnoremap y Znnoremap y Z<CR>
 N	nnoremap x :"!ls<CR>
-R	nnoremap x :'aso fdnormal <CR>
+R	nnoremap x :'aso fdnormal <CR>	a mark before :so: E481
 K	nnoremap x :<Bar>s/a/b/\\sil <CR>
 K	nnoremap x :g/a//sil <CR>
 S	nnoremap x :/!ls/ nnoremap y Z\\<CR>
@@ -292,7 +292,7 @@ K	nnoremap x :dg/ <Bar>'ag/a/<CR>
 K	nnoremap x : 1,g/a/'a/ <CR>
 S	nnoremap x :nnoremap y Zésil so f<CR>
 K	nnoremap x :\\ <CR>
-R	nnoremap x :\\1,v/a/so f "<CR>
+R	nnoremap x :\\1,v/a/so f "<CR>	not a command: E492
 K	nnoremap x :<Bar>sil s/a/b/sil <Bar>g/g/<CR>
 K	nnoremap x :éés/a/b/s/a/b/<CR>
 N	nnoremap x :g/"!ls/<CR>
@@ -310,7 +310,7 @@ K	nnoremap x :'av/a/v/a/1,é<CR>
 K	nnoremap x :<Bar>g/<CR>
 K	nnoremap x :"//<CR>
 K	nnoremap x :1,dg/a/<CR>
-R	nnoremap x :\\v/a/so fé<CR>
+R	nnoremap x :\\v/a/so fé<CR>	not a command: E492
 K	nnoremap x :dsil normal <CR>
 K	nnoremap x :'ad"<CR>
 N	nnoremap x :normal !ls<CR>
@@ -338,7 +338,7 @@ N	nnoremap x : normal "normal <CR>
 N	nnoremap x :normal dnnoremap y Zév/a/<CR>
 K	nnoremap x :v/a//1,ds/a/b/\\sil <CR>
 N	nnoremap x :g/!lsv/a/<CR>
-R	nnoremap x :1,so fnormal g/a/<Bar>g/<CR>
+R	nnoremap x :1,so fnormal g/a/<Bar>g/<CR>	a range before :so: an error
 N	nnoremap x :sil normal normal  normal g/<CR>
 K	nnoremap x :ds/a/b/\\ <CR>
 K	nnoremap x :"normal 1,\\g/a/\\<CR>
@@ -394,7 +394,7 @@ S	nnoremap x :!lss/a/b/ 'a<CR>
 K	nnoremap x :dso f "nnoremap y Z1,s/a/b/<CR>
 K	nnoremap x :1,'anormal <CR>
 S	nnoremap x :nnoremap y Z1,d  <CR>
-R	nnoremap x :"<Bar>so f/"\\<CR>
+R	nnoremap x :"<Bar>so f/"\\<CR>	the rest of the line is a comment
 S	nnoremap x :g/a/nnoremap y Z<CR>
 K	nnoremap x : g/s/a/b/ g/a/'a<CR>
 S	nnoremap x :v/a/so f<CR>
@@ -539,7 +539,7 @@ N	nnoremap x :<Bar>normal normal g/a/normal 'a<CR>
 S	nnoremap x :'a<Bar>!ls<CR>
 S	nnoremap x :!ls'a<CR>
 S	nnoremap x :s/a/b/<Bar> nnoremap y Zg/<CR>
-R	nnoremap x :\\<Bar>nnoremap y Zs/a/b/<CR>
+R	nnoremap x :\\<Bar>nnoremap y Zs/a/b/<CR>	not a command: E492
 K	nnoremap x :dso fg/<CR>
 K	nnoremap x :éds/a/b/normal sil sil g/a/<CR>
 K	nnoremap x :'asil dnnoremap y Z<CR>
@@ -562,7 +562,7 @@ K	nnoremap x :g/é<CR>
 K	nnoremap x :v/a/s/a/b/<CR>
 K	nnoremap x :'ad<CR>
 K	nnoremap x :d'a <CR>
-R	nnoremap x :sil sil \\v/a/so f<CR>
+R	nnoremap x :sil sil \\v/a/so f<CR>	not a command: E492
 K	nnoremap x :/normal g/a/<CR>
 K	nnoremap x :s/a/b/sil d"<CR>
 K	nnoremap x :\\so f<CR>
@@ -642,7 +642,7 @@ N	nnoremap x :normal 1,1,so f<CR>
 N	nnoremap x :normal /'a<CR>
 S	nnoremap x :nnoremap y Zv/a/ <Bar><Bar><CR>
 N	nnoremap x :v/a/normal "é/<CR>
-R	nnoremap x :dd<Bar>so f<CR>
+R	nnoremap x :dd<Bar>so f<CR>	not a command: E492
 S	nnoremap x :g/a/nnoremap y Z'a<Bar>'av/a/s/a/b/<CR>
 K	nnoremap x :g/\\<CR>
 K	nnoremap x :1,g/a/v/a/<CR>
@@ -673,7 +673,7 @@ S	nnoremap x :nnoremap y Z\\<Bar><Bar>"<CR>
 S	nnoremap x :g/g/v/a/sil <Bar><Bar>!ls<CR>
 K	nnoremap x :\\"s/a/b/<Bar>sil s/a/b/<CR>
 K	nnoremap x :\\/é<CR>
-R	nnoremap x :'aso f<Bar>g/'aso f<CR>
+R	nnoremap x :'aso f<Bar>g/'aso f<CR>	a mark before :so: E481
 K	nnoremap x :"'anormal g/g//<CR>
 N	nnoremap x :v/a/\\!lsdév/a/g/a/<CR>
 N	nnoremap x : d1,!lsso fsil <CR>
@@ -686,7 +686,7 @@ S	nnoremap x :nnoremap y Zg//g/a/<CR>
 K	nnoremap x :/d1,<CR>
 K	nnoremap x :'as/a/b/\\<CR>
 S	nnoremap x :nnoremap y Z!ls<CR>
-R	nnoremap x :sil 1,so f1,nnoremap y Z<CR>
+R	nnoremap x :sil 1,so f1,nnoremap y Z<CR>	a range before :so: an error
 K	nnoremap x :"so f<Bar>1,s/a/b/1,<CR>
 K	nnoremap x :\\"g/<CR>
 S	nnoremap x :!ls1,\\<CR>
@@ -712,10 +712,10 @@ N	nnoremap x :"sil so f!ls'aso f<Bar><CR>
 K	nnoremap x :'a\\nnoremap y Zsil v/a/'a<CR>
 S	nnoremap x :!lsso f<Bar>v/a/é"<CR>
 K	nnoremap x :v/a/sil g/<CR>
-R	nnoremap x :'aso fso f<CR>
+R	nnoremap x :'aso fso f<CR>	a mark before :so: E481
 K	nnoremap x :'a/s/a/b/\\<CR>
 K	nnoremap x :g/ 1,"<CR>
-R	nnoremap x :\\1,<Bar>nnoremap y Z/<CR>
+R	nnoremap x :\\1,<Bar>nnoremap y Z/<CR>	not a command: E492
 K	nnoremap x :"v/a/nnoremap y Z1,<CR>
 K	nnoremap x :g/so f<CR>
 N	nnoremap x :\\ /"!ls"'a<CR>
@@ -957,7 +957,7 @@ K	nnoremap x :s/a/b/sil nnoremap y Z/<Bar><CR>
 K	nnoremap x :és/a/b/g/a/nnoremap y Zso fsil nnoremap y Z<CR>
 S	nnoremap x :so f"so f \\/ <CR>
 K	nnoremap x :s/a/b/s/a/b/é"'a1,<CR>
-R	nnoremap x :1,so fs/a/b/<CR>
+R	nnoremap x :1,so fs/a/b/<CR>	a range before :so: an error
 K	nnoremap x :s/a/b/<Bar>1,\\/dsil <CR>
 K	nnoremap x :/ <CR>
 K	nnoremap x :v/a/s/a/b/s/a/b/<CR>
@@ -1022,7 +1022,7 @@ K	nnoremap x :s/a/b/g/d"<CR>
 S	nnoremap x :g/a/nnoremap y Zsil <CR>
 S	nnoremap x :!lsnormal  nnoremap y Z\\<CR>
 S	nnoremap x :!ls'aé\\\\<CR>
-R	nnoremap x : g/a/\\/so f\\\\<CR>
+R	nnoremap x : g/a/\\/so f\\\\<CR>	the command after the :g pattern is an error
 N	nnoremap x :\\g/a/1,"'a!lsé<CR>
 K	nnoremap x :/v/a/ 1,s/a/b/s/a/b/<CR>
 S	nnoremap x :'annoremap y Znormal 1,ésil normal <CR>
@@ -1067,10 +1067,10 @@ N	nnoremap x :<Bar>g/\\"!lsso fnnoremap y Z<CR>
 K	nnoremap x :dv/a/g/1,g/<Bar><CR>
 N	nnoremap x :normal "so f'as/a/b/normal <CR>
 K	nnoremap x :/s/a/b/g/a/d"<CR>
-R	nnoremap x :1,\\v/a/so fé<CR>
+R	nnoremap x :1,\\v/a/so fé<CR>	a range before :so: an error
 K	nnoremap x :g/<Bar>é<Bar>g/sil <CR>
 S	nnoremap x :!lsnnoremap y Z<CR>
-R	nnoremap x :\\é'aso fso f<CR>
+R	nnoremap x :\\é'aso fso f<CR>	not a command: E492
 K	nnoremap x :'av/a/<Bar><CR>
 K	nnoremap x :é1,<CR>
 K	nnoremap x :g/dnormal s/a/b/<Bar>g/a/<CR>
@@ -1119,7 +1119,7 @@ K	nnoremap x :g/1,/<CR>
 K	nnoremap x :éé<CR>
 K	nnoremap x :\\nnoremap y Zdso f<CR>
 K	nnoremap x :g/v/a/'a<CR>
-R	nnoremap x :v/a///so fg/a/'a<CR>
+R	nnoremap x :v/a///so fg/a/'a<CR>	the command after the :g pattern is an error
 S	nnoremap x :!lsnnoremap y Znormal !lsso f'av/a/<CR>
 K	nnoremap x :<Bar>g/a/éso fnnoremap y Zs/a/b/sil <CR>
 S	nnoremap x :/"/so f!lsnormal !ls<CR>
@@ -1159,7 +1159,7 @@ K	nnoremap x :g/v/a/1,v/a/<CR>
 S	nnoremap x :!lsg/a/d\\"<Bar><CR>
 K	nnoremap x :sil  g/é<Bar>'a <CR>
 K	nnoremap x :g/nnoremap y Zg/1, d<CR>
-R	nnoremap x :v/a/g/a/s/a/b/nnoremap y Z<Bar>nnoremap y Z<CR>
+R	nnoremap x :v/a/g/a/s/a/b/nnoremap y Z<Bar>nnoremap y Z<CR>	the command after the :g pattern is an error
 K	nnoremap x :<Bar>1,"sil <CR>
 K	nnoremap x :s/a/b/sil 'a<CR>
 N	nnoremap x :normal v/a/<CR>
@@ -1199,7 +1199,7 @@ K	nnoremap x :v/a/"nnoremap y Z éso f<CR>
 S	nnoremap x :so f!lsv/a/normal <Bar>!ls<CR>
 K	nnoremap x :/" /<CR>
 S	nnoremap x :nnoremap y Zg/a/g/ <Bar>"<CR>
-R	nnoremap x :\\v/a/g/a/so f<CR>
+R	nnoremap x :\\v/a/g/a/so f<CR>	not a command: E492
 N	nnoremap x :s/a/b/\\1,!ls\\<CR>
 S	nnoremap x :nnoremap y Zsil 1,<CR>
 N	nnoremap x : <Bar>v/a/normal sil v/a/g/a/<CR>
@@ -1210,7 +1210,7 @@ N	nnoremap x :<Bar>é!lss/a/b/sil <Bar><CR>
 K	nnoremap x :g/a/d/s/a/b/<CR>
 S	nnoremap x :so f'as/a/b/normal   <CR>
 S	nnoremap x :!lssil  nnoremap y Znormal <Bar>g/a/<CR>
-R	nnoremap x :'aso fsil \\ nnoremap y Z<CR>
+R	nnoremap x :'aso fsil \\ nnoremap y Z<CR>	a mark before :so: E481
 N	nnoremap x :é'aso f"so f !ls<CR>
 N	nnoremap x :g/!ls s/a/b/"g/a/<CR>
 N	nnoremap x :/!lsd<CR>
@@ -1265,7 +1265,7 @@ S	nnoremap x :!ls/s/a/b/g/s/a/b/\\1,<CR>
 K	nnoremap x :g/a/1,<CR>
 K	nnoremap x :g/g/a/"\\<Bar>normal <CR>
 K	nnoremap x :<Bar>1,1,<CR>
-R	nnoremap x :"so f<Bar>nnoremap y Z<CR>
+R	nnoremap x :"so f<Bar>nnoremap y Z<CR>	the rest of the line is a comment
 S	nnoremap x :!lsg/a/"!ls1,s/a/b/<CR>
 S	nnoremap x :sil so fé<Bar><CR>
 N	nnoremap x :g/"sil !ls'a\\sil <CR>
@@ -1302,7 +1302,7 @@ N	nnoremap x :g/a// !lsso fd <CR>
 K	nnoremap x :édg/a/so f<CR>
 K	nnoremap x : "nnoremap y Z<CR>
 S	nnoremap x :sil !lsnormal é<CR>
-R	nnoremap x :sil 'aso f'a/nnoremap y Z<CR>
+R	nnoremap x :sil 'aso f'a/nnoremap y Z<CR>	a mark before :so: E481
 K	nnoremap x :é'ag/a/normal <CR>
 N	nnoremap x :s/a/b/!ls1,<Bar>\\g/a/d<CR>
 K	nnoremap x :\\g/a/d'av/a/<CR>
@@ -1332,7 +1332,7 @@ S	nnoremap x :<Bar>nnoremap y Znnoremap y Zg/a/dg/a/so f<CR>
 K	nnoremap x :d\\v/a/<Bar><CR>
 K	nnoremap x :s/a/b/g/1,normal normal <CR>
 S	nnoremap x :so fg/g/<CR>
-R	nnoremap x :/g/1,so fs/a/b//<CR>
+R	nnoremap x :/g/1,so fs/a/b//<CR>	not a command: E492
 N	nnoremap x :<Bar>g/a/sil g/d!lsg/<CR>
 N	nnoremap x : normal  so fsil so f<CR>
 K	nnoremap x :1,normal "so f<CR>
@@ -1349,7 +1349,7 @@ K	nnoremap x :ésil <CR>
 N	nnoremap x :é\\so f!ls<CR>
 S	nnoremap x :sil so fnormal sil <CR>
 S	nnoremap x : nnoremap y Zsil é<CR>
-R	nnoremap x :'a'a<Bar>so f<Bar>nnoremap y Z/<CR>
+R	nnoremap x :'a'a<Bar>so f<Bar>nnoremap y Z/<CR>	not a command: E492
 S	nnoremap x :v/a//g/g/a/so f<CR>
 S	nnoremap x :nnoremap y Z év/a/é<CR>
 K	nnoremap x :1,<Bar>v/a/d/g/<CR>
@@ -1386,7 +1386,7 @@ K	nnoremap x :\\'ag/<CR>
 K	nnoremap x :v/a/1,<CR>
 S	nnoremap x :so f'a<Bar>normal 1,<CR>
 K	nnoremap x :g/a/v/a/  v/a/d<CR>
-R	nnoremap x :'aso fnormal <CR>
+R	nnoremap x :'aso fnormal <CR>	a mark before :so: E481
 K	nnoremap x :/so fs/a/b/<CR>
 S	nnoremap x :g/a/!ls"<CR>
 K	nnoremap x :"'ag/a/d\\s/a/b/'a<CR>
@@ -1404,14 +1404,14 @@ K	nnoremap x :s/a/b/g/a/normal <CR>
 K	nnoremap x :/nnoremap y Z'asil 1,<CR>
 K	nnoremap x :d/dnnoremap y Z<CR>
 N	nnoremap x :normal 1,<CR>
-R	nnoremap x :'aso f"<CR>
+R	nnoremap x :'aso f"<CR>	a mark before :so: E481
 N	nnoremap x :v/a/normal nnoremap y Z<CR>
 N	nnoremap x :normal nnoremap y Zs/a/b/<Bar>"sil v/a/<CR>
 S	nnoremap x :<Bar>nnoremap y Z'aso f"<CR>
 K	nnoremap x :s/a/b/v/a/\\'a<Bar>'a<CR>
 N	nnoremap x :g/'a\\ !ls <CR>
 K	nnoremap x :v/a/<Bar>désil dsil <CR>
-R	nnoremap x :g/a/s/a/b/s/a/b/g/<Bar>nnoremap y Z <CR>
+R	nnoremap x :g/a/s/a/b/s/a/b/g/<Bar>nnoremap y Z <CR>	the command after the :g pattern is an error
 S	nnoremap x :so f!ls sil d<CR>
 K	nnoremap x :s/a/b/\\nnoremap y Z<CR>
 N	nnoremap x :d"!lsg/a/é<CR>
@@ -1442,7 +1442,7 @@ S	nnoremap x :sil nnoremap y Zso fnormal 1,é<CR>
 K	nnoremap x :s/a/b/<Bar>/so f/\\<CR>
 K	nnoremap x :\\g/a/'asil d/\\<CR>
 K	nnoremap x :dnormal /normal so fé<CR>
-R	nnoremap x :sil é<Bar>g/a/v/a/so f<CR>
+R	nnoremap x :sil é<Bar>g/a/v/a/so f<CR>	not a command: E492
 K	nnoremap x :s/a/b/dnormal <CR>
 K	nnoremap x :<Bar>s/a/b/<CR>
 S	nnoremap x :'av/a/so f1,g/a/<Bar><CR>
@@ -1478,7 +1478,7 @@ S	nnoremap x :so fnormal so f<CR>
 K	nnoremap x :g/normal sil 1,<Bar>s/a/b/<CR>
 K	nnoremap x :/\\d<CR>
 K	nnoremap x :g/és/a/b/g/\\sil <CR>
-R	nnoremap x :1,é<Bar>so f<CR>
+R	nnoremap x :1,é<Bar>so f<CR>	a range before :so: an error
 K	nnoremap x :s/a/b/normal so f<CR>
 K	nnoremap x :"so fv/a/s/a/b/v/a/g/'a<CR>
 S	nnoremap x :<Bar>!ls'a"d<CR>
@@ -1500,7 +1500,7 @@ K	nnoremap x :\\'ad<Bar><CR>
 K	nnoremap x :<Bar>\\\\<CR>
 K	nnoremap x :'as/a/b/so f/<Bar>v/a/<Bar><CR>
 N	nnoremap x :dd!ls<CR>
-R	nnoremap x :1,so f'a<CR>
+R	nnoremap x :1,so f'a<CR>	a range before :so: an error
 K	nnoremap x :s/a/b/<Bar>'a<CR>
 K	nnoremap x :\\g/a/<CR>
 K	nnoremap x :'a1," <Bar>/d<CR>
@@ -1581,7 +1581,7 @@ S	nnoremap x :!lssil "'a'aé<CR>
 K	nnoremap x :1,éé/so fg/a/<CR>
 K	nnoremap x :és/a/b/so fnnoremap y Z<CR>
 K	nnoremap x :éés/a/b/<CR>
-R	nnoremap x :1,so f'a\\<CR>
+R	nnoremap x :1,so f'a\\<CR>	a range before :so: an error
 S	nnoremap x :!lsnormal d1,dg/a/é<CR>
 N	nnoremap x :normal "<CR>
 K	nnoremap x :g/so f  g/a/s/a/b//<CR>
@@ -1610,14 +1610,14 @@ N	nnoremap x :\\nnoremap y Z!ls1,<Bar>g/<Bar><CR>
 N	nnoremap x :g/a/1,éé\\!ls\\<CR>
 S	nnoremap x :so f!lsv/a/s/a/b/v/a/<CR>
 K	nnoremap x :1,1,d'a1,s/a/b/normal <CR>
-R	nnoremap x :" <Bar>nnoremap y Z1,<CR>
+R	nnoremap x :" <Bar>nnoremap y Z1,<CR>	the rest of the line is a comment
 S	nnoremap x :g/a/so fg/<Bar>normal 'a<CR>
 K	nnoremap x :g/normal sil <CR>
 K	nnoremap x :énnoremap y Z1,d<CR>
 S	nnoremap x :nnoremap y Zés/a/b/ 1,'a<CR>
 K	nnoremap x :s/a/b//g/ \\<CR>
 K	nnoremap x :'ag/a/g/\\<CR>
-R	nnoremap x :'a<Bar>1,so f<CR>
+R	nnoremap x :'a<Bar>1,so f<CR>	a range before :so: an error
 S	nnoremap x :nnoremap y Z!lsso f"normal \\sil <CR>
 N	nnoremap x :normal !lssil g/a/<CR>
 S	nnoremap x :g/a/v/a/nnoremap y Z<CR>
@@ -1897,7 +1897,7 @@ K	nnoremap x :1,/é<CR>
 K	nnoremap x :s/a/b/ 'ag/a/<CR>
 S	nnoremap x :<Bar> !ls<Bar><CR>
 S	nnoremap x :nnoremap y Z so f"<CR>
-R	nnoremap x :<Bar>"<Bar>so f<CR>
+R	nnoremap x :<Bar>"<Bar>so f<CR>	the rest of the line is a comment
 K	nnoremap x :1,nnoremap y Z1,g/a/"g/\\<CR>
 K	nnoremap x :é1,d'asil <CR>
 S	nnoremap x :so fé<CR>
@@ -2063,7 +2063,7 @@ K	nnoremap x :g/a/1,g/\\sil éé<CR>
 S	nnoremap x :so féénormal \\1,normal <CR>
 K	nnoremap x :é'anormal <CR>
 K	nnoremap x :'as/a/b/<Bar>é<CR>
-R	nnoremap x :"nnoremap y Znormal é<Bar>nnoremap y Z<CR>
+R	nnoremap x :"nnoremap y Znormal é<Bar>nnoremap y Z<CR>	the rest of the line is a comment
 K	nnoremap x :g/a/<Bar>'a'a1,/<CR>
 S	nnoremap x :so fg/a/<Bar>normal g/<CR>
 N	nnoremap x :normal énormal <CR>
@@ -2092,7 +2092,7 @@ K	nnoremap x :1,s/a/b/1,<CR>
 K	nnoremap x :dv/a/"1,nnoremap y Z'a<CR>
 K	nnoremap x :dv/a/ so f\\<CR>
 K	nnoremap x :é "dso f<CR>
-R	nnoremap x :d/\\<Bar>so fg/a/<CR>
+R	nnoremap x :d/\\<Bar>so fg/a/<CR>	not a command: E492
 K	nnoremap x :g/<Bar>normal so f"sil <CR>
 K	nnoremap x :g/'a é1,sil <CR>
 K	nnoremap x :<Bar>d1,<Bar> v/a/1,<CR>
@@ -2135,7 +2135,7 @@ S	nnoremap x :v/a/!ls!ls<CR>
 S	nnoremap x :v/a/nnoremap y Z1,<Bar><CR>
 K	nnoremap x :sil \\dénnoremap y Z<CR>
 K	nnoremap x :g/g/a/\\é1,nnoremap y Z<CR>
-R	nnoremap x :/<Bar>nnoremap y Zs/a/b/so f<CR>
+R	nnoremap x :/<Bar>nnoremap y Zs/a/b/so f<CR>	not a command: E492
 S	nnoremap x :nnoremap y Z"so fnnoremap y Znnoremap y Z<CR>
 K	nnoremap x :\\so fsil <CR>
 K	nnoremap x :1,/g/  <CR>
@@ -2180,7 +2180,7 @@ K	nnoremap x :ddso fnnoremap y Zso f1,"<CR>
 K	nnoremap x :s/a/b/ "normal nnoremap y Z<CR>
 S	nnoremap x :<Bar>normal <Bar>nnoremap y Zg/a/<CR>
 S	nnoremap x : so f /s/a/b/'ag/a/<CR>
-R	nnoremap x :g/<Bar>so fg/a/<CR>
+R	nnoremap x :g/<Bar>so fg/a/<CR>	the command after the :g pattern is an error
 S	nnoremap x :!lsso f\\<CR>
 K	nnoremap x :1,1,<CR>
 N	nnoremap x :dv/a/sil 'a!ls<CR>
@@ -2278,7 +2278,7 @@ K	nnoremap x :1,"sil dg/1,<CR>
 S	nnoremap x :nnoremap y Zdsil \\so f1,g/a/<CR>
 N	nnoremap x :ds/a/b/g/!ls<CR>
 K	nnoremap x :d'a"d<CR>
-R	nnoremap x :\\normal v/a/<Bar>nnoremap y Z<CR>
+R	nnoremap x :\\normal v/a/<Bar>nnoremap y Z<CR>	not a command: E492
 K	nnoremap x :dsil é<CR>
 S	nnoremap x :!ls1,normal /v/a/<CR>
 S	nnoremap x :nnoremap y Zsil \\'av/a/<Bar><CR>
@@ -2404,7 +2404,7 @@ S	nnoremap x :so fé1,'a<CR>
 K	nnoremap x :1,nnoremap y Z1, s/a/b/d<CR>
 K	nnoremap x :d1,\\d/<CR>
 K	nnoremap x :v/a/g/a/dnnoremap y Zv/a/sil <CR>
-R	nnoremap x :\\\\so f<CR>
+R	nnoremap x :\\\\so f<CR>	not a command: E492
 K	nnoremap x :s/a/b/<Bar>é <CR>
 S	nnoremap x :sil so fg/g/a/nnoremap y Zsil <CR>
 S	nnoremap x :!lsg/a//<CR>
@@ -2492,7 +2492,7 @@ N	nnoremap x :éso fnnoremap y Z<Bar>é!ls<CR>
 K	nnoremap x :v/a/1,'a1,<Bar>\\v/a/<CR>
 N	nnoremap x :dnnoremap y Z/!ls<Bar><Bar>/<CR>
 K	nnoremap x :dg/g/a/<CR>
-R	nnoremap x :1,so fs/a/b/nnoremap y Zénormal d<CR>
+R	nnoremap x :1,so fs/a/b/nnoremap y Zénormal d<CR>	a range before :so: an error
 N	nnoremap x :normal sil sil nnoremap y Z/<CR>
 K	nnoremap x :\\<Bar>v/a/1,g/a/ <CR>
 N	nnoremap x :normal 1,ég/a/dnormal normal <CR>
@@ -2564,7 +2564,7 @@ S	nnoremap x :sil <Bar>so fsil sil <Bar><CR>
 K	nnoremap x :g/a//év/a/nnoremap y Z/<CR>
 S	nnoremap x :g/a/nnoremap y Znnoremap y Z<CR>
 S	nnoremap x :!lsdnormal <CR>
-R	nnoremap x :/"g/1,so fso fg/a/<CR>
+R	nnoremap x :/"g/1,so fso fg/a/<CR>	not a command: E492
 K	nnoremap x :/normal normal <CR>
 S	nnoremap x :<Bar>so fg/v/a/"1,sil <CR>
 N	nnoremap x :normal nnoremap y Zg/a/<Bar>normal !ls<CR>
@@ -2644,7 +2644,7 @@ N	nnoremap x :dd\\d !lss/a/b/<CR>
 K	nnoremap x :ésil 1,1,nnoremap y Z\\1,<CR>
 N	nnoremap x :normal v/a/\\'a'a<CR>
 K	nnoremap x :énnoremap y Znnoremap y Z1,<CR>
-R	nnoremap x :sil <Bar>1,so fs/a/b/s/a/b/g/<CR>
+R	nnoremap x :sil <Bar>1,so fs/a/b/s/a/b/g/<CR>	a range before :so: an error
 K	nnoremap x :v/a/"/'a'a<CR>
 K	nnoremap x :"'aso fv/a/s/a/b/sil g/<CR>
 N	nnoremap x :s/a/b//nnoremap y Zé!ls'a\\<CR>
@@ -2766,7 +2766,7 @@ K	nnoremap x :\\v/a/nnoremap y Z <CR>
 K	nnoremap x :" normal nnoremap y Z<CR>
 K	nnoremap x :\\1,'aé<CR>
 N	nnoremap x :normal "v/a/<CR>
-R	nnoremap x :dnnoremap y Z<Bar>nnoremap y Znormal /"<CR>
+R	nnoremap x :dnnoremap y Z<Bar>nnoremap y Znormal /"<CR>	not a command: E492
 S	nnoremap x :nnoremap y Z<Bar>g/a/normal sil sil <CR>
 K	nnoremap x :\\v/a/é/  <CR>
 K	nnoremap x :g/v/a/<Bar><CR>
@@ -2790,7 +2790,7 @@ K	nnoremap x :"normal normal g/g/<CR>
 N	nnoremap x :normal <Bar>é<CR>
 N	nnoremap x :é/!lsnnoremap y Zsil sil nnoremap y Z<CR>
 N	nnoremap x :g/!lséé<CR>
-R	nnoremap x :1, g/1,<Bar>so f<CR>
+R	nnoremap x :1, g/1,<Bar>so f<CR>	a range before :so: an error
 K	nnoremap x :"  so fnnoremap y Zv/a/<CR>
 S	nnoremap x :<Bar>sil !ls<CR>
 K	nnoremap x :<Bar><Bar>é<CR>
@@ -2832,7 +2832,7 @@ K	nnoremap x /<C-r><C-w><CR>
 K	nnoremap x ?\\<<C-r><C-a>\\><CR>
 K	nnoremap x /<C-r>/<BS><CR>
 K	nnoremap x /<C-r><Esc>a<CR>
-R	nnoremap x /\\%(\\%(\\%(\\%(<C-r>a\\%(\\%(\\%(\\%(\\%(<CR>
+R	nnoremap x /\\%(\\%(\\%(\\%(<C-r>a\\%(\\%(\\%(\\%(\\%(<CR>	a search, which runs no command
 K	nnoremap x :sx/x/d<CR>
 K	nnoremap x :sy/x/d<CR>
 K	nnoremap x :sx/so f/d<CR>
@@ -2888,8 +2888,8 @@ K	nnoremap x :%s/\\v(\\d+):(\\d+)/\\2:\\1/g<CR>
 K	nnoremap x :e res://scenes/main.tscn<CR>
 K	inoremap x ::::::::::::::::
 K	inoremap x ////////////////
-R	inoremap x :::::::::::::::::
-R	inoremap x /////////////////
+R	inoremap x :::::::::::::::::	Insert text
+R	inoremap x /////////////////	Insert text
 N	nnoremap <Leader>w :set wrap!<CR>
 K	nnoremap <Esc><Esc> :noh<CR>
 K	nnoremap x :echo 'hi'<CR>
@@ -2981,7 +2981,7 @@ S	nnoremap x :sethandler <C-a> n:ide<Cmd>m<CR><C-u>
 S	vnoremap x :so f<Cmd>m<CR><C-u>
 K	nnoremap x :noh<Cmd>noh<CR><C-u>
 K	nnoremap x :<Cmd>noh<CR>
-R	nnoremap x <C-v>:<BS>so f<CR>
+R	nnoremap x <C-v>:<BS>so f<CR>	the line is '<,'so f: E492
 S	nnoremap x <C-v>:<BS><C-w>nnoremap y Z<CR>
 S	vnoremap x :<BS>!echo hi<CR>
 S	nnoremap x <C-v>mT:<BS><C-w>nnoremap y  set langmap=q:<CR>
@@ -2993,34 +2993,34 @@ K	nnoremap x :windo windo windo windo windo windo windo windo s/a/b/<CR>
 K	nnoremap x :s/\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)/b/<CR>
 K	nnoremap x :s/\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[a]]]]]]]]/b/<CR>
 K	nnoremap x :windo windo windo windo s/\\%(\\%(\\%[\\%[a]]\\)\\)/b/<CR>
-R	nnoremap x :windo windo windo windo windo windo windo windo windo s/a/b/<CR>
-R	nnoremap x :s/\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)\\)/b/<CR>
-R	nnoremap x :s/\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[a]]]]]]]]]/b/<CR>
-R	nnoremap x :windo windo windo windo s/\\%(\\%(\\%[\\%[\\%[a]]]\\)\\)/b/<CR>
+R	nnoremap x :windo windo windo windo windo windo windo windo windo s/a/b/<CR>	within vim-core's nesting bounds; :s runs
+R	nnoremap x :s/\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)\\)/b/<CR>	within vim-core's nesting bounds; :s runs
+R	nnoremap x :s/\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[a]]]]]]]]]/b/<CR>	within vim-core's nesting bounds; :s runs
+R	nnoremap x :windo windo windo windo s/\\%(\\%(\\%[\\%[\\%[a]]]\\)\\)/b/<CR>	within vim-core's nesting bounds; :s runs
 K	nnoremap x :windo windo windo windo windo windo windo windo s/a/b/<Esc>
 K	nnoremap x :s/\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)/b/<Esc>
 K	nnoremap x :s/\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[a]]]]]]]]/b/<Esc>
 K	nnoremap x :windo windo windo windo s/\\%(\\%(\\%[\\%[a]]\\)\\)/b/<Esc>
-R	nnoremap x :windo windo windo windo windo windo windo windo windo s/a/b/<Esc>
-R	nnoremap x :s/\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)\\)/b/<Esc>
-R	nnoremap x :s/\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[a]]]]]]]]]/b/<Esc>
-R	nnoremap x :windo windo windo windo s/\\%(\\%(\\%[\\%[\\%[a]]]\\)\\)/b/<Esc>
+R	nnoremap x :windo windo windo windo windo windo windo windo windo s/a/b/<Esc>	<Esc> cancels the line; nothing runs
+R	nnoremap x :s/\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)\\)/b/<Esc>	<Esc> cancels the line; nothing runs
+R	nnoremap x :s/\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[a]]]]]]]]]/b/<Esc>	<Esc> cancels the line; nothing runs
+R	nnoremap x :windo windo windo windo s/\\%(\\%(\\%[\\%[\\%[a]]]\\)\\)/b/<Esc>	<Esc> cancels the line; nothing runs
 K	nnoremap x :windo windo windo windo windo windo windo windo s/a/b/<C-u>noh<CR>
 K	nnoremap x :s/\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)/b/<C-u>noh<CR>
 K	nnoremap x :s/\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[a]]]]]]]]/b/<C-u>noh<CR>
 K	nnoremap x :windo windo windo windo s/\\%(\\%(\\%[\\%[a]]\\)\\)/b/<C-u>noh<CR>
-R	nnoremap x :windo windo windo windo windo windo windo windo windo s/a/b/<C-u>noh<CR>
-R	nnoremap x :s/\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)\\)/b/<C-u>noh<CR>
-R	nnoremap x :s/\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[a]]]]]]]]]/b/<C-u>noh<CR>
-R	nnoremap x :windo windo windo windo s/\\%(\\%(\\%[\\%[\\%[a]]]\\)\\)/b/<C-u>noh<CR>
+R	nnoremap x :windo windo windo windo windo windo windo windo windo s/a/b/<C-u>noh<CR>	<C-u> clears the line; only :noh runs
+R	nnoremap x :s/\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)\\)/b/<C-u>noh<CR>	<C-u> clears the line; only :noh runs
+R	nnoremap x :s/\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[a]]]]]]]]]/b/<C-u>noh<CR>	<C-u> clears the line; only :noh runs
+R	nnoremap x :windo windo windo windo s/\\%(\\%(\\%[\\%[\\%[a]]]\\)\\)/b/<C-u>noh<CR>	<C-u> clears the line; only :noh runs
 K	nnoremap x <Cmd>windo windo windo windo windo windo windo windo s/a/b/<Esc>
 K	nnoremap x <Cmd>s/\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)/b/<Esc>
 K	nnoremap x <Cmd>s/\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[a]]]]]]]]/b/<Esc>
 K	nnoremap x <Cmd>windo windo windo windo s/\\%(\\%(\\%[\\%[a]]\\)\\)/b/<Esc>
-R	nnoremap x <Cmd>windo windo windo windo windo windo windo windo windo s/a/b/<Esc>
-R	nnoremap x <Cmd>s/\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)\\)/b/<Esc>
-R	nnoremap x <Cmd>s/\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[a]]]]]]]]]/b/<Esc>
-R	nnoremap x <Cmd>windo windo windo windo s/\\%(\\%(\\%[\\%[\\%[a]]]\\)\\)/b/<Esc>
+R	nnoremap x <Cmd>windo windo windo windo windo windo windo windo windo s/a/b/<Esc>	<Esc> cancels the line; nothing runs
+R	nnoremap x <Cmd>s/\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)\\)/b/<Esc>	<Esc> cancels the line; nothing runs
+R	nnoremap x <Cmd>s/\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[a]]]]]]]]]/b/<Esc>	<Esc> cancels the line; nothing runs
+R	nnoremap x <Cmd>windo windo windo windo s/\\%(\\%(\\%[\\%[\\%[a]]]\\)\\)/b/<Esc>	<Esc> cancels the line; nothing runs
 S	vnoremap x :<Bar>nnoremap y Z<CR>
 S	vnoremap x :<Bar>set langmap=q:<CR>
 S	vnoremap x :<Bar>let mapleader=","<CR>
@@ -3045,14 +3045,14 @@ S	nnoremap x :windo g!/x/so f<CR>
 S	nnoremap x :noh<Bar>g/x/so f<CR>
 S	nnoremap x :noh\\|v/x/!ls<CR>
 S	nnoremap x :g/x/silent so f<CR>
-R	nnoremap x :g/x/ :.,+1so f<CR>
+R	nnoremap x :g/x/ :.,+1so f<CR>	a range before :so: E481
 S	nnoremap x :g/a\\/b/so f<CR>
 S	nnoremap x :g#x#so f<CR>
 S	nnoremap x :v,a\\,b,!ls<CR>
 S	nnoremap x :g!x!so f<CR>
-R	nnoremap x :g /x/so f<CR>
+R	nnoremap x :g /x/so f<CR>	vim-core reads the blank as the :g delimiter and runs :f
 S	nnoremap x :g! /x/so f<CR>
-R	nnoremap x :g\\/so f<CR>
+R	nnoremap x :g\\/so f<CR>	no command after the :g pattern: an error
 S	nnoremap x :g/a<Bar>b/so f<CR>
 S	nnoremap x :g!/x/so user://a.vim<CR>
 S	nnoremap x :v/x/so user://a.vim<CR>
@@ -3062,10 +3062,10 @@ S	nnoremap x :g/x/nnoremap y Z<CR>
 S	nnoremap x :v/x/set shell=/bin/evil<CR>
 S	nnoremap x :g/x/windo so f<CR>
 S	nnoremap x :g/x/v/y/so f<CR>
-R	nnoremap x :gl/x/so f<CR>
-R	nnoremap x :global/x/so f<CR>
+R	nnoremap x :gl/x/so f<CR>	vim-core takes no :gl before a pattern: E492
+R	nnoremap x :global/x/so f<CR>	vim-core takes no :global before a pattern: E492
 S	nnoremap x :global!/x/so f<CR>
-R	nnoremap x :vg/x/so f<CR>
+R	nnoremap x :vg/x/so f<CR>	vim-core takes no :vg before a pattern: E492
 S	nnoremap x :vglobal/x/!ls<CR>
 S	nnoremap x <Cmd>g/x/so f<CR>
 S	nnoremap x :g/x/s/a/b/<Bar>!ls<CR>
@@ -3093,7 +3093,7 @@ K	nnoremap x :set tw=<Left>
 K	nnoremap x :vimgrep // **<Left><Left><Left><Left>
 N	vnoremap x :normal<Space>
 S	nnoremap x y | !id
-S	set so=5 " comment | !id
+R	set so=5 " comment | !id	the | is in the comment of :set
 S	set so=5 | set sw=4 | so x.vim
 S	g/x/s/a/b/|!cmd
 S	nnoremap x :nmap y Z<CR>
@@ -3114,11 +3114,11 @@ S	nnoremap x :bufdo set mp=evil<CR>
 S	cnoremap <C-x> <C-u>nnoremap y Z<CR>
 S	nnoremap x :nnoremap y Z
 K	nnoremap x f//(<Home>%<Home>\\v<End>%(%(%(%(%(%(%(<CR>
-R	nnoremap x f//(<Home>%<Home>\\v<End>%(%(%(%(%(%(%(%(<CR>
+R	nnoremap x f//(<Home>%<Home>\\v<End>%(%(%(%(%(%(%(%(<CR>	f takes the first / as its argument; the rest is a search
 K	nnoremap x /\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)<CR>
 K	nnoremap x /\\v<(g<Bar>v<Bar>sx<Bar>sy<Bar>windo<Bar>bufdo<Bar>tabdo<Bar>g<Bar>v)><CR>
-R	nnoremap x /\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)\\)<CR>
-R	nnoremap x :s/\\v<(g<Bar>v<Bar>sx<Bar>sy<Bar>windo<Bar>bufdo<Bar>tabdo<Bar>g<Bar>v)>//<CR>
+R	nnoremap x /\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)\\)<CR>	a search, which runs no command
+R	nnoremap x :s/\\v<(g<Bar>v<Bar>sx<Bar>sy<Bar>windo<Bar>bufdo<Bar>tabdo<Bar>g<Bar>v)>//<CR>	the command names are in the :s pattern
 S	nnoremap x :sx/x/so user://a.vim<CR>
 S	nnoremap x :sy/x/!ls<CR>
 S	nnoremap x :sx#x#nnoremap y Z<CR>
@@ -3128,7 +3128,7 @@ S	nnoremap x :g/x/sy/y/so f<CR>
 S	nnoremap x :windo sx/x/nnoremap y Z<CR>
 S	nnoremap x <Cmd>sy/x/so f<CR>
 S	nn! <Leader>x !ls<CR>
-R	ino <Leader>x :!rm -rf /<CR>
+R	ino <Leader>x :!rm -rf /<CR>	Insert text
 S	nm <Leader>x :!rm -rf /<CR>
 S	nn <Leader>x :!rm -rf /<CR>
 S	no <Leader>x :!rm -rf /<CR>
@@ -3151,13 +3151,13 @@ S	nnoremap x :echo<C-r>a<CR>
 S	nnoremap x :echo<Up><CR>
 S	nnoremap x :echo<C-f>
 S	cnoremap <C-x> <C-r>a
-R	nnoremap x ?<Up><CR>
+R	nnoremap x ?<Up><CR>	a search, which runs no command
 S	nnoremap x /<C-r>=@a<CR><CR>
 S	nnoremap <Leader>e :call execute('!rm -rf /')<CR>
-R	nnoremap <Leader>p :echo getfperm('/etc/passwd')<CR>
-R	nnoremap <Leader>s :echo getfsize('/etc/passwd')<CR>
-R	nnoremap <Leader>t :echo getftype('/tmp')<CR>
-R	nnoremap <Leader>g :echo glob('*')<CR>
+R	nnoremap <Leader>p :echo getfperm('/etc/passwd')<CR>	:echo calls only has() and exists(): E117
+R	nnoremap <Leader>s :echo getfsize('/etc/passwd')<CR>	:echo calls only has() and exists(): E117
+R	nnoremap <Leader>t :echo getftype('/tmp')<CR>	:echo calls only has() and exists(): E117
+R	nnoremap <Leader>g :echo glob('*')<CR>	:echo calls only has() and exists(): E117
 S	se lmap=q:
 S	setlocal langmap+=q:
 S	set so=5 langremap
@@ -3171,7 +3171,7 @@ S	let mapleader_hack = 1
 S	filetype plugin off | !rm
 S	filetype plugin
 S	filetype plugin off | set shell=/bin/evil
-S	filetype plugin indent on | syntax on
+R	filetype plugin indent on | syntax on	syntax on gives E319 and runs nothing
 S	filetype on | filetype on | !rm
 S	map! <Leader>x !ls<CR>
 S	Set shell=/bin/evil
@@ -3190,7 +3190,7 @@ S	source res://evil.vim
 S	nnoremap <Leader>r :read !cat /etc/passwd<CR>
 S	nnoremap <Leader>r :re !cat /etc/passwd<CR>
 S	nnoremap <Leader>r :rea !cat /etc/passwd<CR>
-R	nnoremap <Leader>r :echo readfile('/etc/passwd')<CR>
+R	nnoremap <Leader>r :echo readfile('/etc/passwd')<CR>	:echo calls only has() and exists(): E117
 S	cmap <C-a> <Home>
 S	imap jk <Esc>
 S	nmap! j gj
@@ -3202,10 +3202,10 @@ S	setlocal shell=/bin/evil
 S	setl fo-=t makeprg=evil
 S	setlocal keywordprg^=evil
 S	setl noshell
-R	nnoremap x : so f<CR>
+R	nnoremap x : so f<CR>	a no-break space is not a blank: E492
 S	nnoremap x :r !id<CR>
 S	nnoremap x :1, 2!sort<CR>
-R	nnoremap x <Cmd>!ls<CR>
+R	nnoremap x <Cmd>!ls<CR>	a vertical tab is not a blank: E492
 S	nnoremap <Leader>r :!python %<CR>
 S	nnoremap x :silent !ls<CR>
 S	nnoremap x :noh<Bar>!ls<CR>
@@ -3216,7 +3216,7 @@ S	cnoremap <C-x> :!ls<CR>
 S	nnoremap x ::!ls<CR>
 S	nnoremap x <Cmd>:!ls<CR>
 S	nnoremap x :noh<Bar>:so f<CR>
-R	nnoremap <Leader>s :echo shellescape(expand('%'))<CR>
+R	nnoremap <Leader>s :echo shellescape(expand('%'))<CR>	:echo calls only has() and exists(): E117
 S	nnoremap <Leader>s :so res://evil.txt<CR>
 S	nnoremap x <Cmd>source user://a.vim<CR>
 S	nnoremap x <cmd>silent so user://a.vim<CR>
@@ -3231,7 +3231,7 @@ S	nnoremap x :source<Tab>user://a.vim<CR>
 S	nnoremap x :source<Space>user://a.vim<CR>
 S	nnoremap x :so<S-Space>user://a.vim<CR>
 S	nnoremap x :sou\tuser://a.vim<CR>
-R	nnoremap x :so<C-I>user://a.vim<CR>
+R	nnoremap x :so<C-I>user://a.vim<CR>	<C-I> completes, so the line is souser://a.vim: E492
 S	nnoremap x :so1<CR>
 S	nnoremap x :source!<Space>user://a.vim<CR>
 S	nnoremap x :so<CR>
@@ -3247,7 +3247,7 @@ S	nnoremap x :silent so user://a.vim<CR>
 S	nnoremap x :silent!so user://a.vim<CR>
 S	nnoremap x :sil so user://a.vim<CR>
 S	nnoremap x :keepjumps so user://a.vim<CR>
-R	nnoremap x :2verbose so user://a.vim<CR>
+R	nnoremap x :2verbose so user://a.vim<CR>	vim-core hands :verbose so to godot-vim, which has no such command: E492
 S	nnoremap x :windo so user://a.vim<CR>
 S	nnoremap x :<Space>so<Space>user://a.vim<CR>
 S	nnoremap x f/:so user://a.vim<CR>
@@ -3256,15 +3256,15 @@ S	nnoremap x :<Tab>so user://a.vim<CR>
 S	nnoremap x :\tso user://a.vim<CR>
 S	nnoremap <silent> x :so user://a.vim<CR>
 S	cnoremap <C-x> <Home>so<Space>user://a.vim
-R	nnoremap <Leader>x :call system('rm -rf /')<CR>
-R	nnoremap <Leader>l :echo systemlist('whoami')<CR>
+R	nnoremap <Leader>x :call system('rm -rf /')<CR>	:call is not a vim-core command: E492
+R	nnoremap <Leader>l :echo systemlist('whoami')<CR>	:echo calls only has() and exists(): E117
 S	SE shell=/bin/evil
 S	SET scrolloff=5 shell=/bin/evil
 S	SET shell=/bin/evil
 S	setlocalx fo-=t
 S	setg shell=x
 S	sethandler <C-a> n:host
-R	nnoremap <Leader>w :call writefile(['pwned'], '/tmp/evil')<CR>
+R	nnoremap <Leader>w :call writefile(['pwned'], '/tmp/evil')<CR>	:call is not a vim-core command: E492
 S	nnoremap x :!echo hi<CR>
 S	nnoremap x f/:!echo hi<CR>
 S	nnoremap x t/:!echo hi<CR>

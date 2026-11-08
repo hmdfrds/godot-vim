@@ -6,8 +6,6 @@
 //! The Sandbox judge is an allowlist: a command kind it does not name is
 //! refused.
 
-use std::collections::HashMap;
-
 use vim_core::execution::{
     ConfigAction, ConfigCommand, ConfigHost, MapDefinition, Opaque, ReachedCommand, SourceReply,
     SourceRequest, TrustTag, Verdict,
@@ -82,9 +80,6 @@ pub(crate) struct LoadPolicy<'a> {
     project_vimrc: ProjectVimrc,
     /// Panel lines of the top file build the panel table.
     collect_panels: bool,
-    /// The text Sandbox's verdict per line of each Sandbox file, by name:
-    /// `true` where a command starting on the line is refused.
-    text_sandbox: Option<HashMap<String, Vec<bool>>>,
     filetype: Vec<FiletypeCommand>,
     panel_lines: Vec<(u32, String)>,
     ignored_panel_lines: usize,
@@ -99,7 +94,6 @@ impl<'a> LoadPolicy<'a> {
             files: None,
             project_vimrc,
             collect_panels: false,
-            text_sandbox: None,
             filetype: Vec::new(),
             panel_lines: Vec::new(),
             ignored_panel_lines: 0,
@@ -122,25 +116,6 @@ impl<'a> LoadPolicy<'a> {
     pub(crate) const fn collecting_panels(mut self) -> Self {
         self.collect_panels = true;
         self
-    }
-
-    /// Also refuse a Sandbox command on a line the line-based text Sandbox
-    /// strips.
-    pub(crate) fn with_text_sandbox(mut self) -> Self {
-        self.text_sandbox = Some(HashMap::new());
-        self
-    }
-
-    /// Note a config before it runs.
-    pub(crate) fn prepare(&mut self, name: &str, text: &str, tag: TrustTag) {
-        if Tier::of(tag) != Tier::Sandbox {
-            return;
-        }
-        if let Some(files) = &mut self.text_sandbox {
-            files
-                .entry(name.to_owned())
-                .or_insert_with(|| refused_lines(text));
-        }
     }
 
     pub(crate) fn take_filetype(&mut self) -> Vec<FiletypeCommand> {
@@ -309,30 +284,11 @@ impl<'a> LoadPolicy<'a> {
             trust: tier.tag(),
         })
     }
-
-    /// Whether the text Sandbox strips a line the command is on.
-    fn text_sandbox_strips(&self, command: &ConfigCommand<'_>) -> bool {
-        let Some(files) = &self.text_sandbox else {
-            return false;
-        };
-        let line = command.line as usize;
-        files
-            .get(command.file)
-            .is_none_or(|lines| line == 0 || lines.get(line - 1).copied().unwrap_or(true))
-    }
 }
 
 impl ConfigHost for LoadPolicy<'_> {
     fn judge(&mut self, command: &ConfigCommand<'_>) -> Verdict {
-        let tier = Tier::of(command.trust);
-        let mut decision = self.decide(command, tier);
-        if tier == Tier::Sandbox
-            && !matches!(decision, Decision::Refuse(_) | Decision::Ignore)
-            && self.text_sandbox_strips(command)
-        {
-            decision = Decision::Refuse(format!("E48: Not allowed in sandbox: {}", command.text));
-        }
-        match decision {
+        match self.decide(command, Tier::of(command.trust)) {
             Decision::Allow => Verdict::Allow,
             Decision::Refuse(error) => Verdict::Refuse(error.into()),
             Decision::Ignore => Verdict::Claim,
@@ -356,15 +312,8 @@ impl ConfigHost for LoadPolicy<'_> {
     }
 
     fn source(&mut self, request: &SourceRequest<'_>) -> SourceReply {
-        match self.resolve_source(request) {
-            Ok(reply) => {
-                if let SourceReply::Text { name, text, trust } = &reply {
-                    self.prepare(name, text, *trust);
-                }
-                reply
-            }
-            Err(error) => SourceReply::Refuse(error),
-        }
+        self.resolve_source(request)
+            .unwrap_or_else(SourceReply::Refuse)
     }
 }
 
@@ -511,28 +460,6 @@ fn set_names_blocked(assignment: &SetAssignment) -> bool {
     }
 }
 
-/// For each line of a Sandbox file, whether a command starting there is
-/// refused because the text Sandbox strips the line or a `\` line that
-/// continues it.
-fn refused_lines(text: &str) -> Vec<bool> {
-    let stripped = super::sandbox::stripped_lines(text);
-    let lines: Vec<&str> = text.lines().collect();
-    let mut refused = vec![false; lines.len()];
-    let mut continued = false;
-    for at in (0..lines.len()).rev() {
-        let stripped = stripped.get(at).copied().unwrap_or(true);
-        let line = lines[at].trim_start();
-        if line.starts_with('\\') || line.starts_with("\"\\ ") {
-            continued |= stripped;
-            refused[at] = stripped;
-        } else {
-            refused[at] = stripped || continued;
-            continued = false;
-        }
-    }
-    refused
-}
-
 /// Options that can run the shell or send data out, and the `langmap`
 /// family, which turns a key a right-hand side types into `:`. Long and
 /// short names, as `:set` takes either; a second list after vim-core's
@@ -640,5 +567,7 @@ pub(crate) fn panel_line_is_safe(trimmed: &str) -> bool {
     }
 }
 
+#[cfg(test)]
+mod oracle_tests;
 #[cfg(test)]
 mod tests;

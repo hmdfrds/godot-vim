@@ -5,10 +5,9 @@
 //! panelunmap <surface> <lhs>
 //! ```
 //!
-//! Single-line, with no cross-line state. That is forced rather than chosen:
-//! `config::sandbox` sanitizes raw text line by line *before* any structured
-//! parse runs, so a directive whose meaning depended on a previous line could
-//! not be made safe.
+//! Single-line, with no cross-line state: the load policy judges each line
+//! on its own, so a directive whose meaning depended on a previous line could
+//! not be judged.
 //!
 //! # Why the shipped defaults go through here too
 //!
@@ -187,9 +186,7 @@ impl std::fmt::Display for PanelParseError {
 }
 
 /// Whether `line` opens with one of the two panel verbs.
-///
-/// Exposed so `config::sandbox` can route panel lines to their own whitelist
-/// branch in P7 without re-deriving the prefix test.
+#[cfg(test)]
 pub(crate) fn is_panel_line(line: &str) -> bool {
     verb_of(line.trim()).is_some()
 }

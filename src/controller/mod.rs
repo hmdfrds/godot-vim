@@ -1053,7 +1053,6 @@ impl VimController {
         text: ConfigText<'_>,
         policy: &mut LoadPolicy<'_>,
     ) -> LoadReport {
-        policy.prepare(text.name, text.text, text.trust);
         let mut response = self.engine_mut().source_script(text, policy).response;
         for command in policy.take_filetype() {
             self.ctx.filetype.apply(command);

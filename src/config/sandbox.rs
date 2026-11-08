@@ -1,8 +1,6 @@
-//! Config sandboxing — strips dangerous constructs from untrusted vimrc files.
-//!
-//! When `project_vimrc` is set to `Sandbox`, mappings whose RHS could invoke
-//! shell commands are silently removed. This prevents a malicious
-//! `res://.godot-vimrc` from executing arbitrary commands on keypress.
+//! The line-based text Sandbox of earlier versions, kept only as the test
+//! oracle of the load policy: it comments out every line of a project
+//! vimrc it cannot show to be safe.
 
 use super::policy::{is_blocked_option, panel_line_is_safe};
 
@@ -1530,7 +1528,6 @@ pub(crate) fn stripped_lines(text: &str) -> Vec<bool> {
 /// Apply the project vimrc security policy. Returns `None` to block loading
 /// entirely (Disabled), or the sanitized content (Sandbox) or unchanged text
 /// (Trusted / user-level).
-#[cfg(test)]
 pub(crate) fn apply_vimrc_policy(
     text: &str,
     is_project_level: bool,

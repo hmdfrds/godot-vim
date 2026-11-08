@@ -135,8 +135,7 @@ impl GodotVimCore {
         };
         let mut policy = LoadPolicy::new(project_vimrc)
             .with_actions(&self.actions)
-            .with_files(&files)
-            .with_text_sandbox();
+            .with_files(&files);
         if reload {
             policy = policy.collecting_panels();
         }

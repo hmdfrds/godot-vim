@@ -22,6 +22,7 @@ pub(crate) mod parser;
 pub(crate) mod path;
 pub(crate) mod policy;
 pub(crate) mod presets;
+#[cfg(test)]
 pub(crate) mod sandbox;
 pub(crate) mod source;
 pub(crate) mod types;

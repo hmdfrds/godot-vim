@@ -61,7 +61,7 @@ fn state(engine: &VimEngine) -> (String, vim_core::primitives::VimOptions) {
     (text, engine.options().clone())
 }
 
-/// `text` loaded at `tier` by the policy alone, without the text Sandbox.
+/// `text` loaded at `tier` as a project file.
 fn load(tier: Tier, text: &str) -> (VimController, LoadReport) {
     let actions = crate::actions::specs::registry();
     let mut policy = LoadPolicy::new(ProjectVimrc::Sandbox).with_actions(&actions);
@@ -98,7 +98,7 @@ fn only_line(report: &LoadReport) -> &str {
 
 /// What the policy does with a vector of the text Sandbox's tests.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Expected {
+pub(super) enum Expected {
     /// Kept by both: it runs in full.
     Kept,
     /// Stripped by both: it does not run in full.
@@ -106,18 +106,22 @@ enum Expected {
     /// Kept by the text Sandbox, refused now: a `!` its keys may type as
     /// the filter operator, `:normal`, or a write to a named file.
     Refused,
-    /// Stripped by the text Sandbox, run in full now: vim-core parses it
-    /// as Insert text, a pattern, a comment, an error, or within bounds.
+    /// Stripped by the text Sandbox, run in full now, for the reason given
+    /// with the vector.
     Relaxed,
 }
 
 /// Every keep and strip vector the text Sandbox's tests judged, one line
-/// each with `\` and tab escaped, tagged with what the policy does.
-fn vectors() -> Vec<(Expected, String)> {
+/// each with `\` and tab escaped, tagged with what the policy does, and a
+/// relaxed one with the reason.
+pub(super) fn vectors() -> Vec<(Expected, String, &'static str)> {
     include_str!("sandbox_vectors.txt")
         .lines()
         .map(|entry| {
-            let (tag, line) = entry.split_once('\t').expect("a tag and a line");
+            let mut fields = entry.split('\t');
+            let (Some(tag), Some(line)) = (fields.next(), fields.next()) else {
+                panic!("a tag and a line: {entry}");
+            };
             let expected = match tag {
                 "K" => Expected::Kept,
                 "S" => Expected::Stripped,
@@ -125,7 +129,9 @@ fn vectors() -> Vec<(Expected, String)> {
                 "R" => Expected::Relaxed,
                 _ => panic!("unknown tag {tag}"),
             };
-            (expected, unescape(line))
+            let reason = fields.next().unwrap_or_default();
+            assert_eq!(expected == Expected::Relaxed, !reason.is_empty(), "{entry}");
+            (expected, unescape(line), reason)
         })
         .collect()
 }
@@ -152,7 +158,7 @@ fn every_text_sandbox_vector_leaves_the_engine_as_expected() {
     let fresh = state(VimController::new().engine());
     let vectors = vectors();
     assert!(vectors.len() > 3000);
-    for (expected, line) in vectors {
+    for (expected, line, _) in vectors {
         let (controller, report) = sandboxed(&line);
         let sandboxed = state(controller.engine());
         let full = state(run_in_full(&line).engine());
@@ -345,9 +351,7 @@ fn a_panelmap_preset_line_is_ignored_without_a_message() {
             "panelmap preset vim",
             "  :panelmap   preset\t",
         ] {
-            let mut policy = LoadPolicy::new(ProjectVimrc::Sandbox)
-                .collecting_panels()
-                .with_text_sandbox();
+            let mut policy = LoadPolicy::new(ProjectVimrc::Sandbox).collecting_panels();
             let mut controller = VimController::new();
             let config = ConfigText::new(PROJECT, line).with_trust(tier.tag());
             let report = controller.load_config(config, &mut policy);
@@ -359,7 +363,7 @@ fn a_panelmap_preset_line_is_ignored_without_a_message() {
             assert!(policy.panel_lines().is_empty(), "{line}");
             assert_eq!(policy.ignored_panel_lines(), 0);
         }
-        // The text Sandbox strips a panel line after a bar.
+        // After a bar too.
         let (_, report) = load(tier, "set so=5 | panelmap preset");
         assert!(report.lines.is_empty(), "{tier:?}: {:?}", report.lines);
     }
@@ -496,8 +500,7 @@ fn load_with_files(
     let actions = crate::actions::specs::registry();
     let mut policy = LoadPolicy::new(project_vimrc)
         .with_actions(&actions)
-        .with_files(&access)
-        .with_text_sandbox();
+        .with_files(&access);
     let mut controller = VimController::new();
     let config = ConfigText::new(USER, top).with_trust(Tier::Trusted.tag());
     let report = controller.load_config(config, &mut policy);
@@ -555,44 +558,12 @@ fn a_nested_source_is_refused_where_the_file_may_not_be_read() {
     }
 }
 
-// ── The text Sandbox in front ─────────────────────────────────────────
-
-#[test]
-fn the_text_sandbox_still_refuses_the_lines_it_strips() {
-    // Both are run in full by the policy alone: vim-core parses the first
-    // as an error and the second as Insert text.
-    let text = "nnoremap a :1,so f<CR>\n\
-                nnoremap b\n  \\ :1,so f<CR>\n\
-                nnoremap c gj";
-    let (controller, report) = sandboxed(text);
-    assert!(report.lines.is_empty(), "{:?}", report.lines);
-    assert!(maps(&controller, 'a'));
-
-    let mut policy = LoadPolicy::new(ProjectVimrc::Sandbox).with_text_sandbox();
-    let mut controller = VimController::new();
-    let report = controller.load_config(
-        ConfigText::new(PROJECT, text).with_trust(Tier::Sandbox.tag()),
-        &mut policy,
-    );
-    assert_eq!(
-        report.lines,
-        [
-            format!("{PROJECT}:1: E48: Not allowed in sandbox: nnoremap a :1,so f<CR>"),
-            format!("{PROJECT}:2: E48: Not allowed in sandbox: nnoremap b :1,so f<CR>"),
-        ]
-    );
-    assert!(!maps(&controller, 'a'));
-    assert!(!maps(&controller, 'b'));
-    assert!(maps(&controller, 'c'));
-}
-
 // ── Reload ────────────────────────────────────────────────────────────
 
 fn reload(controller: &mut VimController, text: Option<&str>) -> LoadReport {
     let actions = crate::actions::specs::registry();
     let mut policy = LoadPolicy::new(ProjectVimrc::Sandbox)
         .with_actions(&actions)
-        .with_text_sandbox()
         .collecting_panels();
     let config = text.map(|text| ConfigText::new(USER, text).with_trust(Tier::Trusted.tag()));
     let report = controller.reload_config(config, &mut policy);
