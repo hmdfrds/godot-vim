@@ -80,6 +80,13 @@ Config File Path, which are trusted. Only one file is read and
 a committed vimrc use Config File Path, or set Security > Project Vimrc to
 `Trusted` for a project you trust.
 
+**A project vimrc mapping's command line is judged when it runs.** A
+command you finish on a line a project vimrc mapping left open, or one a
+project command-line mapping completes, is held to the same rule as the
+mapping. A refused one shows `E48: Not allowed in sandbox: ... (Sandbox
+mapping: ...)` and does not run. Lines of your own vimrc's mappings run
+as before.
+
 **`:g` and `:v` run the rest of the line.** Every `|` command after the
 pattern runs on each matching line in turn, so `:g/^/m0` reverses the
 lines. A command line splits at `|` as in Vim, and an error ends it:

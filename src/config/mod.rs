@@ -16,6 +16,7 @@
 //! `config_saved` which triggers re-sourcing. `:source` re-reads the active
 //! file the same way, or sources another file on top (see [`source`]).
 
+pub(crate) mod cmdline_judge;
 pub(crate) mod mapping_service;
 pub(crate) mod panelmap;
 pub(crate) mod parser;
