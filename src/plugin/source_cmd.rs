@@ -96,8 +96,9 @@ impl GodotVimCore {
 
     /// Load a vimrc: startup, the enable edge, panic recovery, `:source`
     /// and a Mapping Dialog save all come here. The file is read once and
-    /// each command is judged by the [`LoadPolicy`] of its tier. Errors and
-    /// refusals go to Output, where they are seen with Log Level Off.
+    /// each command is judged by the [`LoadPolicy`] of its tier. The first
+    /// errors and refusals go to Output, where they are seen with Log Level
+    /// Off.
     ///
     /// The active config is loaded from a clean slate, and the panel table
     /// is built from its panel lines; with no file, or under Project Vimrc
@@ -150,7 +151,7 @@ impl GodotVimCore {
                 controller.load_config(config, &mut policy)
             }),
         };
-        for line in &report.lines {
+        for line in report.output() {
             godot_print!("{line}");
         }
         let panel_lines = policy.panel_lines().to_vec();

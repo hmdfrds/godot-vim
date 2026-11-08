@@ -62,11 +62,16 @@ const SEEDED_DEFAULTS: &str = "nmap <C-S-Down> :addcursor below<CR>\n\
      nmap <leader>mf :cursorfilter<Space>\n\
      nmap <leader>mF :cursorfilter!<Space>";
 
-/// What loading a config showed: each error and refusal where it was
-/// raised, and how many of each.
+/// Lines a load prints at most: Godot's Output took tens of seconds for the
+/// 20,000 refusals of a hostile 1 MB project vimrc.
+pub(crate) const MAX_REPORT_LINES: usize = 100;
+
+/// What loading a config showed: the first errors and refusals where they
+/// were raised, and how many of each.
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct LoadReport {
-    /// `{file}:{line}: {message}`, as Vim names the place of an error.
+    /// `{file}:{line}: {message}`, as Vim names the place of an error; the
+    /// first [`MAX_REPORT_LINES`].
     pub(crate) lines: Vec<String>,
     /// Errors other than Sandbox refusals.
     pub(crate) errors: u32,
@@ -86,16 +91,28 @@ impl LoadReport {
         } else {
             self.errors += 1;
         }
-        self.lines.push(match source {
-            Some(place) => format!("{}:{}: {message}", place.file, place.line),
-            None => message,
-        });
+        if self.lines.len() < MAX_REPORT_LINES {
+            self.lines.push(match source {
+                Some(place) => format!("{}:{}: {message}", place.file, place.line),
+                None => message,
+            });
+        }
     }
 
     fn add(&mut self, other: Self) {
-        self.lines.extend(other.lines);
+        let room = MAX_REPORT_LINES - self.lines.len();
+        self.lines.extend(other.lines.into_iter().take(room));
         self.errors += other.errors;
         self.refused += other.refused;
+    }
+
+    /// The lines to print, then how many more there were.
+    pub(crate) fn output(&self) -> impl Iterator<Item = String> + '_ {
+        let more = ((self.errors + self.refused) as usize).saturating_sub(self.lines.len());
+        let summary = (more > 0).then(|| {
+            format!("{more} more not shown; the status bar counts every error and refused command")
+        });
+        self.lines.iter().cloned().chain(summary)
     }
 }
 

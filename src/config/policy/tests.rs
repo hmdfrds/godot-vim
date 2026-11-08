@@ -5,7 +5,7 @@ use vim_core::keymap::{KeyEvent, MappingMode};
 
 use super::*;
 use crate::config::path::ResolvedConfig;
-use crate::controller::{LoadReport, VimController};
+use crate::controller::{LoadReport, VimController, MAX_REPORT_LINES};
 
 const MODES: [MappingMode; 7] = [
     MappingMode::Normal,
@@ -643,4 +643,20 @@ fn errors_and_refusals_go_to_messages_too() {
     assert!(history
         .iter()
         .any(|entry| entry == &format!("Error detected while processing {PROJECT}:")));
+}
+
+#[test]
+fn a_load_prints_its_first_lines_and_counts_the_rest() {
+    let refused = MAX_REPORT_LINES + 5;
+    let (_, report) = sandboxed(&"nmap x y\n".repeat(refused));
+    assert_eq!(report.refused as usize, refused);
+    let output: Vec<String> = report.output().collect();
+    assert_eq!(output.len(), MAX_REPORT_LINES + 1);
+    assert!(
+        output[MAX_REPORT_LINES - 1].starts_with(&format!("{PROJECT}:{MAX_REPORT_LINES}: E48: "))
+    );
+    assert_eq!(
+        output[MAX_REPORT_LINES],
+        "5 more not shown; the status bar counts every error and refused command"
+    );
 }
