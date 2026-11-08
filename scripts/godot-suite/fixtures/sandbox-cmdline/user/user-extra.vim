@@ -1,0 +1,1 @@
+nnoremap U iUSER<Esc>
