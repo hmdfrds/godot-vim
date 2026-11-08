@@ -4,7 +4,7 @@
 //! Status messages are shared across tabs (Vim shows one status line),
 //! and `hlsearch` is a global setting in Vim.
 
-use compact_str::CompactString;
+use vim_core::VimString;
 
 use crate::types::StatusMessage;
 
@@ -35,11 +35,11 @@ impl GlobalState {
         &self.message
     }
 
-    pub(crate) fn set_message(&mut self, text: impl Into<CompactString>) {
+    pub(crate) fn set_message(&mut self, text: impl Into<VimString>) {
         self.message = StatusMessage::Info(text.into());
     }
 
-    pub(crate) fn set_error(&mut self, text: impl Into<CompactString>) {
+    pub(crate) fn set_error(&mut self, text: impl Into<VimString>) {
         self.message = StatusMessage::Error(text.into());
     }
 

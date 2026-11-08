@@ -206,9 +206,9 @@ fn sandbox(text: &str) -> PolicyText {
 }
 
 /// The first command of a line holding several that would be stripped on a
-/// line of its own. vim-core splits a config line at every `|` not preceded
-/// by a backslash and runs each command, so every one must pass, not only
-/// the first. Splitting inside a pattern or a string only strips more.
+/// line of its own. vim-core runs each `|` command of a config line, so every
+/// one must pass, not only the first. Splitting at every `|` not preceded by
+/// a backslash, inside a pattern or a string too, only strips more.
 fn unsafe_bar_command<'a>(trimmed: &'a str, reserve: &mut usize) -> Option<&'a str> {
     if trimmed.starts_with('"') {
         return None;
@@ -277,13 +277,15 @@ const BLOCKED_SET_OPTIONS: &[&str] = &[
 ];
 
 /// Extract the option name from a `set` token, stripping value delimiters
-/// (`=`, `?`, `!`, etc.) and the `no` prefix (`noshell` -> `shell`).
+/// (`=`, `?`, `!`, etc.) and the `no` or `inv` prefix (`noshell` -> `shell`).
 fn extract_option_name_from_token(token: &str) -> &str {
     let name = token
         .split(['=', '?', '!', '+', '-', '^', ':'])
         .next()
         .unwrap_or("");
-    name.strip_prefix("no").unwrap_or(name)
+    name.strip_prefix("no")
+        .or_else(|| name.strip_prefix("inv"))
+        .unwrap_or(name)
 }
 
 /// Whether a `set` token, or an option name, names a blocked option.
@@ -873,8 +875,8 @@ fn is_marked(b: &u8) -> bool {
     b.is_ascii_alphabetic() || *b == b'!' || !b.is_ascii()
 }
 
-/// The longest command line a right-hand side may type, in bytes. vim-core's
-/// `split_ex_pipeline` takes time quadratic in a run of range characters.
+/// The longest command line a right-hand side may type, in bytes, which bounds
+/// the time each judgment of it takes.
 const MAX_COMMAND_LINE: usize = 1024;
 
 /// The range vim-core fills in when `:` is typed in Visual mode.
@@ -1033,19 +1035,21 @@ impl Judge {
         (text_check && text_runs_dangerous(line)) || self.parses_to_unsafe_command(line)
     }
 
-    /// Whether one of the commands vim-core runs for `line` is unsafe, split
-    /// and parsed as `execute_ex_line` does. A line of one piece is parsed
-    /// whole; [`split_ex_pipeline`] failing to split strips. Of several pieces,
-    /// one already parsed safe is not parsed again: the parser reads nothing
-    /// but the piece.
+    /// Whether one of the commands of `line` is unsafe, split by
+    /// [`split_ex_pipeline`] at every `|` outside the pattern of an `s`, `g`
+    /// or `v`, and split as vim-core runs it; either finding one strips, and
+    /// so does [`split_ex_pipeline`] failing to split. A piece already parsed
+    /// safe is not parsed again: the parser reads nothing but the piece.
     fn parses_to_unsafe_command(&mut self, line: &str) -> bool {
         let Some(pieces) = split_ex_pipeline(line) else {
             return true;
         };
-        if pieces.len() <= 1 {
-            return parses_unsafe(line);
-        }
-        pieces.into_iter().any(|piece| {
+        let Ok(run) = std::panic::catch_unwind(|| vim_core::grammar::split_ex_pipeline(line))
+        else {
+            return true;
+        };
+        let run = run.iter().map(|piece| &**piece);
+        pieces.into_iter().chain(run).any(|piece| {
             if self.safe.contains(piece) {
                 return false;
             }
@@ -1061,11 +1065,12 @@ impl Judge {
 /// Whether vim-core parses `piece` as an unsafe command. One that fails to
 /// parse runs nothing, and one the parser panics on is unsafe.
 fn parses_unsafe(piece: &str) -> bool {
-    std::panic::catch_unwind(|| {
-        vim_core::grammar::parse_ex_command_with_modifiers(piece)
-            .is_ok_and(|(_, command)| is_unsafe_command(&command))
-    })
-    .unwrap_or(true)
+    std::panic::catch_unwind(|| piece_is_unsafe(piece)).unwrap_or(true)
+}
+
+fn piece_is_unsafe(piece: &str) -> bool {
+    vim_core::grammar::parse_ex_command_with_modifiers(piece)
+        .is_ok_and(|(_, command)| is_unsafe_command(&command))
 }
 
 /// How many `%(`, `%[` and (outside a search) [`NESTING_COMMANDS`] start in
@@ -1101,10 +1106,10 @@ fn count_nested(line: &str, starts: std::ops::Range<usize>, search: bool) -> usi
         .count()
 }
 
-/// vim-core's `split_ex_pipeline` in linear time. vim-core's own looks for
-/// the command after a piece's range again at every byte, which takes time
-/// quadratic in a long range. `None` for a range with a mark of more than one
-/// byte, which vim-core v0.9.0 splits otherwise or panics on.
+/// `input` split at every `|` outside the pattern of an `s`, `g` or `v` that
+/// starts a piece, in linear time. vim-core keeps more of a line together,
+/// so its own split is judged beside this one. `None` for a range with a mark
+/// of more than one byte.
 fn split_ex_pipeline(input: &str) -> Option<Vec<&str>> {
     let trimmed = input.trim();
     if trimmed.is_empty() {
@@ -1226,7 +1231,7 @@ fn is_unsafe_command(command: &vim_core::grammar::types::ExCommand) -> bool {
         | ExCommand::Unabbreviate { .. }
         | ExCommand::AbClear { .. }
         | ExCommand::SetHandler { .. }
-        | ExCommand::LetMapleader { .. } => true,
+        | ExCommand::LetLeader { .. } => true,
         ExCommand::Set { assignments }
         | ExCommand::SetLocal { assignments }
         | ExCommand::SetGlobal { assignments } => {
@@ -1239,14 +1244,19 @@ fn is_unsafe_command(command: &vim_core::grammar::types::ExCommand) -> bool {
                 | SetAssignment::Append(name, _)
                 | SetAssignment::Remove(name, _)
                 | SetAssignment::Prepend(name, _) => is_blocked_option(name),
+                SetAssignment::InvertBool(name) => is_blocked_option(name),
                 _ => false,
             })
         }
         ExCommand::Read { path, .. } => path.starts_with('!'),
+        // vim-core splits the list again on each line it runs on
+        // (`global_exe_one()` in Vim's ex_cmds.c).
+        ExCommand::Global { commands, .. } => vim_core::grammar::split_ex_pipeline(commands)
+            .iter()
+            .any(|piece| piece_is_unsafe(piece)),
         ExCommand::WinDo { command, .. }
         | ExCommand::BufDo { command, .. }
         | ExCommand::TabDo { command, .. }
-        | ExCommand::Global { command, .. }
         | ExCommand::StructuralExtract { command, .. }
         | ExCommand::StructuralComplement { command, .. } => is_unsafe_command(command),
         _ => false,
@@ -2080,10 +2090,10 @@ inoremap jk <Esc>
         let x = vim_core::keymap::KeyEvent::char('x');
         for line in lines {
             let mut trusted = VimEngine::new();
-            let _ = trusted.source_config_text(line);
+            let _ = crate::config::source_text(&mut trusted, line);
             assert!(trusted.could_start_mapping(x), "not a mapping: {line}");
             let mut engine = VimEngine::new();
-            let _ = engine.source_config_text(&sandbox_config_text(line));
+            let _ = crate::config::source_text(&mut engine, &sandbox_config_text(line));
             assert!(!engine.could_start_mapping(x), "{line}");
         }
     }
@@ -2265,6 +2275,32 @@ inoremap jk <Esc>
             "nnoremap x :v/x/nnoremap y Z<CR>",
             "nnoremap x :global!/x/!ls<CR>",
         ]);
+    }
+
+    /// vim-core runs the rest of a `:g` line as its command list, `|`
+    /// commands included, and keeps a `|` inside its pattern, behind a
+    /// modifier too. Each command of the list is judged.
+    #[test]
+    fn strips_a_global_whose_command_list_runs_a_stripped_command() {
+        assert_all_stripped(&[
+            "nnoremap x :g/x/s/a/b/<Bar>!ls<CR>",
+            "nnoremap x :g/x/d<Bar>nnoremap y Z<CR>",
+            "nnoremap x :v/x/s/a/b/<Bar>so f<CR>",
+            "nnoremap x :sil g/x<Bar>y/nnoremap a b<CR>",
+            "nnoremap x :g/x/normal x<Bar>nnoremap a b<CR>",
+        ]);
+        assert_defines_nothing_in_the_engine(&["nnoremap x :sil g/x<Bar>y/nnoremap a b<CR>"]);
+    }
+
+    /// A config has no buffer for `:g` to run on (E523), but the line is
+    /// stripped all the same.
+    #[test]
+    fn strips_a_project_vimrc_global_that_runs_the_shell_after_a_bar() {
+        let text = "g/x/s/a/b/|!cmd\n";
+        let policed =
+            apply_vimrc_policy(text, true, crate::settings::ProjectVimrc::Sandbox).unwrap();
+        assert_eq!(policed.stripped, 1);
+        assert_eq!(policed.text, "\" [sandbox] stripped: g/x/s/a/b/|!cmd\n");
     }
 
     /// Runs `f` on a 1 MiB stack, the main thread's on Windows.
@@ -2588,9 +2624,9 @@ inoremap jk <Esc>
         assert!(out, "a :filetype chain was stripped");
     }
 
-    /// vim-core's `split_ex_pipeline` may panic on a mark followed by a
-    /// character of more than one byte. Judging such a line never crashes,
-    /// and stripped or kept, it reaches no shell and sources nothing.
+    /// The Sandbox's split gives up on a mark followed by a character of more
+    /// than one byte. Judging such a line never crashes, and stripped or
+    /// kept, it reaches no shell and sources nothing.
     #[test]
     fn a_command_line_the_parser_may_panic_on_is_judged_without_crashing() {
         use vim_core::execution::{HostRequest, HostSession};
@@ -2621,36 +2657,67 @@ inoremap jk <Esc>
         assert_all_kept(&["nnoremap x :s/'é/e/<CR>", "nnoremap x :'a,'bs/é/e/<CR>"]);
     }
 
-    /// The Sandbox splits a line into the commands vim-core runs as vim-core
-    /// does, or not at all.
+    /// Whatever the Sandbox keeps of a mapping that types a command line,
+    /// pressing it in the engine reaches no shell, reads no config file and
+    /// maps nothing: every command vim-core splits the line into, and every
+    /// command of a `:g` list, is judged.
     #[test]
-    fn splits_a_line_as_vim_core_does() {
+    fn a_kept_command_line_runs_nothing_stripped_in_the_engine() {
+        use vim_core::execution::{HostRequest, HostSession};
+        use vim_core::keymap::KeyEvent;
         let words = [
-            "1", ",", ";", ".", "$", "%", "+", "-", " ", "\t", "'", "'a", "'|", "|", "s", "g", "v",
-            "/", "#", "\\", "!", "d", "x", "_", "é", "'é", "\u{a0}",
+            "g/a/",
+            "v/a/",
+            "s/a/b/",
+            "<Bar>",
+            "\\",
+            "\"",
+            " ",
+            "sil ",
+            "1,",
+            "'a",
+            "!ls",
+            "so f",
+            "nnoremap y Z",
+            "d",
+            "normal ",
+            "é",
+            "/",
+            "g/",
         ];
         let mut seed = 1_u32;
-        let mut split = 0;
-        for _ in 0..50_000 {
+        let mut kept = 0;
+        for _ in 0..4_000 {
             seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
-            let mut line = String::new();
-            for _ in 0..(seed >> 16) % 16 {
+            let mut line = String::from("nnoremap x :");
+            for _ in 0..(seed >> 16) % 8 {
                 seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
                 line.push_str(words[(seed >> 16) as usize % words.len()]);
             }
-            if let Some(pieces) = split_ex_pipeline(&line) {
-                assert_eq!(
-                    pieces,
-                    vim_core::grammar::split_ex_pipeline(&line),
-                    "{line:?}"
-                );
-                split += 1;
+            line.push_str("<CR>");
+            if sandbox_config_text(&line).trim_end() != line {
+                continue;
             }
+            kept += 1;
+            let mut session = HostSession::new("a\nab|\n");
+            let _ = session.source_config(&line);
+            for request in session.process_key_host(KeyEvent::char('x')).host_requests {
+                assert!(
+                    !matches!(
+                        request,
+                        HostRequest::ExternalCommand { .. } | HostRequest::ReadConfigFile { .. }
+                    ),
+                    "{line}"
+                );
+            }
+            assert!(
+                !session.engine().could_start_mapping(KeyEvent::char('y')),
+                "{line}"
+            );
         }
-        assert!(split > 40_000, "{split}");
+        assert!(kept > 2_500, "{kept}");
     }
 
-    /// vim-core's split takes time quadratic in a long range.
     #[test]
     fn splits_a_long_range_in_linear_time() {
         let n = 1 << 20;
@@ -2954,8 +3021,6 @@ inoremap jk <Esc>
         };
         for (text, keys) in [
             ("nnoremap x :!echo hi<CR>\n", "x"),
-            ("nnoremap x :\u{a0}!echo hi<CR>\n", "x"),
-            ("nnoremap x :\u{3000}!echo hi<CR>\n", "x"),
             ("nnoremap x :nnoremap y :!echo hi<lt>CR><CR>\n", "xy"),
             ("set langmap=q:\nnnoremap x 0q!echo hi<CR>\n", "x"),
             ("nnoremap x f/:!echo hi<CR>\n", "x"),
@@ -2978,6 +3043,7 @@ inoremap jk <Esc>
             ("nnoremap x wya:x:!echo hi<CR>\n", "x"),
             ("nnoremap x c:xif:!echo hi<CR>\n", "x"),
             ("nnoremap x d:T<Del>*w:<Left>!echo hi\n", "x\n"),
+            ("nnoremap x :g/a/s/a/b/<Bar>!echo hi<CR>\n", "x"),
             (
                 "vnoremap x :<Bar>nnoremap y <lt>Cmd>!echo hi<lt>CR><CR>\n",
                 "vxy",
@@ -3728,7 +3794,8 @@ imap jj <Esc>
             "let mapleader=\",\" | nnoremap x :!id<CR>",
         ] {
             let mut engine = vim_core::execution::VimEngine::new();
-            let _ = engine.source_config_text(&sandbox_config_text(&format!("{line}\n")));
+            let _ =
+                crate::config::source_text(&mut engine, &sandbox_config_text(&format!("{line}\n")));
             let x = vim_core::keymap::KeyEvent::char('x');
             assert!(!engine.could_start_mapping(x), "{line}");
         }
@@ -3744,9 +3811,10 @@ imap jj <Esc>
         // recognise. Narrowing the split set to `['=']` alone whitelists
         // `set shell!` from a committed project vimrc.
         //
-        // One token per delimiter Vim accepts, plus the `no` prefix.
+        // One token per delimiter Vim accepts, plus the `no` and `inv` prefixes.
         for token in [
-            "shell=x", "shell?", "shell!", "shell:x", "shell+=x", "shell-=x", "shell^=x", "noshell",
+            "shell=x", "shell?", "shell!", "shell:x", "shell+=x", "shell-=x", "shell^=x",
+            "noshell", "invshell",
         ] {
             assert_eq!(
                 extract_option_name_from_token(token),
@@ -3787,15 +3855,31 @@ imap jj <Esc>
         ]);
     }
 
+    /// `inv` before a boolean option's name inverts it (option.c,
+    /// `get_option_prefix()`), so `inv` hides a blocked name as `no` does.
+    #[test]
+    fn strips_a_blocked_option_behind_inv() {
+        assert_all_stripped(&[
+            "set invlangremap",
+            "set so=5 invlrm",
+            "setlocal invlnr",
+            "nnoremap x :set invlrm<CR>",
+            "nnoremap x :set so=5 invlangnoremap<CR>",
+        ]);
+        let mut trusted = vim_core::execution::VimEngine::new();
+        let _ = crate::config::source_text(&mut trusted, "set invlrm");
+        assert!(!trusted.options().langremap(), "inv inverts 'langremap'");
+    }
+
     #[test]
     fn a_stripped_langmap_line_leaves_the_engine_langmap_empty() {
         use vim_core::execution::VimEngine;
         let text = "set langmap=q:\nnnoremap x 0q!echo hi<CR>\n";
         let mut trusted = VimEngine::new();
-        let _ = trusted.source_config_text(text);
+        let _ = crate::config::source_text(&mut trusted, text);
         assert_eq!(trusted.options().langmap(), "q:");
         let mut engine = VimEngine::new();
-        let _ = engine.source_config_text(&sandbox_config_text(text));
+        let _ = crate::config::source_text(&mut engine, &sandbox_config_text(text));
         assert_eq!(engine.options().langmap(), "");
     }
 

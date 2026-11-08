@@ -4,14 +4,14 @@
 //! and its helper functions. Handlers do NOT match on variants — they convert
 //! to `String` at the `host_failure()` boundary via `Display`.
 
-use compact_str::CompactString;
 use std::fmt;
+use vim_core::VimString;
 
 /// Typed errors for `EditorHost` operations.
 ///
 /// A variant with a Vim counterpart displays as `E{N}: {message}`; the
 /// Godot-only refusals carry no number. `host_failure()` forwards the text to
-/// the engine as a `CompactString`.
+/// the engine as a `VimString`.
 #[derive(Debug, Clone)]
 pub(crate) enum HostError {
     /// E32: No file name — buffer has no associated path.
@@ -22,7 +22,7 @@ pub(crate) enum HostError {
     UnsavedChanges,
 
     /// E166: Can't open linked file for writing — symlink write blocked without `!`.
-    SymlinkWrite { path: CompactString },
+    SymlinkWrite { path: VimString },
 
     /// E382: Cannot write. The attached CodeEdit (Shader Editor, addon) is
     /// not the script editor's current script, so saving would put its text
@@ -31,14 +31,14 @@ pub(crate) enum HostError {
 
     /// E484: Can't open file — file not found, access denied, too large, etc.
     CantOpenFile {
-        path: CompactString,
-        detail: Option<CompactString>,
+        path: VimString,
+        detail: Option<VimString>,
     },
 
     /// E514: Write failed — ResourceSaver or `std::fs::write` error.
     WriteFailed {
-        path: CompactString,
-        detail: Option<CompactString>,
+        path: VimString,
+        detail: Option<VimString>,
     },
 
     /// No File menu of Godot's would close the attached editor's tab.

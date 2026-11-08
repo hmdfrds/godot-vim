@@ -6,10 +6,10 @@
 //! command, try the next chain". The top-level dispatcher tries each chain in
 //! registration order and falls back to `E492`.
 
-use compact_str::CompactString;
 use godot::classes::{CodeEdit, Control, EditorInterface, Node};
 use godot::prelude::*;
 use vim_core::execution::{HostRequestId, HostResult};
+use vim_core::VimString;
 
 use super::{host_failure, host_success};
 use crate::bridge::godot_calls;
@@ -54,7 +54,7 @@ fn debugger_action(
     if call_debugger_method(method) {
         Some(HostResult::Success {
             id,
-            message: success_message.map(CompactString::from),
+            message: success_message.map(VimString::from),
         })
     } else {
         Some(host_failure(id, "E5: Debugger panel not found"))

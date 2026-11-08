@@ -7,8 +7,8 @@
 //! external filesystem paths use `std::fs` directly. Security: the `FileAccessScope`
 //! policy restricts which path types are permitted, and symlink writes require `:w!`.
 
-use compact_str::CompactString;
 use vim_core::execution::{HostRequestId, HostResult};
+use vim_core::VimString;
 
 use super::editor_host::EditorHost;
 use super::error::HostError;
@@ -48,8 +48,8 @@ pub(crate) fn validate_path_scope(path: &str, scope: FileAccessScope) -> Result<
         return Ok(());
     }
     Err(HostError::CantOpenFile {
-        path: CompactString::from(path),
-        detail: Some(CompactString::from(
+        path: VimString::from(path),
+        detail: Some(VimString::from(
             "Access denied — path is outside the project. \
              Set security/file_access_scope to Unrestricted in Editor Settings to allow.",
         )),
@@ -64,8 +64,8 @@ pub(super) fn check_fs_file_size(path: &str) -> Result<(), HostError> {
             let size = usize::try_from(meta.len()).unwrap_or(usize::MAX);
             if size > MAX_READ_FILE_SIZE {
                 Err(HostError::CantOpenFile {
-                    path: CompactString::from(path),
-                    detail: Some(CompactString::from(format!(
+                    path: VimString::from(path),
+                    detail: Some(VimString::from(format!(
                         "File too large (>10MB): {} bytes",
                         size
                     ))),
@@ -112,7 +112,7 @@ pub(super) fn handle_write_file(
             if let Ok(meta) = std::fs::symlink_metadata(p) {
                 if meta.file_type().is_symlink() && !force.is_force() {
                     let err = HostError::SymlinkWrite {
-                        path: CompactString::from(p),
+                        path: VimString::from(p),
                     };
                     return host_failure(id, err.to_string());
                 }
@@ -129,7 +129,7 @@ pub(super) fn handle_write_file(
                     let byte_count = text.len();
                     HostResult::Success {
                         id,
-                        message: Some(CompactString::from(format!(
+                        message: Some(VimString::from(format!(
                             "\"{}\" {}L, {}B written",
                             p, line_count, byte_count
                         ))),
@@ -137,8 +137,8 @@ pub(super) fn handle_write_file(
                 }
                 Err(e) => {
                     let err = HostError::WriteFailed {
-                        path: CompactString::from(p),
-                        detail: Some(CompactString::from(e.to_string())),
+                        path: VimString::from(p),
+                        detail: Some(VimString::from(e.to_string())),
                     };
                     if force.is_force() {
                         log::warn!(
@@ -171,7 +171,7 @@ pub(super) fn handle_write_file(
             let byte_count = text_for_counts.len();
             HostResult::Success {
                 id,
-                message: Some(CompactString::from(format!(
+                message: Some(VimString::from(format!(
                     "\"{}\" {}L, {}B written",
                     saved_path, line_count, byte_count
                 ))),
@@ -274,7 +274,7 @@ pub(super) fn handle_edit_file(
             let byte_count = text.len();
             HostResult::Success {
                 id,
-                message: Some(CompactString::from(format!(
+                message: Some(VimString::from(format!(
                     "\"{}\" {}L, {}B",
                     path, line_count, byte_count
                 ))),
@@ -327,8 +327,8 @@ pub(super) fn handle_read_file(
     } else {
         check_fs_file_size(path).and_then(|_| {
             std::fs::read_to_string(path).map_err(|e| HostError::CantOpenFile {
-                path: CompactString::from(path),
-                detail: Some(CompactString::from(e.to_string())),
+                path: VimString::from(path),
+                detail: Some(VimString::from(e.to_string())),
             })
         })
     };
@@ -336,7 +336,7 @@ pub(super) fn handle_read_file(
     match result {
         Ok(data) => HostResult::Data {
             id,
-            data: CompactString::from(data),
+            data: VimString::from(data),
             offset: after_line.map(|l| l as usize), // u32→usize: always safe
         },
         Err(e) => host_failure(id, e.to_string()),
@@ -350,15 +350,15 @@ fn read_via_godot(path: &str) -> Result<String, HostError> {
 
     let file = FileAccess::open(&GString::from(path), ModeFlags::READ).ok_or_else(|| {
         HostError::CantOpenFile {
-            path: CompactString::from(path),
+            path: VimString::from(path),
             detail: None,
         }
     })?;
     let length = usize::try_from(file.get_length()).unwrap_or(usize::MAX);
     if length > MAX_READ_FILE_SIZE {
         return Err(HostError::CantOpenFile {
-            path: CompactString::from(path),
-            detail: Some(CompactString::from(format!(
+            path: VimString::from(path),
+            detail: Some(VimString::from(format!(
                 "File too large (>10MB): {} bytes",
                 length
             ))),
@@ -769,8 +769,8 @@ mod tests {
     fn handle_write_file_save_failure_returns_error() {
         let mut editor = MockEditorHost::new("content", Some("res://broken.gd"));
         editor.save_result = Some(Err(HostError::WriteFailed {
-            path: CompactString::from("res://broken.gd"),
-            detail: Some(CompactString::from("FAILED")),
+            path: VimString::from("res://broken.gd"),
+            detail: Some(VimString::from("FAILED")),
         }));
         let result = handle_write_file(
             test_id(),
@@ -1010,8 +1010,8 @@ mod tests {
     fn handle_write_quit_save_failure_no_force_returns_error() {
         let mut editor = MockEditorHost::new("content", Some("res://script.gd"));
         editor.save_result = Some(Err(HostError::WriteFailed {
-            path: CompactString::from("res://script.gd"),
-            detail: Some(CompactString::from("save failed")),
+            path: VimString::from("res://script.gd"),
+            detail: Some(VimString::from("save failed")),
         }));
         let result = handle_write_quit(test_id(), &mut editor, ForceOverride::Normal);
         assert_failure(&result);
@@ -1027,8 +1027,8 @@ mod tests {
     fn handle_write_quit_save_failure_with_force_returns_error_with_hint() {
         let mut editor = MockEditorHost::new("content", Some("res://script.gd"));
         editor.save_result = Some(Err(HostError::WriteFailed {
-            path: CompactString::from("res://script.gd"),
-            detail: Some(CompactString::from("save failed")),
+            path: VimString::from("res://script.gd"),
+            detail: Some(VimString::from("save failed")),
         }));
         let result = handle_write_quit(test_id(), &mut editor, ForceOverride::Force);
         assert_failure(&result);
@@ -1334,7 +1334,7 @@ mod tests {
     fn handle_edit_file_open_failure_returns_error() {
         let mut editor = MockEditorHost::new("clean", Some("res://current.gd"));
         editor.open_result = Some(Err(HostError::CantOpenFile {
-            path: CompactString::from("res://nonexistent.gd"),
+            path: VimString::from("res://nonexistent.gd"),
             detail: None,
         }));
         let result = handle_edit_file(

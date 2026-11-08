@@ -1315,7 +1315,7 @@ fn dispatch_search_effect(effect: Effect, state: &mut ShellState, doc: &Document
                     MatchRange::with_replacement(
                         start_pos,
                         end_pos,
-                        compact_str::CompactString::from(substitute_match.replacement()),
+                        vim_core::VimString::from(substitute_match.replacement()),
                     )
                 })
                 .collect();
@@ -1326,7 +1326,7 @@ fn dispatch_search_effect(effect: Effect, state: &mut ShellState, doc: &Document
             state.clear_substitute_preview();
         }
         Effect::SearchMatchInfo { current, total, .. } => {
-            let msg = compact_str::format_compact!("[{}/{}]", current, total);
+            let msg = vim_core::format_vim!("[{}/{}]", current, total);
             messages::handle_show_message(state.globals_mut(), msg.as_str());
         }
         other => log::error!("dispatch_search_effect: unexpected effect {:?}", other),

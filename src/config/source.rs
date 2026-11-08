@@ -4,7 +4,7 @@
 
 use std::fmt::Write;
 
-use compact_str::{format_compact, CompactString};
+use vim_core::{format_vim, VimString};
 
 use super::path::ResolvedConfig;
 use crate::types::StatusMessage;
@@ -146,10 +146,10 @@ pub(crate) enum Loaded {
 pub(crate) fn status(path: &str, loaded: Loaded) -> StatusMessage {
     let (stripped, ignored) = match loaded {
         Loaded::Missing => {
-            return StatusMessage::Error(format_compact!("E484: Can't open file {path}"));
+            return StatusMessage::Error(format_vim!("E484: Can't open file {path}"));
         }
         Loaded::Disabled => {
-            return StatusMessage::Error(format_compact!(
+            return StatusMessage::Error(format_vim!(
                 "{path} not sourced: Security > Project Vimrc is Disabled"
             ));
         }
@@ -158,7 +158,7 @@ pub(crate) fn status(path: &str, loaded: Loaded) -> StatusMessage {
             ignored_panel_lines,
         } => (stripped, ignored_panel_lines),
     };
-    let mut text = CompactString::from("Config file sourced");
+    let mut text = VimString::from("Config file sourced");
     if stripped > 0 {
         let _ = write!(text, ", {stripped} line(s) skipped by the Sandbox policy");
     }

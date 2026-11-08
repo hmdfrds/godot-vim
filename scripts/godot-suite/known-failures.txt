@@ -2,7 +2,6 @@
 # <godot>::<case>:log (problem lines), each with a reason after #.
 # scripts/godot-suite.sh fails when the failing set of the running Godot
 # changes in either direction. Rewrite one version's lines with --bless.
-4.5-stable::abbrev-caret-vimrc b0f8dfb3   # the config loader of vim-core 0.9 skips iabbrev lines, so the vimrc abbreviation never loads; typed :iabbrev expands (abbrev-caret)
 4.5-stable::comp-pgdn-fast e81e4ff4   # PageDown in Insert before the popup opens goes to vim-core and does not move the caret down a page as TextEdit does, so Enter splits another line
 4.5-stable::comp-replace-fast f1c72395   # Shift+Enter with no popup types a newline (Vim's <S-CR>); Godot before 4.7 binds Shift+Enter to nothing outside the popup
 4.5-stable::ctrl-o-dd e088c1d5   # after Insert <C-o>dd the caret keeps its old column instead of the one dd leaves, so y lands mid-line: bayr, not ybar
@@ -26,7 +25,6 @@
 4.5-stable::source-nested-user 63ad01f1   # a :source line in a sourced file is not run, so the inner file never loads and textwidth stays 0; Vim sources it (scriptfile.c, do_source())
 4.5-stable::undo-ctrl-o b5632be3   # vim-core types the text after Insert <C-o>x outside any undo group: u leaves afoobarc, not afoobc
 4.5-stable::undo-insert-session 85cd9be1   # u after an append leaves the caret past the end of the line instead of on its last character
-4.6.3-stable::abbrev-caret-vimrc b0f8dfb3   # the config loader of vim-core 0.9 skips iabbrev lines, so the vimrc abbreviation never loads; typed :iabbrev expands (abbrev-caret)
 4.6.3-stable::comp-pgdn-fast e81e4ff4   # PageDown in Insert before the popup opens goes to vim-core and does not move the caret down a page as TextEdit does, so Enter splits another line
 4.6.3-stable::comp-replace-fast f1c72395   # Shift+Enter with no popup types a newline (Vim's <S-CR>); Godot before 4.7 binds Shift+Enter to nothing outside the popup
 4.6.3-stable::comp-replace-no-stab ebdea036   # after Shift+Tab dedents the line with the popup open, godot-vim opens the popup again at its first row; Godot keeps the highlighted row
@@ -50,7 +48,6 @@
 4.6.3-stable::source-nested-user 63ad01f1   # a :source line in a sourced file is not run, so the inner file never loads and textwidth stays 0; Vim sources it (scriptfile.c, do_source())
 4.6.3-stable::undo-ctrl-o b5632be3   # vim-core types the text after Insert <C-o>x outside any undo group: u leaves afoobarc, not afoobc
 4.6.3-stable::undo-insert-session 85cd9be1   # u after an append leaves the caret past the end of the line instead of on its last character
-4.7.2-stable::abbrev-caret-vimrc b0f8dfb3   # the config loader of vim-core 0.9 skips iabbrev lines, so the vimrc abbreviation never loads; typed :iabbrev expands (abbrev-caret)
 4.7.2-stable::comp-pgdn-fast e81e4ff4   # PageDown in Insert before the popup opens goes to vim-core and does not move the caret down a page as TextEdit does, so Enter splits another line
 4.7.2-stable::comp-replace-no-stab ebdea036   # after Shift+Tab dedents the line with the popup open, godot-vim opens the popup again at its first row; Godot keeps the highlighted row
 4.7.2-stable::ctrl-o-dd e088c1d5   # after Insert <C-o>dd the caret keeps its old column instead of the one dd leaves, so y lands mid-line: bayr, not ybar
@@ -73,7 +70,6 @@
 4.7.2-stable::source-nested-user 63ad01f1   # a :source line in a sourced file is not run, so the inner file never loads and textwidth stays 0; Vim sources it (scriptfile.c, do_source())
 4.7.2-stable::undo-ctrl-o b5632be3   # vim-core types the text after Insert <C-o>x outside any undo group: u leaves afoobarc, not afoobc
 4.7.2-stable::undo-insert-session 85cd9be1   # u after an append leaves the caret past the end of the line instead of on its last character
-4.8-dev7::abbrev-caret-vimrc b0f8dfb3   # the config loader of vim-core 0.9 skips iabbrev lines, so the vimrc abbreviation never loads; typed :iabbrev expands (abbrev-caret)
 4.8-dev7::comp-pgdn-fast e81e4ff4   # PageDown in Insert before the popup opens goes to vim-core and does not move the caret down a page as TextEdit does, so Enter splits another line
 4.8-dev7::comp-replace-no-stab ebdea036   # after Shift+Tab dedents the line with the popup open, godot-vim opens the popup again; Godot 4.8 closes it once the caret moved past its last filter
 4.8-dev7::ctrl-o-dd e088c1d5   # after Insert <C-o>dd the caret keeps its old column instead of the one dd leaves, so y lands mid-line: bayr, not ybar

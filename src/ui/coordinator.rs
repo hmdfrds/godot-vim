@@ -6,12 +6,12 @@
 //! overlays exist, or none do. The `update()` method is called once per
 //! keystroke with a `UiSnapshot` and fans out to each subsystem.
 
-use compact_str::CompactString;
 use godot::classes::control::{LayoutPreset, MouseFilter};
 use godot::classes::text_edit::CaretType;
 use godot::classes::{CodeEdit, Control, Node};
 use godot::obj::NewAlloc;
 use godot::prelude::*;
+use vim_core::VimString;
 
 use vim_core::primitives::{CommandLinePrompt, CursorStyle, Direction, Mode};
 
@@ -81,8 +81,8 @@ struct DirtyCache {
     /// keystroke.
     last_message: StatusMessage,
     last_recording: Option<char>,
-    last_pending_command: Option<CompactString>,
-    last_pending_keys: Option<CompactString>,
+    last_pending_command: Option<VimString>,
+    last_pending_keys: Option<VimString>,
     cached_visual_head: Option<CharLineCol>,
 }
 

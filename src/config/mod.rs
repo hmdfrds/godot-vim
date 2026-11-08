@@ -25,3 +25,15 @@ pub(crate) mod sandbox;
 pub(crate) mod source;
 pub(crate) mod types;
 pub(crate) mod writer;
+
+/// Run config `text` in the engine with a host that answers nothing: every
+/// command is allowed and a `:source` comes back as a host request.
+pub(crate) fn source_text(
+    engine: &mut vim_core::execution::VimEngine,
+    text: &str,
+) -> vim_core::execution::Response {
+    use vim_core::execution::{ConfigText, TrustAll};
+    engine
+        .source_script(ConfigText::new("", text), &mut TrustAll::new())
+        .response
+}

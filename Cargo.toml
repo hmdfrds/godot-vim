@@ -17,15 +17,10 @@ crate-type = ["cdylib"]
 
 [dependencies]
 godot = { git = "https://github.com/godot-rust/gdext", tag = "v0.5.5", features = ["api-4-5"] }
-vim-core = { git = "https://github.com/hmdfrds/vim-core.git", tag = "v0.9.1" }
+vim-core = { git = "https://github.com/hmdfrds/vim-core.git", tag = "v0.10.1" }
 bitflags = "2"
 unicode-segmentation = "1.10"
 log = { version = "0.4", features = ["max_level_trace", "release_max_level_trace"] }
-# Must match the compact_str that vim-core exports in its public API (0.7).
-# vim-text internally uses 0.8, so cargo tree shows both; that one never
-# crosses the boundary. Bumping this to 0.8 makes every CompactString in
-# vim-core's API a type mismatch (28 errors). Dependabot: leave this alone.
-compact_str = "0.7"
 
 [dev-dependencies]
 proptest = "1.4"

@@ -6,7 +6,7 @@
 //! - **Step**: pauses after engine processing for effect-by-effect inspection
 //!   with n(ext) / p(rev) / c(ontinue) / q(uit) navigation.
 
-use compact_str::CompactString;
+use vim_core::VimString;
 
 use crate::types::MatchRange;
 
@@ -15,8 +15,8 @@ const STEP_DESC_MAX_LEN: usize = 60;
 #[derive(Debug, Default)]
 pub(crate) struct VimdebugState {
     mode: VimdebugMode,
-    provenance: Option<CompactString>,
-    effects: Option<CompactString>,
+    provenance: Option<VimString>,
+    effects: Option<VimString>,
     range: Option<MatchRange>,
     step_pending: Vec<StepEffect>,
     step_index: usize,
@@ -32,7 +32,7 @@ pub(crate) enum VimdebugMode {
 
 #[derive(Debug, Clone)]
 pub(crate) struct StepEffect {
-    pub(crate) description: CompactString,
+    pub(crate) description: VimString,
     pub(crate) applied: bool,
 }
 
@@ -73,11 +73,11 @@ impl VimdebugState {
         }
     }
 
-    pub(crate) fn provenance(&self) -> Option<&CompactString> {
+    pub(crate) fn provenance(&self) -> Option<&VimString> {
         self.provenance.as_ref()
     }
 
-    pub(crate) fn effects_summary(&self) -> Option<&CompactString> {
+    pub(crate) fn effects_summary(&self) -> Option<&VimString> {
         self.effects.as_ref()
     }
 
@@ -88,12 +88,12 @@ impl VimdebugState {
     #[allow(dead_code)] // Called when vimdebug watch annotations are wired to the new pipeline.
     pub(crate) fn capture_provenance(&mut self, provenance: Option<&str>) {
         if self.is_enabled() {
-            self.provenance = provenance.map(CompactString::from);
+            self.provenance = provenance.map(VimString::from);
         }
     }
 
     #[allow(dead_code)] // Called when vimdebug watch annotations are wired to the new pipeline.
-    pub(crate) fn capture_effects_summary(&mut self, summary: CompactString) {
+    pub(crate) fn capture_effects_summary(&mut self, summary: VimString) {
         if self.is_enabled() {
             self.effects = Some(summary);
         }
@@ -113,7 +113,7 @@ impl VimdebugState {
     }
 
     #[allow(dead_code)] // Used by vimdebug step mode (currently disabled in new pipeline).
-    pub(crate) fn load_step_effects(&mut self, descriptions: Vec<CompactString>) {
+    pub(crate) fn load_step_effects(&mut self, descriptions: Vec<VimString>) {
         self.step_pending = descriptions
             .into_iter()
             .map(|d| StepEffect {
@@ -165,7 +165,7 @@ impl VimdebugState {
         !self.step_pending.is_empty() && self.step_index < self.step_pending.len()
     }
 
-    pub(crate) fn step_status_line(&self) -> Option<CompactString> {
+    pub(crate) fn step_status_line(&self) -> Option<VimString> {
         if self.step_pending.is_empty() {
             return None;
         }
@@ -183,7 +183,7 @@ impl VimdebugState {
             "(all applied)"
         };
         let display_idx = if current < total { current + 1 } else { total };
-        Some(compact_str::format_compact!(
+        Some(vim_core::format_vim!(
             "[{}/{}] {} | n:next p:prev c:all q:quit",
             display_idx,
             total,
@@ -245,9 +245,9 @@ mod tests {
         let mut state = VimdebugState::default();
         state.set_mode(VimdebugMode::Step);
         state.load_step_effects(vec![
-            CompactString::from("SetCursor(5)"),
-            CompactString::from("SetMode(Normal)"),
-            CompactString::from("ShowMessage(ok)"),
+            VimString::from("SetCursor(5)"),
+            VimString::from("SetMode(Normal)"),
+            VimString::from("ShowMessage(ok)"),
         ]);
         assert!(state.has_pending_steps());
 
@@ -268,7 +268,7 @@ mod tests {
     fn step_next_returns_none_at_end() {
         let mut state = VimdebugState::default();
         state.set_mode(VimdebugMode::Step);
-        state.load_step_effects(vec![CompactString::from("effect1")]);
+        state.load_step_effects(vec![VimString::from("effect1")]);
         assert_eq!(state.step_next(), Some(0));
         assert_eq!(state.step_next(), None);
     }
@@ -277,7 +277,7 @@ mod tests {
     fn step_quit_clears() {
         let mut state = VimdebugState::default();
         state.set_mode(VimdebugMode::Step);
-        state.load_step_effects(vec![CompactString::from("effect1")]);
+        state.load_step_effects(vec![VimString::from("effect1")]);
         state.step_quit();
         assert!(!state.has_pending_steps());
         assert!(state.step_status_line().is_none());
@@ -288,8 +288,8 @@ mod tests {
         let mut state = VimdebugState::default();
         state.set_mode(VimdebugMode::Step);
         state.load_step_effects(vec![
-            CompactString::from("SetCursor(5, 12)"),
-            CompactString::from("SetMode(Normal)"),
+            VimString::from("SetCursor(5, 12)"),
+            VimString::from("SetMode(Normal)"),
         ]);
         let line = state.step_status_line().unwrap();
         assert!(line.contains("[1/2]"));

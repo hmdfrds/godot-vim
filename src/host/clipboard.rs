@@ -1,8 +1,8 @@
 //! Reads the system clipboard via the [`ClipboardPort`] abstraction to
 //! fulfill `HostRequest::ReadClipboard`.
 
-use compact_str::CompactString;
 use vim_core::execution::{HostRequestId, HostResult};
+use vim_core::VimString;
 
 use crate::bridge::clipboard::ClipboardPort;
 
@@ -19,6 +19,6 @@ pub(super) fn handle_read_clipboard(
     log::trace!("clipboard::read: len={}", text.len());
     HostResult::ClipboardText {
         id,
-        text: CompactString::from(text),
+        text: VimString::from(text),
     }
 }

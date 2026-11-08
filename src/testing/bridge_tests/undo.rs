@@ -270,6 +270,38 @@ fn empty_insert_with_no_node() {
     assert_editor!(mock, text: "hello");
 }
 
+/// The controller's engine sends that shape for `i<Esc>`, and its `u` then
+/// undoes the `x`.
+#[test]
+fn empty_insert_from_the_controllers_engine() {
+    use vim_core::effects::Effect;
+    use vim_core::execution::InputContext;
+    use vim_core::keymap::KeyEvent;
+    let mut controller = crate::controller::VimController::new();
+    let mut mock = MockTextEdit::new("hello");
+    let mut ctx = DispatchCtx::new();
+    let mut ends = Vec::new();
+    for key in [
+        KeyEvent::char('x'),
+        KeyEvent::char('i'),
+        KeyEvent::escape(),
+        KeyEvent::char('u'),
+    ] {
+        let text = mock.get_text();
+        let doc = crate::bridge::document::GodotDocument::new(&text);
+        let input = InputContext::new(&doc, 0).validate_clamped();
+        let effects = controller.engine_mut().process(key, input).take_effects();
+        ends.extend(effects.iter().filter_map(|effect| match effect {
+            Effect::EndUndoGroup { node_id } => Some(node_id.is_some()),
+            _ => None,
+        }));
+        ctx.dispatch(&mut mock, effects);
+    }
+    assert_eq!(ends, [true, false], "x commits a node, i<Esc> none");
+    assert!(!ctx.undo_pending());
+    assert_editor!(mock, text: "hello");
+}
+
 /// An empty pair inside an open Insert session leaves the session's start.
 #[test]
 fn empty_pair_inside_a_session_keeps_its_start() {

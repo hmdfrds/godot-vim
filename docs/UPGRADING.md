@@ -17,13 +17,28 @@ session's start. `u` after such a session still leaves its text, until
 vim-core keeps what you type after the command in the session.
 
 **Ctrl+Z after a `u` that changed nothing undoes one step.** After `x`,
-`x`, an Insert that typed nothing (`i<Esc>`) and `u`, Ctrl+Z also undid
+`x`, a `guu` on a line already in lower case and `u`, Ctrl+Z also undid
 the first `x`, often more, and could log an error. Now it undoes the
 second `x` only.
 
 **`undolevels` defaults to 10000**, the size of GodotVim's undo store. It
 was unlimited. A vimrc that sets it still wins, and a larger value also
 makes the store larger.
+
+**`{` and `}` stop only where Vim's do.** They stop at an empty line, a
+line that starts with a form feed and an nroff macro line such as `.PP`,
+the lines Vim's `findpar()` stops at. A line that holds only spaces or tabs
+no longer stops them. Godot keeps the indent on a new line, so in a script
+they often jump further than before. To make a line that stops them, leave
+it empty; Godot can trim trailing whitespace when it saves (Editor
+Settings > Text Editor > Behavior > Files > Trim Trailing Whitespace On
+Save).
+
+**`d}`, `y}`, `gq}` and `)` take in the last character at the end of the
+text.** When the motion runs into the end of a text with no newline after
+it, `d}` deletes, `y}` yanks and `gq}` formats up to and including the last
+character, and so does an operator with `)`, as in Vim. They left that
+character out.
 
 ## From v1.9.2
 

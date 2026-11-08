@@ -33,8 +33,8 @@
 
 use std::fmt::Write as _;
 
-use compact_str::CompactString;
 use vim_core::keymap::KeyEvent;
+use vim_core::VimString;
 
 use crate::actions::action::{is_valid_action_id, Params, MAX_ACTION_COUNT};
 use crate::actions::keys::{parse_lhs, LhsError};
@@ -55,11 +55,11 @@ const MAX_PARAMS: usize = 4;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum TargetSpec {
     /// A dotted, registered action id.
-    Action(CompactString),
+    Action(VimString),
     /// `native` — give the key back to Godot at this surface.
     Native,
     /// `<Shortcut>(section/path)` — delegate to one of Godot's own shortcuts.
-    Shortcut(CompactString),
+    Shortcut(VimString),
 }
 
 /// The five documented flags, each legal at most once and in any order.
@@ -104,7 +104,7 @@ impl Flags {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct PanelMap {
     pub(crate) flags: Flags,
-    pub(crate) surface: CompactString,
+    pub(crate) surface: VimString,
     /// Canonicalized, non-empty, at most `MAX_KEY_SEQUENCE_LEN` long.
     pub(crate) lhs: Vec<KeyEvent>,
     pub(crate) target: TargetSpec,
@@ -118,7 +118,7 @@ pub(crate) enum PanelLine {
     /// enum is moved around per config line.
     Map(Box<PanelMap>),
     Unmap {
-        surface: CompactString,
+        surface: VimString,
         lhs: Vec<KeyEvent>,
     },
 }
@@ -133,19 +133,19 @@ pub(crate) enum PanelParseError {
     /// A required operand was absent.
     MissingOperand(&'static str),
     /// `panelunmap` takes exactly two operands.
-    TrailingOperand(CompactString),
-    UnknownFlag(CompactString),
-    DuplicateFlag(CompactString),
+    TrailingOperand(VimString),
+    UnknownFlag(VimString),
+    DuplicateFlag(VimString),
     /// Not `^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$`.
-    BadSurface(CompactString),
+    BadSurface(VimString),
     Lhs(LhsError),
     /// Not an action id, not `native`, not `<Shortcut>(path)`.
-    BadTarget(CompactString),
+    BadTarget(VimString),
     /// Not `key=value`, or the key is not `^[A-Za-z0-9_.]+$`.
-    BadParam(CompactString),
-    DuplicateParam(CompactString),
+    BadParam(VimString),
+    DuplicateParam(VimString),
     /// Values are decimal integers only, `^-?[0-9]{1,10}$`.
-    ParamNotAnInteger(CompactString),
+    ParamNotAnInteger(VimString),
     TooManyParams(usize),
     /// `count` is validated at load as well as clamped at runtime: an
     /// unbounded count is an editor freeze, not a slow keystroke.

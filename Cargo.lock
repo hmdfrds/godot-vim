@@ -125,29 +125,15 @@ dependencies = [
 
 [[package]]
 name = "compact_str"
-version = "0.7.1"
+version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f86b9c4c00838774a6d902ef931eff7470720c51d90c2e32cfe15dc304737b3f"
+checksum = "79fcda08c33bb58b97008b2cdada6622500e949e060f5913361763121abd2416"
 dependencies = [
  "castaway",
  "cfg-if",
  "itoa",
- "ryu",
  "static_assertions",
-]
-
-[[package]]
-name = "compact_str"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fd622ebbb56a5b2ccb651b32b911cdeb2a9b4b11776b2473bf26a26a286244e"
-dependencies = [
- "castaway",
- "cfg-if",
- "itoa",
- "rustversion",
- "ryu",
- "static_assertions",
+ "zmij",
 ]
 
 [[package]]
@@ -319,7 +305,6 @@ name = "godot-vim"
 version = "1.9.3"
 dependencies = [
  "bitflags",
- "compact_str 0.7.1",
  "godot",
  "log",
  "proptest",
@@ -553,12 +538,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ryu"
-version = "1.0.23"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
-
-[[package]]
 name = "semver"
 version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -766,14 +745,14 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vim-core"
-version = "0.9.1"
-source = "git+https://github.com/hmdfrds/vim-core.git?tag=v0.9.1#bec806f44494cde804b7323e55f54a337ca73309"
+version = "0.10.1"
+source = "git+https://github.com/hmdfrds/vim-core.git?tag=v0.10.1#59c86070c69bf2e04f00aaef4d658804308c386a"
 dependencies = [
  "ahash",
  "arrayvec",
  "bitflags",
  "cfg-if",
- "compact_str 0.7.1",
+ "compact_str",
  "derive_more",
  "memchr",
  "nonmax",
@@ -791,11 +770,11 @@ dependencies = [
 [[package]]
 name = "vim-regex"
 version = "0.1.0"
-source = "git+https://github.com/hmdfrds/vim-core.git?tag=v0.9.1#bec806f44494cde804b7323e55f54a337ca73309"
+source = "git+https://github.com/hmdfrds/vim-core.git?tag=v0.10.1#59c86070c69bf2e04f00aaef4d658804308c386a"
 dependencies = [
  "ahash",
  "aho-corasick",
- "compact_str 0.7.1",
+ "compact_str",
  "memchr",
  "smallvec",
 ]
@@ -803,11 +782,11 @@ dependencies = [
 [[package]]
 name = "vim-text"
 version = "0.1.0"
-source = "git+https://github.com/hmdfrds/vim-core.git?tag=v0.9.1#bec806f44494cde804b7323e55f54a337ca73309"
+source = "git+https://github.com/hmdfrds/vim-core.git?tag=v0.10.1#59c86070c69bf2e04f00aaef4d658804308c386a"
 dependencies = [
  "arrayvec",
  "bitflags",
- "compact_str 0.8.2",
+ "compact_str",
  "memchr",
 ]
 
@@ -878,3 +857,9 @@ dependencies = [
  "quote",
  "syn 2.0.119",
 ]
+
+[[package]]
+name = "zmij"
+version = "1.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"

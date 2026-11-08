@@ -5,8 +5,8 @@
 //! creating circular dependencies. Each type exists to replace a primitive
 //! (bool, tuple, Option pair) with a named, mis-use-resistant alternative.
 
-use compact_str::CompactString;
 use vim_core::primitives::{CommandLinePrompt, CursorStyle, Direction, Mode};
+use vim_core::VimString;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ForceOverride
@@ -118,7 +118,7 @@ pub(crate) struct MatchRange {
     pub(crate) end: CharLineCol,
     /// The replacement text that would be produced by `:s`. `None` for
     /// vimdebug range highlights and other non-substitute uses.
-    pub(crate) replacement: Option<CompactString>,
+    pub(crate) replacement: Option<VimString>,
 }
 
 impl MatchRange {
@@ -136,7 +136,7 @@ impl MatchRange {
     pub(crate) fn with_replacement(
         start: CharLineCol,
         end: CharLineCol,
-        replacement: CompactString,
+        replacement: VimString,
     ) -> Self {
         Self {
             start,
@@ -219,9 +219,9 @@ pub(crate) enum StatusMessage {
     #[default]
     None,
     /// e.g. "3 lines yanked" -- rendered in default color.
-    Info(CompactString),
+    Info(VimString),
     /// e.g. "E486: Pattern not found" -- rendered in red.
-    Error(CompactString),
+    Error(VimString),
 }
 
 impl StatusMessage {
@@ -254,7 +254,7 @@ impl StatusMessage {
 pub(crate) struct CommandLineState {
     /// `None` when not in command-line mode; otherwise Ex / SearchForward / SearchBackward.
     pub(crate) prompt: Option<CommandLinePrompt>,
-    pub(crate) input: CompactString,
+    pub(crate) input: VimString,
     /// Char offset within `input` (not byte offset).
     pub(crate) cursor: usize,
 }
@@ -272,16 +272,16 @@ pub(crate) enum VimdebugSnapshot {
     Inactive,
     /// `:vimdebug watch` — status bar shows provenance and effect summary.
     Watch {
-        provenance: CompactString,
-        effects: CompactString,
+        provenance: VimString,
+        effects: VimString,
         range: Option<MatchRange>,
     },
     /// `:vimdebug step` — additionally shows step navigation status line.
     Step {
-        provenance: CompactString,
-        effects: CompactString,
+        provenance: VimString,
+        effects: VimString,
         range: Option<MatchRange>,
-        step_status: CompactString,
+        step_status: VimString,
     },
 }
 
@@ -336,7 +336,7 @@ impl VimdebugSnapshot {
 ///
 /// This is the sole data contract between controller and UI -- the UI layer
 /// never touches engine internals directly. All fields are pre-converted to
-/// display-ready types (CharLineCol, CompactString, etc.).
+/// display-ready types (CharLineCol, VimString, etc.).
 #[derive(Debug)]
 pub(crate) struct UiSnapshot {
     pub(crate) mode: Mode,
@@ -345,7 +345,7 @@ pub(crate) struct UiSnapshot {
     pub(crate) cmdline: CommandLineState,
     /// Register character being recorded (e.g. 'q'), or `None`.
     pub(crate) recording_register: Option<char>,
-    pub(crate) search_pattern: Option<(CompactString, Direction)>,
+    pub(crate) search_pattern: Option<(VimString, Direction)>,
     /// `false` after `:noh` (highlights suppressed but pattern retained);
     /// `true` after any new search.
     pub(crate) hlsearch_enabled: bool,
@@ -353,9 +353,9 @@ pub(crate) struct UiSnapshot {
     /// selection end, so the cursor overlay needs the engine's actual head
     /// position to render correctly.
     pub(crate) visual_head: Option<CharLineCol>,
-    pub(crate) pending_keys: CompactString,
+    pub(crate) pending_keys: VimString,
     /// Showcmd string (e.g. "3d", "ci") combining parser and mapping state.
-    pub(crate) pending_command: CompactString,
+    pub(crate) pending_command: VimString,
     /// `Some(vec)` = update/clear the inccommand overlay; `None` = no change.
     pub(crate) substitute_preview: Option<Vec<MatchRange>>,
     pub(crate) vimdebug: VimdebugSnapshot,

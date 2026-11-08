@@ -41,9 +41,9 @@ use crate::state::ShellState;
 pub(crate) enum PendingUiAction {
     OpenMappingDialog,
     /// `:source`, with the file as typed, `None` when bare.
-    Source(Option<compact_str::CompactString>),
+    Source(Option<vim_core::VimString>),
     ShowUndoTree,
-    Vimdebug(compact_str::CompactString),
+    Vimdebug(vim_core::VimString),
     /// Run a shell-side action by NAME.
     ///
     /// Name-carrying, never id-carrying. `ActionNames` wraps its own
@@ -51,7 +51,7 @@ pub(crate) enum PendingUiAction {
     /// would resolve against the wrong table. The string also keeps `bridge`
     /// free of any dependency on `crate::actions`.
     RunRegistryAction {
-        name: compact_str::CompactString,
+        name: vim_core::VimString,
         count: u32,
     },
     /// `:panelmap` / `:panelmap <lhs>` — the panel-binding introspector.
@@ -60,7 +60,7 @@ pub(crate) enum PendingUiAction {
     /// the same reason [`PendingUiAction::RunRegistryAction`] carries a name:
     /// `bridge` must not depend on `crate::actions`. The plane lives on
     /// `GodotVimCore`, so the parse and the report both happen after the hop.
-    PanelCommand(compact_str::CompactString),
+    PanelCommand(vim_core::VimString),
     PerfReport,
     PerfReset,
     /// Start Code Complete Delay for the caret on `line`; the timer is a
@@ -356,7 +356,7 @@ impl GodotHost {
         if self.host_request_depth > MAX_HOST_REQUEST_DEPTH {
             return HostResult::Failure {
                 id: request.id(),
-                error: compact_str::CompactString::from("host request depth limit exceeded"),
+                error: vim_core::VimString::from("host request depth limit exceeded"),
             };
         }
 
@@ -402,7 +402,7 @@ impl GodotHost {
                 cmd_str if parse_panel_command(cmd_str).is_some() => {
                     let args = parse_panel_command(cmd_str).unwrap_or_default();
                     self.pending_ui_actions.push(PendingUiAction::PanelCommand(
-                        compact_str::CompactString::from(args),
+                        vim_core::VimString::from(args),
                     ));
                     return HostResult::Success {
                         id: request.id(),
@@ -411,7 +411,7 @@ impl GodotHost {
                 }
                 cmd_str if cmd_str.starts_with("vimdebug") => {
                     self.pending_ui_actions.push(PendingUiAction::Vimdebug(
-                        compact_str::CompactString::from(cmd_str),
+                        vim_core::VimString::from(cmd_str),
                     ));
                     return HostResult::Success {
                         id: request.id(),
@@ -458,11 +458,7 @@ impl GodotHost {
             cache_editor_id: editor_id,
             cached_generation: generation,
             cursor_offset,
-            viewport: ViewportInfo {
-                first_line: 0,
-                height: 0,
-                width: 0,
-            },
+            viewport: ViewportInfo::new(0, 0, 0),
             state: ShellState::default(),
             security_policy: SecurityPolicy {
                 shell_execution: ShellExecution::Disabled,
@@ -516,11 +512,11 @@ impl GodotHost {
             live_generation_raw,
         );
         // Viewport.
-        self.viewport = ViewportInfo {
-            first_line: codec::i32_to_usize(self.editor.get_first_visible_line()),
-            height: self.editor.safe_visible_line_count(),
-            width: approximate_viewport_width(&self.editor),
-        };
+        self.viewport = ViewportInfo::new(
+            codec::i32_to_usize(self.editor.get_first_visible_line()),
+            self.editor.safe_visible_line_count(),
+            approximate_viewport_width(&self.editor),
+        );
     }
 
     /// Re-derive Godot's completion popup from what this engine pass did.

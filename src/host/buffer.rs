@@ -1,9 +1,9 @@
 //! Buffer navigation: `:bn`, `:bp`, `:b<N>` via Godot's ScriptEditor TabContainer.
 
-use compact_str::CompactString;
 use godot::classes::{CodeEdit, EditorInterface, Node, TabContainer, TextEdit};
 use godot::prelude::*;
 use vim_core::execution::{HostRequestId, HostResult};
+use vim_core::VimString;
 
 use super::{host_failure, host_success};
 use crate::scene_tree::{find_descendant, MAX_DISCOVERY_DEPTH};
@@ -194,7 +194,7 @@ pub(super) fn handle_buffer_list(id: HostRequestId) -> HostResult {
     if count == 0 {
         return HostResult::Success {
             id,
-            message: Some(CompactString::from("No buffers open")),
+            message: Some(VimString::from("No buffers open")),
         };
     }
 
@@ -216,6 +216,6 @@ pub(super) fn handle_buffer_list(id: HostRequestId) -> HostResult {
 
     HostResult::Success {
         id,
-        message: Some(CompactString::from(lines.join("\n"))),
+        message: Some(VimString::from(lines.join("\n"))),
     }
 }

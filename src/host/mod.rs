@@ -20,10 +20,10 @@ pub(crate) use dispatch::execute;
 pub(crate) use dispatch::SecurityPolicy;
 pub(crate) use editor_host::GodotEditorHost;
 
-use compact_str::CompactString;
 use vim_core::execution::{HostRequestId, HostResult};
+use vim_core::VimString;
 
-pub(crate) fn host_failure(id: HostRequestId, msg: impl Into<CompactString>) -> HostResult {
+pub(crate) fn host_failure(id: HostRequestId, msg: impl Into<VimString>) -> HostResult {
     HostResult::Failure {
         id,
         error: msg.into(),

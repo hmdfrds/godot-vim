@@ -32,10 +32,10 @@
 //!
 //! See `DESIGN-rebindable-nav.md` (design notes, kept outside this repo) §4.7, §5.6 and §6.3.
 
-use compact_str::CompactString;
 use vim_core::keymap::{
     Key, KeyEvent, MappingEntry, MappingKind, MappingOwner, MappingTrie, Modifiers, TrieLookup,
 };
+use vim_core::VimString;
 
 use super::action::{ActionRegistry, Params, RuleTarget};
 use super::keys::{starts_vim_grammar_sequence, CMD_MODS};
@@ -113,7 +113,7 @@ pub(crate) struct Rule {
     pub(crate) nowait: bool,
     /// Which provider (or the user) installed this rule.
     pub(crate) owner: MappingOwner,
-    pub(crate) desc: CompactString,
+    pub(crate) desc: VimString,
 }
 
 /// Why a rule cannot be registered.
@@ -124,9 +124,9 @@ pub(crate) struct Rule {
 pub(crate) enum RuleReject {
     /// The line did not parse at all.
     Parse(PanelParseError),
-    UnknownSurface(CompactString),
+    UnknownSurface(VimString),
     /// A typo in a target must never become a silent dead key.
-    UnknownAction(CompactString),
+    UnknownAction(VimString),
     /// `foreign` and `editor.insert` take no rules: dispatch returns `Ignore`
     /// before any lookup there, so a rule would be unreachable by
     /// construction — and accepting one would let a project vimrc claim keys
@@ -141,7 +141,7 @@ pub(crate) enum RuleReject {
     /// `:panelmap` reported it as eligible.
     UndispatchedTarget {
         surface: SurfaceId,
-        target: CompactString,
+        target: VimString,
     },
 }
 
@@ -198,7 +198,7 @@ pub(crate) struct PanelDiagnostic {
     /// 1-based, when the rule came from a file.
     pub(crate) line: Option<u32>,
     /// The provider tag, or the vimrc path.
-    pub(crate) source: CompactString,
+    pub(crate) source: VimString,
     pub(crate) reject: RuleReject,
 }
 
@@ -627,16 +627,16 @@ fn rule_from(
             };
             let desc = registry
                 .get(id)
-                .map_or_else(|| name.clone(), |spec| CompactString::from(spec.desc));
+                .map_or_else(|| name.clone(), |spec| VimString::from(spec.desc));
             (RuleTarget::Action(id), desc)
         }
         TargetSpec::Native => (
             RuleTarget::Native,
-            CompactString::from("give the key back to Godot"),
+            VimString::from("give the key back to Godot"),
         ),
         TargetSpec::Shortcut(path) => (
             RuleTarget::Shortcut(path.clone()),
-            CompactString::from(format!("editor shortcut {path}")),
+            VimString::from(format!("editor shortcut {path}")),
         ),
     };
     let consume = if map.flags.void {
