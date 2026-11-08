@@ -285,7 +285,7 @@ func _setup() -> String:
 		return "the CodeEdit did not take focus"
 	if _variant == "plugin":
 		deadline = Time.get_ticks_msec() + WAIT_MS
-		while C.mode_of(_bar()) == null:
+		while C.mode_of(_bar()) == null and not C.is_load_report(_bar()):
 			if Time.get_ticks_msec() > deadline:
 				return "godot-vim did not attach (bar: %s)" % JSON.stringify(_bar())
 			await _frames(1)
