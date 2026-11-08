@@ -59,8 +59,8 @@ const SEEDED_DEFAULTS: &str = "nmap <C-S-Down> :addcursor below<CR>\n\
      nmap <leader>ms :cursorsplit<CR>\n\
      nmap <leader>mx :cursorremove<CR>\n\
      nmap <leader>mp :cursorprimary next<CR>\n\
-     nmap <leader>mf :cursorfilter \n\
-     nmap <leader>mF :cursorfilter! ";
+     nmap <leader>mf :cursorfilter<Space>\n\
+     nmap <leader>mF :cursorfilter!<Space>";
 
 /// What loading a config showed: each error and refusal where it was
 /// raised, and how many of each.
@@ -1775,6 +1775,30 @@ mod tests {
         c.setup_filetype(InstanceId::from_i64(1), &json_signals());
         let out = type_keys(&mut c, "", "i\"key\": \"one two three four five six\"\x1b");
         assert!(!out.contains('\n'), "{out:?}");
+    }
+
+    /// The `:cursorfilter` seeds leave the command line open after a blank
+    /// for the pattern.
+    #[test]
+    fn the_cursorfilter_seeds_end_in_a_blank() {
+        use vim_core::keymap::{KeyEvent, MappingMode};
+        let mut c = VimController::new();
+        let report = reload(&mut c, "");
+        assert!(report.lines.is_empty(), "{:?}", report.lines);
+        for (key, command) in [('f', ":cursorfilter "), ('F', ":cursorfilter! ")] {
+            let lhs = [
+                KeyEvent::char('\\'),
+                KeyEvent::char('m'),
+                KeyEvent::char(key),
+            ];
+            let mappings = c.engine().keymap().list_mappings(MappingMode::Normal);
+            let (_, entry, _) = mappings
+                .iter()
+                .find(|(keys, _, _)| keys[..] == lhs)
+                .expect("the seed is mapped");
+            let keys: Vec<KeyEvent> = command.chars().map(KeyEvent::char).collect();
+            assert_eq!(entry.sequence(), &keys[..], "<leader>m{key}");
+        }
     }
 
     /// Re-reading the active config mirrors the file, so a mapping it no
