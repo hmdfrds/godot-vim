@@ -639,3 +639,6 @@ pub(crate) fn panel_line_is_safe(trimmed: &str) -> bool {
         Ok(None) | Err(_) => false,
     }
 }
+
+#[cfg(test)]
+mod tests;

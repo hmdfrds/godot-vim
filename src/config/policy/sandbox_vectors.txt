@@ -1,0 +1,3300 @@
+K	panelmap dock n godotvim.item.next
+S	panelmap editor.completion <Esc> godotvim.completion.trigger
+S	set shell!
+S	set kp?
+S	set ep+=x
+S	set noshell
+R	nnoremap x :'é<CR>
+R	nnoremap x :1,'éd<CR>
+R	nnoremap x <Cmd>'é<CR>
+R	nnoremap x :'é
+K	nnoremap x :s/'é/e/<CR>
+K	nnoremap x :'a,'bs/é/e/<CR>
+K	panelmap dock j native
+S	nnoremap x :g/x/so user://a.vim<CR>
+S	nnoremap x :v/x/nnoremap y Z<CR>
+S	nnoremap x :global!/x/!ls<CR>
+K	nnoremap x : é'a'av/a/normal <CR>
+K	nnoremap x :s/a/b/g/a/d<CR>
+S	nnoremap x :nnoremap y Z1,"v/a/""g/<CR>
+S	nnoremap x :!lsg/a/so fé'annoremap y Z<CR>
+N	nnoremap x :d!ls\\\\v/a///<CR>
+N	nnoremap x :d!lsé<CR>
+K	nnoremap x : <CR>
+N	nnoremap x :normal 'a<Bar>v/a/<CR>
+N	nnoremap x :g/v/a/!lsnnoremap y Zé!ls<CR>
+N	nnoremap x :sil normal \\1,<CR>
+K	nnoremap x :g/'asil ddnormal \\<CR>
+K	nnoremap x :s/a/b/g/"<CR>
+S	nnoremap x :nnoremap y Z\\<CR>
+S	nnoremap x : !ls<CR>
+K	nnoremap x : v/a/ds/a/b/g/s/a/b/<CR>
+S	nnoremap x :nnoremap y Z<CR>
+K	nnoremap x :<CR>
+K	nnoremap x :'a<Bar>normal <CR>
+K	nnoremap x :s/a/b/v/a/so fnnoremap y Zé<CR>
+K	nnoremap x :/g/s/a/b/ég/a/<CR>
+S	nnoremap x : so fs/a/b/<CR>
+N	nnoremap x :normal d/!ls'as/a/b/v/a/<CR>
+K	nnoremap x :<Bar>/<CR>
+K	nnoremap x :\\ g/\\<CR>
+K	nnoremap x :1,<Bar><CR>
+K	nnoremap x :1,<CR>
+K	nnoremap x :sil  'a'a/\\normal <CR>
+K	nnoremap x :"\\/é<CR>
+K	nnoremap x :d'av/a/so f<CR>
+K	nnoremap x :<Bar>g/a/sil 'a"so f<CR>
+K	nnoremap x :'adv/a/g/a/v/a/<Bar>sil <CR>
+K	nnoremap x :g/"<Bar>nnoremap y Znnoremap y Z<CR>
+S	nnoremap x :!lsnnoremap y Znormal \\ 1,sil <CR>
+K	nnoremap x :'ad1,<CR>
+K	nnoremap x :dg/normal 1,<CR>
+K	nnoremap x :g/<CR>
+K	nnoremap x :sil \\g/nnoremap y Zso fv/a/nnoremap y Z<CR>
+K	nnoremap x :v/a/<CR>
+N	nnoremap x :"g/a/dnnoremap y Z'anormal !ls<CR>
+K	nnoremap x :<Bar><CR>
+S	nnoremap x :so fs/a/b/v/a/v/a/<CR>
+N	nnoremap x :\\so fnormal !lsnormal \\<CR>
+K	nnoremap x :<Bar>//" /s/a/b/<CR>
+R	nnoremap x :1,so fg/<CR>
+K	nnoremap x :normal <CR>
+S	nnoremap x :v/a/!ls<CR>
+S	nnoremap x : so f<Bar>so fsil <CR>
+S	nnoremap x :nnoremap y Z1,<Bar>"<CR>
+S	nnoremap x :nnoremap y Z sil s/a/b/<CR>
+K	nnoremap x :'ad <CR>
+K	nnoremap x :s/a/b/"<CR>
+K	nnoremap x :"g//\\d<CR>
+K	nnoremap x :v/a/<Bar>é"<CR>
+S	nnoremap x :nnoremap y Zg/<CR>
+K	nnoremap x :d/<CR>
+K	nnoremap x :\\<CR>
+S	nnoremap x :so f<CR>
+K	nnoremap x :'a\\s/a/b/dv/a/<CR>
+K	nnoremap x :g/a/\\g/a/sil v/a/d\\<CR>
+N	nnoremap x :sil g/a/é\\év/a/!ls<CR>
+N	nnoremap x :s/a/b/dso f!ls<CR>
+K	nnoremap x :'ag/a/"<CR>
+N	nnoremap x :v/a/normal v/a/<CR>
+K	nnoremap x :1,é"v/a/<CR>
+S	nnoremap x :!ls<CR>
+S	nnoremap x :'asil !lsso fég/nnoremap y Z<CR>
+S	nnoremap x :g/g/!lssil g/a/g/a/<Bar><CR>
+S	nnoremap x :so fg/a/éd'aso f<CR>
+N	nnoremap x :\\!ls<CR>
+S	nnoremap x :!lsnnoremap y Zs/a/b/<CR>
+K	nnoremap x :v/a/s/a/b/g/a/normal <CR>
+K	nnoremap x :s/a/b/g/"dg/a/<CR>
+K	nnoremap x :sil <CR>
+N	nnoremap x :s/a/b/!lsnormal <CR>
+K	nnoremap x :/g/<CR>
+N	nnoremap x : normal v/a/ds/a/b/<CR>
+S	nnoremap x :nnoremap y Z1,<CR>
+K	nnoremap x :\\<Bar> é"/<CR>
+S	nnoremap x :nnoremap y Z/g/g//<CR>
+K	nnoremap x :sil v/a/v/a/<CR>
+K	nnoremap x :1,dg/<CR>
+N	nnoremap x :s/a/b/!lsg/ nnoremap y Z"<CR>
+K	nnoremap x :ddésil s/a/b/é<CR>
+K	nnoremap x :é<CR>
+K	nnoremap x :"g/é<CR>
+S	nnoremap x :<Bar>nnoremap y Zdsil v/a/g/"<CR>
+K	nnoremap x :d<CR>
+K	nnoremap x :sil  1,s/a/b/<CR>
+K	nnoremap x :"normal <CR>
+K	nnoremap x :"v/a//1,sil é<CR>
+K	nnoremap x : v/a/<Bar> <Bar>normal <CR>
+K	nnoremap x :éd<CR>
+K	nnoremap x :év/a/<Bar>1,<CR>
+K	nnoremap x :<Bar>g/a/<CR>
+K	nnoremap x : /"<Bar><CR>
+S	nnoremap x :g/a/nnoremap y Zd<CR>
+S	nnoremap x :!lsnormal g/<Bar>g/a/!ls<CR>
+K	nnoremap x :'asil g/g/v/a/1,<CR>
+S	nnoremap x :g/a/'annoremap y Zsil  nnoremap y Zso f<CR>
+S	nnoremap x :so f/!ls<CR>
+S	nnoremap x :<Bar>sil g/a/!lsso f/so f<CR>
+K	nnoremap x :1,"<CR>
+N	nnoremap x :sil sil / !lsso f<CR>
+K	nnoremap x :"g/a//g/<CR>
+K	nnoremap x :  <CR>
+S	nnoremap x :nnoremap y Zd<CR>
+R	nnoremap x :s/a/b/s/a/b/<Bar>so f<CR>
+K	nnoremap x :1,1,"sil d<CR>
+N	nnoremap x :\\'a!lssil <CR>
+K	nnoremap x :"'anormal so f"/g/<CR>
+K	nnoremap x :d'ad<CR>
+N	nnoremap x :énormal <Bar>dv/a/!ls\\<CR>
+N	nnoremap x :d"!ls'a<Bar>/ <CR>
+K	nnoremap x :\\sil <CR>
+S	nnoremap x :!lssil <Bar>nnoremap y Z<CR>
+K	nnoremap x :1,<Bar>é/<CR>
+K	nnoremap x :v/a/s/a/b/normal "g/a/"<CR>
+S	nnoremap x : !ls!lsnnoremap y Z<CR>
+K	nnoremap x :"g/<CR>
+S	nnoremap x :s/a/b/<Bar>so f'av/a/'ad<CR>
+N	nnoremap x :g/édsil s/a/b/!ls"<CR>
+S	nnoremap x :so fdddé<CR>
+N	nnoremap x :g/a//!ls<CR>
+K	nnoremap x :1,1,ds/a/b//d<CR>
+R	nnoremap x :1,so f<CR>
+K	nnoremap x :v/a/\\ <CR>
+K	nnoremap x :'a1,\\so fg/dg/<CR>
+K	nnoremap x :\\<Bar><CR>
+K	nnoremap x :s/a/b/'a v/a/<CR>
+K	nnoremap x :s/a/b/sil éso f\\" <CR>
+K	nnoremap x :"<CR>
+K	nnoremap x :"so f\\g/a/v/a/<Bar>é<CR>
+K	nnoremap x :sil /normal "g/a/sil 1,<CR>
+K	nnoremap x :" <CR>
+K	nnoremap x :s/a/b/ 'annoremap y Z<CR>
+K	nnoremap x :é'a<Bar><CR>
+K	nnoremap x :'a<Bar><CR>
+K	nnoremap x :\\g/a/"1,nnoremap y Zdsil <CR>
+K	nnoremap x :sil g/a/<CR>
+N	nnoremap x :d!lsnormal 1,<CR>
+K	nnoremap x :g/a/'aé<CR>
+K	nnoremap x :g/a/<CR>
+N	nnoremap x :ég/nnoremap y Z!ls v/a/<CR>
+K	nnoremap x :sil <Bar>\\so f"<CR>
+K	nnoremap x :"so f<Bar>d<Bar><CR>
+S	nnoremap x :v/a/nnoremap y Znormal 'a<CR>
+K	nnoremap x :s/a/b/<CR>
+N	nnoremap x :1,'anormal v/a/"v/a/s/a/b/<CR>
+K	nnoremap x :év/a/v/a/<CR>
+K	nnoremap x :g/a/\\normal sil 'a<CR>
+K	nnoremap x :g/g/1,é"<CR>
+K	nnoremap x :g/a/g/<CR>
+N	nnoremap x :  'anormal 1,é\\<CR>
+K	nnoremap x :g/a/v/a/<CR>
+K	nnoremap x : "d\\<CR>
+K	nnoremap x :s/a/b/dd"\\é<CR>
+K	nnoremap x :<Bar>/1,<Bar>\\'a<CR>
+K	nnoremap x :g/a/ <CR>
+S	nnoremap x :v/a/sil !ls/sil sil !ls<CR>
+K	nnoremap x :'a1,/1,"<CR>
+S	nnoremap x :!lsv/a/nnoremap y Zg/a/g/a/<CR>
+S	nnoremap x :'a<Bar>v/a/v/a/nnoremap y Zd!ls<CR>
+S	nnoremap x : !ls1,d<CR>
+K	nnoremap x :és/a/b///so f1,g/a/<CR>
+S	nnoremap x :nnoremap y Zsil d/<CR>
+K	nnoremap x :g/a/v/a/"<Bar>normal <CR>
+K	nnoremap x :g/a/ g/'a<CR>
+K	nnoremap x :v/a/v/a/\\1,<CR>
+S	nnoremap x :sil so f<CR>
+K	nnoremap x :s/a/b/\\so fdg/a/normal <CR>
+K	nnoremap x :/<CR>
+K	nnoremap x :'a<CR>
+K	nnoremap x :s/a/b/"s/a/b/<CR>
+S	nnoremap x :!lsnormal <CR>
+K	nnoremap x :g/a//<CR>
+S	nnoremap x :nnoremap y Znormal v/a/ dso f<CR>
+S	nnoremap x :1,!ls !ls/'a'a<CR>
+K	nnoremap x :s/a/b/1,nnoremap y Zv/a/sil sil <CR>
+N	nnoremap x :'a/!ls1,nnoremap y Z<CR>
+K	nnoremap x :s/a/b/g/g/1,énormal <CR>
+K	nnoremap x :1,v/a/'a<CR>
+K	nnoremap x :<Bar>\\\\dg/'a<Bar><CR>
+S	nnoremap x :nnoremap y Z/!ls"<CR>
+S	nnoremap x :nnoremap y Z1,!ls"so f<CR>
+S	nnoremap x :so fég/a/v/a/<CR>
+K	nnoremap x :1,/<CR>
+N	nnoremap x :normal 1,g/a/sil é sil <CR>
+K	nnoremap x :v/a/ sil \\'a<CR>
+K	nnoremap x :"/1,<CR>
+S	nnoremap x :g/a/nnoremap y Zg/a/<CR>
+S	nnoremap x :!lsv/a/'a<CR>
+K	nnoremap x :\\  "<CR>
+S	nnoremap x :!ls!ls<CR>
+K	nnoremap x :éso f\\<CR>
+S	nnoremap x :v/a/sil !lsv/a/'a!ls<CR>
+K	nnoremap x :/v/a/nnoremap y Znnoremap y Zv/a/1,<CR>
+N	nnoremap x :g/\\d!ls/<CR>
+K	nnoremap x :g/normal <CR>
+S	nnoremap x :!ls\\dso fg/v/a/é<CR>
+K	nnoremap x :\\/\\so fs/a/b/<CR>
+K	nnoremap x : /\\s/a/b//<CR>
+K	nnoremap x :g/<Bar>ég/a/sil \\<CR>
+N	nnoremap x :sil s/a/b/nnoremap y Z nnoremap y Zg/!ls<CR>
+K	nnoremap x :dsil d/g/a/so fg/<CR>
+S	nnoremap x :nnoremap y Zg/a/ s/a/b/<CR>
+R	nnoremap x :'aso fv/a/"<CR>
+K	nnoremap x :/<Bar><CR>
+S	nnoremap x :so f\\/d<Bar>"\\<CR>
+K	nnoremap x :énormal nnoremap y Zg/so fés/a/b/<CR>
+K	nnoremap x :s/a/b/so fg/'aé/sil <CR>
+K	nnoremap x :sil <Bar>g/a/'as/a/b/<CR>
+K	nnoremap x :g/a/sil <CR>
+N	nnoremap x :g/a/"!ls!ls<Bar>g/<CR>
+K	nnoremap x :é "sil sil  <CR>
+K	nnoremap x :1,dg/a/<Bar>s/a/b/<CR>
+K	nnoremap x :<Bar>é<CR>
+K	nnoremap x : 1,v/a/"sil \\<CR>
+K	nnoremap x :s/a/b/normal nnoremap y Z/nnoremap y Znnoremap y Z'a<CR>
+K	nnoremap x :sil /dd<CR>
+K	nnoremap x :éso f'a/s/a/b/<CR>
+K	nnoremap x :<Bar>s/a/b/s/a/b/g/a/<CR>
+K	nnoremap x :'a\\"/<CR>
+K	nnoremap x :\\1,<CR>
+K	nnoremap x :v/a/'asil <Bar><CR>
+S	nnoremap x :1,!lsdnnoremap y Zd"v/a/<CR>
+K	nnoremap x :/'aso f1,"g/<CR>
+N	nnoremap x :<Bar>1,s/a/b/!lss/a/b/\\<CR>
+K	nnoremap x :<Bar>v/a//<CR>
+S	nnoremap x :nnoremap y Zé!lss/a/b/<CR>
+K	nnoremap x :sil 1,<CR>
+N	nnoremap x :normal s/a/b/so fv/a/é<CR>
+K	nnoremap x :\\so f'asil g/a/s/a/b/\\<CR>
+N	nnoremap x :normal é/<CR>
+K	nnoremap x :\\sil \\so f/<CR>
+K	nnoremap x :sil "v/a/<CR>
+K	nnoremap x :<Bar>" <CR>
+K	nnoremap x : "dg/s/a/b/'asil <CR>
+K	nnoremap x :\\g/sil <CR>
+K	nnoremap x :/sil <CR>
+N	nnoremap x :normal <Bar>d<CR>
+S	nnoremap x :nnoremap y Znnoremap y Z<CR>
+N	nnoremap x :"!ls<CR>
+R	nnoremap x :'aso fdnormal <CR>
+K	nnoremap x :<Bar>s/a/b/\\sil <CR>
+K	nnoremap x :g/a//sil <CR>
+S	nnoremap x :/!ls/ nnoremap y Z\\<CR>
+K	nnoremap x :'ag/<Bar>s/a/b/s/a/b/<CR>
+S	nnoremap x :!lssil <Bar><CR>
+K	nnoremap x :g/a/s/a/b/"<CR>
+K	nnoremap x :<Bar>g/<Bar>1,<CR>
+S	nnoremap x :!ls ""<CR>
+N	nnoremap x :/v/a/!ls<CR>
+K	nnoremap x :s/a/b/v/a/g/"\\\\<CR>
+S	nnoremap x :!ls<Bar><CR>
+S	nnoremap x :nnoremap y Zso fnormal <CR>
+S	nnoremap x :!lsd<CR>
+S	nnoremap x :!ls<Bar>\\v/a/'a<CR>
+S	nnoremap x :nnoremap y Z'a<CR>
+K	nnoremap x :"v/a/<CR>
+K	nnoremap x :g/d//v/a/v/a/normal <CR>
+N	nnoremap x :"sil sil !ls<Bar><CR>
+S	nnoremap x :nnoremap y Zg/a/sil  'annoremap y Z <CR>
+N	nnoremap x :g/a/énormal !ls/nnoremap y Z<CR>
+N	nnoremap x :/!lsnnoremap y Z g/a/sil <CR>
+S	nnoremap x :g/a/v/a/ nnoremap y Z1,'a<CR>
+S	nnoremap x :1,<Bar>so fso fv/a/<Bar>\\<CR>
+N	nnoremap x :normal so f<CR>
+K	nnoremap x :v/a/s/a/b/1,s/a/b/\\"<CR>
+K	nnoremap x :"g/énnoremap y Z<CR>
+K	nnoremap x :'as/a/b/énormal g/d<CR>
+K	nnoremap x :g/sil nnoremap y Zso f<Bar><CR>
+K	nnoremap x :v/a/sil <Bar><CR>
+K	nnoremap x :<Bar>'as/a/b/sil <CR>
+K	nnoremap x : "é<Bar>normal  <CR>
+K	nnoremap x :dg/ <Bar>'ag/a/<CR>
+K	nnoremap x : 1,g/a/'a/ <CR>
+S	nnoremap x :nnoremap y Zésil so f<CR>
+K	nnoremap x :\\ <CR>
+R	nnoremap x :\\1,v/a/so f "<CR>
+K	nnoremap x :<Bar>sil s/a/b/sil <Bar>g/g/<CR>
+K	nnoremap x :éés/a/b/s/a/b/<CR>
+N	nnoremap x :g/"!ls/<CR>
+K	nnoremap x :/'a<CR>
+K	nnoremap x :v/a/<Bar><Bar>ég/\\g/<CR>
+N	nnoremap x :g/a/é!ls<CR>
+K	nnoremap x :\\s/a/b//'a<CR>
+K	nnoremap x :\\normal g/1,sil /<CR>
+S	nnoremap x :!ls 'as/a/b/v/a/!ls<CR>
+K	nnoremap x :ésil \\sil "<CR>
+K	nnoremap x :'asil normal <CR>
+K	nnoremap x :éso f1,<Bar>v/a/s/a/b/sil <CR>
+K	nnoremap x : g//g/a/<CR>
+K	nnoremap x :'av/a/v/a/1,é<CR>
+K	nnoremap x :<Bar>g/<CR>
+K	nnoremap x :"//<CR>
+K	nnoremap x :1,dg/a/<CR>
+R	nnoremap x :\\v/a/so fé<CR>
+K	nnoremap x :dsil normal <CR>
+K	nnoremap x :'ad"<CR>
+N	nnoremap x :normal !ls<CR>
+S	nnoremap x :nnoremap y Zg/a/ 1,<CR>
+S	nnoremap x :v/a/nnoremap y Z'ag/!ls<Bar><CR>
+N	nnoremap x :" \\!lsnnoremap y Z<Bar>1,<CR>
+N	nnoremap x :g/<Bar>v/a/d !lsnormal <CR>
+S	nnoremap x :!lsnnoremap y Z1, <CR>
+K	nnoremap x :\\é"<Bar>/<Bar>/<CR>
+S	nnoremap x :!lsso f'ag/sil normal <CR>
+K	nnoremap x :g/d1,nnoremap y Zd<CR>
+K	nnoremap x ://<CR>
+K	nnoremap x :/normal /v/a/<CR>
+S	nnoremap x :'ad<Bar>so f<CR>
+K	nnoremap x :\\ dg/a/sil <CR>
+K	nnoremap x :g/a/\\ g/<CR>
+K	nnoremap x :<Bar>"g/a/<CR>
+N	nnoremap x :1,normal !ls"éso f<CR>
+K	nnoremap x :dsil /"/d<CR>
+N	nnoremap x :normal !lssil normal <Bar><CR>
+K	nnoremap x :<Bar>és/a/b/<Bar>g/a/<CR>
+N	nnoremap x :/1,!lsé<Bar>sil <CR>
+N	nnoremap x :g/!lssil  d <CR>
+N	nnoremap x : normal "normal <CR>
+N	nnoremap x :normal dnnoremap y Zév/a/<CR>
+K	nnoremap x :v/a//1,ds/a/b/\\sil <CR>
+N	nnoremap x :g/!lsv/a/<CR>
+R	nnoremap x :1,so fnormal g/a/<Bar>g/<CR>
+N	nnoremap x :sil normal normal  normal g/<CR>
+K	nnoremap x :ds/a/b/\\ <CR>
+K	nnoremap x :"normal 1,\\g/a/\\<CR>
+K	nnoremap x :/s/a/b/1, so f<CR>
+N	nnoremap x :\\!lsdé sil <CR>
+K	nnoremap x :dso fg/a/'a"g/a/<CR>
+S	nnoremap x :g/a/v/a/g/a/v/a/nnoremap y Z<CR>
+N	nnoremap x :normal ésil normal !ls"<CR>
+K	nnoremap x :dsil  <CR>
+K	nnoremap x :dd<CR>
+S	nnoremap x :'a!ls<CR>
+K	nnoremap x :\\g/s/a/b/nnoremap y Zg/a/v/a/g/<CR>
+N	nnoremap x :normal g/\\ s/a/b/"é<CR>
+K	nnoremap x :s/a/b/\\g/a/s/a/b/<CR>
+S	nnoremap x :!lsnormal és/a/b/<CR>
+K	nnoremap x :é<Bar>normal /<Bar>s/a/b/<Bar><CR>
+S	nnoremap x :nnoremap y Z'ag/nnoremap y Zso f<CR>
+K	nnoremap x :v/a/\\<CR>
+K	nnoremap x : <Bar> 1,d<CR>
+K	nnoremap x :g/nnoremap y Zg//1,<Bar>d<CR>
+S	nnoremap x :nnoremap y Z<Bar>so f<CR>
+S	nnoremap x :so f1,\\d<CR>
+K	nnoremap x :ds/a/b/so fg/a/d<CR>
+N	nnoremap x :1,normal \\!ls"<CR>
+K	nnoremap x :g/a/év/a/<CR>
+K	nnoremap x :s/a/b/g/g/<CR>
+K	nnoremap x :ég/a/g/a/<CR>
+N	nnoremap x :/!lsso fdénormal <CR>
+K	nnoremap x :sil \\<Bar>1,<CR>
+K	nnoremap x :v/a/s/a/b/nnoremap y Zg/<CR>
+K	nnoremap x :g/g/a/"v/a/so f "<CR>
+N	nnoremap x : normal nnoremap y Z/normal <CR>
+S	nnoremap x :'a!ls / g/so f<CR>
+S	nnoremap x :nnoremap y Z g/a/g/<CR>
+N	nnoremap x :dnnoremap y Zé!ls<CR>
+N	nnoremap x :1,s/a/b/'a 'a!ls\\<CR>
+K	nnoremap x :'ag/s/a/b/g/a/\\ <CR>
+S	nnoremap x :nnoremap y Z<Bar>sil /<Bar>"nnoremap y Z<CR>
+N	nnoremap x :é'a!lsso f!lsso fv/a/<CR>
+K	nnoremap x :\\v/a//1,g/a/v/a/<CR>
+K	nnoremap x :éso f<CR>
+S	nnoremap x :!ls!lsd"<Bar>\\"<CR>
+K	nnoremap x :énnoremap y Z<CR>
+S	nnoremap x :so fg//<CR>
+N	nnoremap x :normal 1,"<CR>
+S	nnoremap x :v/a/!ls/<CR>
+S	nnoremap x :nnoremap y Zg/a/ <CR>
+S	nnoremap x :1,'a!lsg/ !ls<CR>
+N	nnoremap x :"so fd\\sil !ls<CR>
+K	nnoremap x :sil s/a/b/g/a/<CR>
+K	nnoremap x :\\\\énnoremap y Znormal sil <CR>
+S	nnoremap x :!lss/a/b/ 'a<CR>
+K	nnoremap x :dso f "nnoremap y Z1,s/a/b/<CR>
+K	nnoremap x :1,'anormal <CR>
+S	nnoremap x :nnoremap y Z1,d  <CR>
+R	nnoremap x :"<Bar>so f/"\\<CR>
+S	nnoremap x :g/a/nnoremap y Z<CR>
+K	nnoremap x : g/s/a/b/ g/a/'a<CR>
+S	nnoremap x :v/a/so f<CR>
+S	nnoremap x :sil !lsnnoremap y Zv/a/ g/a/\\<CR>
+S	nnoremap x :g/a/!lsg/a/<CR>
+N	nnoremap x :g/d"!ls<CR>
+K	nnoremap x :'a1,v/a/"<CR>
+K	nnoremap x :g/éso fs/a/b/<CR>
+S	nnoremap x :  so fsil sil g/<CR>
+K	nnoremap x :1,é1,1,1,nnoremap y Z<CR>
+N	nnoremap x :normal !lsd!ls<CR>
+K	nnoremap x :ésil <Bar>1,<CR>
+K	nnoremap x :v/a/g/\\g/a/d'annoremap y Z<CR>
+K	nnoremap x :ég/a/<Bar>g/a/<CR>
+S	nnoremap x :nnoremap y Z1,é!lsso fnnoremap y Z'a<CR>
+S	nnoremap x :!lsd<Bar>é<CR>
+S	nnoremap x :!ls!ls<Bar>"1,s/a/b//<CR>
+K	nnoremap x :g/\\s/a/b/"1,é1,<CR>
+S	nnoremap x :so fso f1,<CR>
+K	nnoremap x :/v/a/g/a/ 'a\\v/a/<CR>
+K	nnoremap x :<Bar>d'anormal dg/a/s/a/b/<CR>
+K	nnoremap x :'a <CR>
+K	nnoremap x :'a'a<CR>
+S	nnoremap x :sil so fnormal s/a/b/s/a/b/<CR>
+K	nnoremap x :"nnoremap y Z'av/a/d'a<CR>
+K	nnoremap x :"\\"/v/a/<CR>
+S	nnoremap x :/!ls"sil g/!lsv/a/<CR>
+K	nnoremap x :g/a/v/a/\\<CR>
+K	nnoremap x :"1,g/g/s/a/b/so fé<CR>
+K	nnoremap x :v/a/ g/a/1, <CR>
+K	nnoremap x :sil ég/a/nnoremap y Z<CR>
+S	nnoremap x :so fnnoremap y Z<Bar>v/a/normal sil <CR>
+K	nnoremap x :'a 1,'a<CR>
+N	nnoremap x :normal dg/é<CR>
+N	nnoremap x :normal <Bar>/'a1, d<CR>
+K	nnoremap x :\\sil g/<CR>
+S	nnoremap x :nnoremap y Znormal é<CR>
+K	nnoremap x :g/<Bar> "normal nnoremap y Z<CR>
+K	nnoremap x :sil "'annoremap y Z/g/a/<CR>
+N	nnoremap x :'anormal 1,d"<CR>
+S	nnoremap x :<Bar>nnoremap y Z<Bar> <Bar>'a<CR>
+S	nnoremap x :!ls!ls1,\\énnoremap y Z1,<CR>
+K	nnoremap x : /é<CR>
+K	nnoremap x :"'a/so f1,<CR>
+K	nnoremap x :v/a/1,'ad'a'a<CR>
+K	nnoremap x :s/a/b/d<CR>
+K	nnoremap x :"\\nnoremap y Z'adv/a/1,<CR>
+K	nnoremap x :<Bar>v/a/"dsil g/<CR>
+K	nnoremap x :g/g/sil g/'anormal g/<CR>
+N	nnoremap x :d'ag/!lsnnoremap y Z<CR>
+K	nnoremap x :sil <Bar>d <CR>
+K	nnoremap x :\\s/a/b/s/a/b/sil 1,<CR>
+K	nnoremap x :g/a/\\ 1,\\<CR>
+K	nnoremap x : 'asil sil <Bar>s/a/b/<CR>
+S	nnoremap x :so fsil <CR>
+K	nnoremap x :'a"nnoremap y Zso f" <CR>
+K	nnoremap x :é \\dg/<CR>
+N	nnoremap x :/!lsg/ d<CR>
+K	nnoremap x :dg/a/<CR>
+N	nnoremap x :normal s/a/b/<CR>
+K	nnoremap x :dnormal <CR>
+K	nnoremap x :"\\nnoremap y Zso f 'anormal <CR>
+K	nnoremap x : v/a/ normal <CR>
+K	nnoremap x :s/a/b/"/1,s/a/b/so fs/a/b/<CR>
+S	nnoremap x :so fé\\<CR>
+K	nnoremap x :1,g/énnoremap y Z/dv/a/<CR>
+K	nnoremap x : /d <CR>
+K	nnoremap x :é1,/v/a/"<CR>
+K	nnoremap x : \\<CR>
+N	nnoremap x :v/a/sil <Bar>normal ""'a<CR>
+K	nnoremap x :1,sil "so f<CR>
+S	nnoremap x :!lsg/<CR>
+N	nnoremap x :normal "sil g/a/g/a/nnoremap y Zs/a/b/<CR>
+K	nnoremap x :"g/'a<CR>
+K	nnoremap x :sil éé<CR>
+N	nnoremap x :v/a/<Bar>s/a/b/!ls\\sil <CR>
+K	nnoremap x :s/a/b/<Bar>v/a/"<CR>
+K	nnoremap x :év/a/sil nnoremap y Zg/a/sil <CR>
+K	nnoremap x ://\\""nnoremap y Zs/a/b/<CR>
+S	nnoremap x :v/a/so fg/a// g/a/<CR>
+N	nnoremap x :\\so f<Bar>é!ls<CR>
+S	nnoremap x :!ls!lsév/a/<Bar>'a<CR>
+K	nnoremap x :'a1,<CR>
+K	nnoremap x :d v/a/<CR>
+K	nnoremap x :édnnoremap y Z// <CR>
+S	nnoremap x :<Bar>so f<CR>
+K	nnoremap x :'a <Bar>\\ <CR>
+S	nnoremap x :sil g/a/nnoremap y Z<CR>
+K	nnoremap x :s/a/b/so f\\"<Bar><CR>
+K	nnoremap x :\\énnoremap y Z<CR>
+K	nnoremap x :'a éég/nnoremap y Znnoremap y Z<CR>
+S	nnoremap x :so f<Bar>/<CR>
+S	nnoremap x :v/a/sil !ls"<CR>
+S	nnoremap x :v/a/!lsg/a/\\"<CR>
+S	nnoremap x :v/a/!lsé/dnormal !ls<CR>
+K	nnoremap x :v/a/s/a/b//dnnoremap y Z /<CR>
+S	nnoremap x :!lsso f<CR>
+K	nnoremap x :"d /g/<CR>
+S	nnoremap x :sil nnoremap y Zg/a/\\d<CR>
+K	nnoremap x :\\\\nnoremap y Zs/a/b/g/a/\\ <CR>
+S	nnoremap x :nnoremap y Zsil \\/"é<CR>
+K	nnoremap x :1,normal  nnoremap y Z/<CR>
+N	nnoremap x :normal <Bar><Bar><CR>
+K	nnoremap x :v/a/ <CR>
+S	nnoremap x :v/a/sil sil é<Bar>g/a/!ls<CR>
+K	nnoremap x :\\so f/ v/a/'ag/<CR>
+S	nnoremap x :nnoremap y Zg/a/nnoremap y Z<CR>
+S	nnoremap x :so f\\normal dg/a/nnoremap y Z<CR>
+S	nnoremap x :sil so f!lss/a/b/\\<CR>
+K	nnoremap x :év/a/s/a/b/ é<CR>
+N	nnoremap x :g/a/'anormal sil  normal /<CR>
+K	nnoremap x :éév/a/v/a/<CR>
+N	nnoremap x :normal é/d'a\\<CR>
+K	nnoremap x :1,ds/a/b/és/a/b/'a<CR>
+K	nnoremap x : v/a/"\\1,\\<CR>
+K	nnoremap x :s/a/b/s/a/b/nnoremap y Z<Bar>/'a<CR>
+S	nnoremap x :!ls nnoremap y Zsil d<CR>
+N	nnoremap x :normal nnoremap y Zsil g/a/<CR>
+N	nnoremap x :normal !ls so f"<CR>
+K	nnoremap x :g/nnoremap y Z<CR>
+K	nnoremap x :s/a/b/ég/éd<CR>
+S	nnoremap x :!lsénnoremap y Z<Bar>g/<CR>
+K	nnoremap x :v/a//<CR>
+K	nnoremap x :é1,v/a/<CR>
+K	nnoremap x :s/a/b/\\" <Bar>g/sil <CR>
+S	nnoremap x :so f<Bar>/normal <CR>
+K	nnoremap x :1,d"nnoremap y Zso fésil <CR>
+K	nnoremap x :g/a/1, <CR>
+S	nnoremap x :so f!ls1,1,<CR>
+S	nnoremap x :nnoremap y Zdnormal \\g/<CR>
+N	nnoremap x :/!ls"<Bar>ds/a/b/<CR>
+K	nnoremap x :g/a/dnormal so fé<CR>
+K	nnoremap x :sil  <CR>
+S	nnoremap x :so fs/a/b/"<Bar><CR>
+K	nnoremap x :d"g/a/1,normal <CR>
+S	nnoremap x :nnoremap y Z!lsg/!lsg/a/<CR>
+S	nnoremap x :<Bar><Bar>!ls"'anormal g/<CR>
+K	nnoremap x :v/a/\\ <Bar><CR>
+K	nnoremap x :" <Bar>'a<CR>
+S	nnoremap x :so fég/a/\\normal <CR>
+N	nnoremap x :<Bar>normal normal g/a/normal 'a<CR>
+S	nnoremap x :'a<Bar>!ls<CR>
+S	nnoremap x :!ls'a<CR>
+S	nnoremap x :s/a/b/<Bar> nnoremap y Zg/<CR>
+R	nnoremap x :\\<Bar>nnoremap y Zs/a/b/<CR>
+K	nnoremap x :dso fg/<CR>
+K	nnoremap x :éds/a/b/normal sil sil g/a/<CR>
+K	nnoremap x :'asil dnnoremap y Z<CR>
+K	nnoremap x :\\g/'a<CR>
+S	nnoremap x :g/a/!lsv/a//<Bar><CR>
+K	nnoremap x :/ sil <CR>
+K	nnoremap x :\\/<CR>
+K	nnoremap x :'a<Bar>g/<CR>
+K	nnoremap x :é <CR>
+K	nnoremap x :g/d<CR>
+S	nnoremap x :nnoremap y Z\\'ag/"<CR>
+K	nnoremap x :g/g/g/so fsil <CR>
+K	nnoremap x :v/a/ésil /so fd<CR>
+K	nnoremap x :d/nnoremap y Z so f so f<CR>
+K	nnoremap x :/so f<CR>
+N	nnoremap x :g/a/'anormal  so fg/'a<CR>
+K	nnoremap x :<Bar>d"sil s/a/b/s/a/b/d<CR>
+N	nnoremap x :normal !lsg/a/<CR>
+K	nnoremap x :g/é<CR>
+K	nnoremap x :v/a/s/a/b/<CR>
+K	nnoremap x :'ad<CR>
+K	nnoremap x :d'a <CR>
+R	nnoremap x :sil sil \\v/a/so f<CR>
+K	nnoremap x :/normal g/a/<CR>
+K	nnoremap x :s/a/b/sil d"<CR>
+K	nnoremap x :\\so f<CR>
+S	nnoremap x :so fnormal 'a<CR>
+K	nnoremap x :v/a/g/a/normal <CR>
+K	nnoremap x :/é<CR>
+N	nnoremap x :sil g/!lsso fg/a/<CR>
+K	nnoremap x :\\normal nnoremap y Znnoremap y Znormal <CR>
+K	nnoremap x :d1,<Bar>g/a//<CR>
+K	nnoremap x :és/a/b/<CR>
+S	nnoremap x :!ls\\!ls<CR>
+K	nnoremap x :dv/a/g/1,<Bar>s/a/b/<CR>
+S	nnoremap x :so f/ <Bar><CR>
+K	nnoremap x :1, "1,"<CR>
+N	nnoremap x :"so f!ls"<CR>
+N	nnoremap x :1,nnoremap y Z!ls<CR>
+K	nnoremap x :v/a/g/so f<CR>
+K	nnoremap x :/v/a/<CR>
+S	nnoremap x :!ls\\g/<CR>
+S	nnoremap x : nnoremap y Zd "1,<CR>
+N	nnoremap x :normal s/a/b/nnoremap y Zé/<CR>
+K	nnoremap x :ésil so fg/sil <CR>
+K	nnoremap x :d<Bar>s/a/b/<CR>
+N	nnoremap x :'ag/a/normal g/a/<CR>
+S	nnoremap x : so f!ls<CR>
+S	nnoremap x :v/a/nnoremap y Z'ag/a/<CR>
+K	nnoremap x :sil  s/a/b/v/a/1,énormal <CR>
+S	nnoremap x :nnoremap y Z!lssil \\nnoremap y Z\\<CR>
+K	nnoremap x :év/a/<CR>
+K	nnoremap x :"1,<CR>
+K	nnoremap x :"v/a/so f/\\sil <CR>
+K	nnoremap x :v/a/ddg/a/é/'a<CR>
+N	nnoremap x : /!lsso fnormal sil g/a/<CR>
+S	nnoremap x :so fs/a/b/<CR>
+K	nnoremap x :<Bar><Bar><CR>
+N	nnoremap x :normal g/a/so fs/a/b/'ag/!ls<CR>
+N	nnoremap x :normal <Bar><CR>
+K	nnoremap x :1,/v/a/d<CR>
+S	nnoremap x :nnoremap y Z"g//<CR>
+K	nnoremap x : g/a/<Bar>1,'a <CR>
+K	nnoremap x :"/g/a/normal <CR>
+K	nnoremap x :"so f<CR>
+K	nnoremap x :s/a/b/sil normal /'ag/a/s/a/b/<CR>
+S	nnoremap x :v/a/nnoremap y Zv/a/<Bar><CR>
+K	nnoremap x :"normal \\"1,normal d<CR>
+S	nnoremap x :nnoremap y Z é<CR>
+K	nnoremap x : g/'a"<CR>
+N	nnoremap x :normal 1,d!ls<Bar><CR>
+K	nnoremap x :"éso fdv/a//<CR>
+N	nnoremap x :g/a/normal s/a/b/ v/a/g/a/d<CR>
+K	nnoremap x :g/a/g/"v/a/dé<CR>
+S	nnoremap x :'annoremap y Zs/a/b/!ls\\<CR>
+K	nnoremap x :/normal so fd<CR>
+K	nnoremap x :g/nnoremap y Z/s/a/b/v/a/é<CR>
+K	nnoremap x :g/a/<Bar>/<CR>
+K	nnoremap x :"v/a/\\s/a/b/1,<CR>
+N	nnoremap x :<Bar>normal v/a/nnoremap y Z!lssil <CR>
+N	nnoremap x :\\normal !lsnormal s/a/b/'a<CR>
+K	nnoremap x :<Bar>1,1,1, <CR>
+N	nnoremap x :normal g/a/<Bar>1,s/a/b/sil <CR>
+K	nnoremap x :'a/sil so f<CR>
+K	nnoremap x :<Bar>sil <CR>
+K	nnoremap x :"/<CR>
+K	nnoremap x :g/a/"<CR>
+K	nnoremap x :"nnoremap y Z1,so f <CR>
+K	nnoremap x :"d<CR>
+K	nnoremap x : d/<CR>
+N	nnoremap x :d!ls<CR>
+K	nnoremap x :g/ <CR>
+N	nnoremap x :é"so fv/a/!ls<CR>
+N	nnoremap x :s/a/b/sil é!ls<CR>
+S	nnoremap x :!ls\\d1,<CR>
+K	nnoremap x :\\v/a/d<CR>
+K	nnoremap x :/\\"g/<CR>
+K	nnoremap x :s/a/b/g//\\<CR>
+N	nnoremap x :normal 1,1,so f<CR>
+N	nnoremap x :normal /'a<CR>
+S	nnoremap x :nnoremap y Zv/a/ <Bar><Bar><CR>
+N	nnoremap x :v/a/normal "é/<CR>
+R	nnoremap x :dd<Bar>so f<CR>
+S	nnoremap x :g/a/nnoremap y Z'a<Bar>'av/a/s/a/b/<CR>
+K	nnoremap x :g/\\<CR>
+K	nnoremap x :1,g/a/v/a/<CR>
+K	nnoremap x :és/a/b/so f/<CR>
+K	nnoremap x :é\\/v/a/"g/a/<CR>
+K	nnoremap x :s/a/b/g/<CR>
+K	nnoremap x :s/a/b//<CR>
+S	nnoremap x :g/a/so fg/normal éso f\\<CR>
+K	nnoremap x :g/a/sil /1,<CR>
+K	nnoremap x :é'asil dnormal  \\<CR>
+K	nnoremap x :<Bar>1,<Bar><CR>
+S	nnoremap x :!ls<Bar>nnoremap y Z<CR>
+S	nnoremap x :nnoremap y Znormal v/a/é<CR>
+K	nnoremap x :\\'a<CR>
+S	nnoremap x :'a<Bar>v/a/so f'a<CR>
+K	nnoremap x :é""<Bar>1,\\<CR>
+K	nnoremap x :/<Bar>'ag/a/'a'a<CR>
+K	nnoremap x :<Bar>g/a/v/a/<CR>
+K	nnoremap x :ég/a/g/<CR>
+K	nnoremap x ://s/a/b/d/\\sil <CR>
+N	nnoremap x :normal 1, <CR>
+N	nnoremap x :'anormal !lsnnoremap y Zd!ls <CR>
+K	nnoremap x :\\"dg/a/sil <CR>
+N	nnoremap x : normal nnoremap y Z<CR>
+K	nnoremap x :1,/normal 'a<CR>
+S	nnoremap x :so f\\g/<CR>
+S	nnoremap x :nnoremap y Z\\<Bar><Bar>"<CR>
+S	nnoremap x :g/g/v/a/sil <Bar><Bar>!ls<CR>
+K	nnoremap x :\\"s/a/b/<Bar>sil s/a/b/<CR>
+K	nnoremap x :\\/é<CR>
+R	nnoremap x :'aso f<Bar>g/'aso f<CR>
+K	nnoremap x :"'anormal g/g//<CR>
+N	nnoremap x :v/a/\\!lsdév/a/g/a/<CR>
+N	nnoremap x : d1,!lsso fsil <CR>
+S	nnoremap x :so fv/a/<CR>
+N	nnoremap x :  dv/a/!ls!ls<CR>
+K	nnoremap x :s/a/b/v/a/g/<Bar> <CR>
+N	nnoremap x :normal sil so f 'ag//<CR>
+K	nnoremap x :/v/a/g/a/ s/a/b/<CR>
+S	nnoremap x :nnoremap y Zg//g/a/<CR>
+K	nnoremap x :/d1,<CR>
+K	nnoremap x :'as/a/b/\\<CR>
+S	nnoremap x :nnoremap y Z!ls<CR>
+R	nnoremap x :sil 1,so f1,nnoremap y Z<CR>
+K	nnoremap x :"so f<Bar>1,s/a/b/1,<CR>
+K	nnoremap x :\\"g/<CR>
+S	nnoremap x :!ls1,\\<CR>
+K	nnoremap x :1,v/a/ s/a/b/<CR>
+S	nnoremap x :so f/d/!ls<CR>
+S	nnoremap x :<Bar>so f/s/a/b/1,"\\<CR>
+K	nnoremap x :\\nnoremap y Z<CR>
+K	nnoremap x :g/a/<Bar>dnnoremap y Znormal nnoremap y Z1,<CR>
+K	nnoremap x :g/normal v/a/<CR>
+N	nnoremap x :"\\d/!lsnnoremap y Z<CR>
+K	nnoremap x :'ag/normal "/d<CR>
+S	nnoremap x :d<Bar>'a !lsso f1,<CR>
+N	nnoremap x :normal dg/a/\\<CR>
+K	nnoremap x :/nnoremap y Z<CR>
+K	nnoremap x :g/g/g/a/é/<CR>
+K	nnoremap x :é<Bar>"\\<Bar><CR>
+K	nnoremap x :g/a/"sil sil <CR>
+K	nnoremap x :g/s/a/b/ g/so f"g/<CR>
+S	nnoremap x :so f<Bar>!ls<CR>
+K	nnoremap x :1,s/a/b/d/nnoremap y Z<CR>
+S	nnoremap x :<Bar>g/a/!lss/a/b/g/<CR>
+N	nnoremap x :"sil so f!ls'aso f<Bar><CR>
+K	nnoremap x :'a\\nnoremap y Zsil v/a/'a<CR>
+S	nnoremap x :!lsso f<Bar>v/a/é"<CR>
+K	nnoremap x :v/a/sil g/<CR>
+R	nnoremap x :'aso fso f<CR>
+K	nnoremap x :'a/s/a/b/\\<CR>
+K	nnoremap x :g/ 1,"<CR>
+R	nnoremap x :\\1,<Bar>nnoremap y Z/<CR>
+K	nnoremap x :"v/a/nnoremap y Z1,<CR>
+K	nnoremap x :g/so f<CR>
+N	nnoremap x :\\ /"!ls"'a<CR>
+S	nnoremap x :sil so f"s/a/b/1, <CR>
+K	nnoremap x :1,sil nnoremap y Z\\"éso f<CR>
+K	nnoremap x :\\/d"'av/a/<CR>
+S	nnoremap x :!ls!lsso f<CR>
+K	nnoremap x :ég/a/v/a/<Bar>normal <CR>
+K	nnoremap x :dd/'a<Bar>/<CR>
+N	nnoremap x :g/!ls/<CR>
+K	nnoremap x :dv/a/<CR>
+K	nnoremap x :s/a/b/<Bar><CR>
+K	nnoremap x :é"<CR>
+S	nnoremap x :so f//<CR>
+S	nnoremap x :<Bar>'a!ls<CR>
+S	nnoremap x : so f"<Bar>normal <CR>
+K	nnoremap x :1,g/a/<CR>
+S	nnoremap x :v/a/<Bar>nnoremap y Z<CR>
+K	nnoremap x :'a\\/g/'a" <CR>
+K	nnoremap x :s/a/b/\\<CR>
+N	nnoremap x :é!lss/a/b//s/a/b/<CR>
+K	nnoremap x :d'a<CR>
+N	nnoremap x :\\normal g/a/!ls<CR>
+S	nnoremap x :so fnormal <CR>
+K	nnoremap x :"normal /so f"so f<CR>
+K	nnoremap x :g/a/\\énnoremap y Znnoremap y Zso f\\<CR>
+S	nnoremap x :nnoremap y Zs/a/b//1,\\'a<Bar><CR>
+N	nnoremap x :<Bar>d!lsnormal <CR>
+K	nnoremap x :1,v/a/normal 'a<CR>
+N	nnoremap x :'ag/é1,!ls<CR>
+S	nnoremap x :!lsg/a/!ls<CR>
+S	nnoremap x :nnoremap y Z\\g/a/g/<CR>
+K	nnoremap x : "normal 1,<CR>
+K	nnoremap x : <Bar>g/a/é s/a/b/<CR>
+S	nnoremap x :!lsnormal g/a/ normal /<CR>
+K	nnoremap x :é"\\v/a/é 'a<CR>
+S	nnoremap x :so f1,"<CR>
+N	nnoremap x :normal "'a"sil <CR>
+K	nnoremap x :/"'adé"<CR>
+S	nnoremap x :nnoremap y Znnoremap y Zd1,dg/!ls<CR>
+S	nnoremap x :nnoremap y Z"g/a/nnoremap y Z<CR>
+K	nnoremap x :v/a/dd<CR>
+S	nnoremap x :!lssil \\<CR>
+S	nnoremap x :!ls 'a<CR>
+K	nnoremap x :d<Bar>"s/a/b/sil 1,<CR>
+K	nnoremap x :\\v/a/<CR>
+K	nnoremap x :\\ s/a/b/<Bar><Bar>s/a/b/<CR>
+K	nnoremap x :g/a/\\<CR>
+S	nnoremap x :nnoremap y Z"g/a/'aé<CR>
+K	nnoremap x :1,s/a/b/<Bar>/s/a/b/g/a/<CR>
+K	nnoremap x :d'a<Bar><CR>
+K	nnoremap x :g/g/\\" <CR>
+N	nnoremap x :v/a//sil !lsv/a/<CR>
+K	nnoremap x :d"so f"<Bar>'asil <CR>
+K	nnoremap x :/\\"<CR>
+S	nnoremap x :so fv/a/ésil nnoremap y Z <CR>
+K	nnoremap x :v/a/""so f1,<CR>
+K	nnoremap x :g/\\ ""<CR>
+K	nnoremap x :"s/a/b/<Bar>'aé'ad<CR>
+K	nnoremap x :\\"/<CR>
+K	nnoremap x :sil g/g/a/\\g/nnoremap y Z'a<CR>
+K	nnoremap x :sil <Bar><Bar><CR>
+K	nnoremap x :é'anormal g/<CR>
+K	nnoremap x :/""so f<CR>
+N	nnoremap x :v/a/s/a/b/sil nnoremap y Z!lsd<CR>
+S	nnoremap x :so fs/a/b/!ls<CR>
+N	nnoremap x :normal g/nnoremap y Z"<CR>
+K	nnoremap x :"s/a/b/normal <CR>
+K	nnoremap x :s/a/b/g/ <Bar>\\<CR>
+N	nnoremap x :d!lsnnoremap y Z<CR>
+S	nnoremap x :ég/sil <Bar>'a!ls<CR>
+K	nnoremap x :"g/sil 1,\\<CR>
+K	nnoremap x :1,s/a/b/v/a/nnoremap y Zé<CR>
+K	nnoremap x :"normal v/a/sil nnoremap y Z<Bar><CR>
+K	nnoremap x :s/a/b/g/a/1,normal <Bar>\\so f<CR>
+S	nnoremap x :nnoremap y Znnoremap y Z\\1,"<CR>
+N	nnoremap x :sil normal  nnoremap y Z1,'a<CR>
+K	nnoremap x :<Bar>"/ v/a/nnoremap y Zd<CR>
+K	nnoremap x :g/a/é<Bar>sil <Bar><CR>
+S	nnoremap x :!lssil é'a<CR>
+K	nnoremap x :s/a/b/so f<CR>
+S	nnoremap x :!ls<Bar>é<CR>
+N	nnoremap x :normal v/a/sil d1,s/a/b/<CR>
+K	nnoremap x :1,/g/a/'a<CR>
+N	nnoremap x :v/a/dsil g/!lsg/<CR>
+S	nnoremap x :sil nnoremap y Z/'a<CR>
+N	nnoremap x :g/!ls/\\/<CR>
+N	nnoremap x :normal nnoremap y Z/<CR>
+S	nnoremap x :so f/'a'as/a/b/<CR>
+N	nnoremap x :dsil !lsso f<CR>
+S	nnoremap x :!lsso f<Bar><CR>
+K	nnoremap x :sil é1,v/a/nnoremap y Z1,é<CR>
+K	nnoremap x : s/a/b/<CR>
+K	nnoremap x :sil 1,"1,normal <CR>
+N	nnoremap x :normal "d!ls<CR>
+K	nnoremap x :"nnoremap y Znnoremap y Z"nnoremap y Z<CR>
+N	nnoremap x :normal so fg/g/!ls<CR>
+K	nnoremap x :"é/g/\\g/<CR>
+K	nnoremap x :sil g/1,<CR>
+S	nnoremap x :nnoremap y Znormal 1,<CR>
+S	nnoremap x :so fnnoremap y Z"g/a/sil 1,<CR>
+S	nnoremap x :v/a/1,!ls'a <CR>
+N	nnoremap x :sil normal  "d/so f<CR>
+S	nnoremap x :so fso f'adnormal /<CR>
+S	nnoremap x :g/g/a/<Bar>so fnnoremap y Zso f<CR>
+K	nnoremap x :""<CR>
+K	nnoremap x :1,sil <CR>
+S	nnoremap x :<Bar>sil 'av/a/!ls'ag/<CR>
+K	nnoremap x :'anormal <CR>
+K	nnoremap x :dnormal nnoremap y Znormal nnoremap y Z<CR>
+N	nnoremap x :g/a/1,d!lss/a/b/normal <CR>
+S	nnoremap x :!lsés/a/b/<CR>
+N	nnoremap x :normal é!lss/a/b/\\s/a/b/<CR>
+N	nnoremap x :dv/a/!lssil normal <Bar><CR>
+K	nnoremap x :g/1,<CR>
+K	nnoremap x :normal  <CR>
+K	nnoremap x :g/v/a/so fg/a/1,nnoremap y Z<CR>
+S	nnoremap x :nnoremap y Zs/a/b/"g/s/a/b/é<CR>
+K	nnoremap x : g/nnoremap y Z<CR>
+K	nnoremap x :dv/a//s/a/b/<CR>
+S	nnoremap x :so f<Bar>v/a/é/s/a/b/g/<CR>
+S	nnoremap x :sil nnoremap y Zg/normal "1,v/a/<CR>
+K	nnoremap x :"d <CR>
+S	nnoremap x : g/a/!lsso fdnormal nnoremap y Z<CR>
+K	nnoremap x :'a /<CR>
+K	nnoremap x : sil "normal /<Bar><CR>
+N	nnoremap x :d<Bar>\\!lsé<CR>
+K	nnoremap x :"<Bar>\\so f/s/a/b/so f<CR>
+K	nnoremap x :sil g/a/g/a/<CR>
+S	nnoremap x :!ls1,v/a/<CR>
+K	nnoremap x :g/'aé1,<CR>
+K	nnoremap x :sil ég/a/<CR>
+S	nnoremap x :so fd1,<CR>
+K	nnoremap x ://ds/a/b/dv/a/é<CR>
+K	nnoremap x :1,normal <Bar>"1,d1,<CR>
+N	nnoremap x :normal s/a/b/normal \\/v/a/\\<CR>
+S	nnoremap x :so f1,nnoremap y Z!lsso f1,"<CR>
+S	nnoremap x :!lssil  \\<CR>
+S	nnoremap x :<Bar>!lsnormal <CR>
+S	nnoremap x :!lsnormal normal ""<CR>
+N	nnoremap x :g/a//s/a/b/!ls"<CR>
+S	nnoremap x :so fnormal  nnoremap y Z nnoremap y Z<CR>
+K	nnoremap x :  'a<CR>
+K	nnoremap x :é/<CR>
+K	nnoremap x :"nnoremap y Z1,v/a/so fnormal "<CR>
+K	nnoremap x :és/a/b/éso fnnoremap y Z<CR>
+K	nnoremap x ://éso fnormal normal so f<CR>
+S	nnoremap x :'annoremap y Zv/a/d<CR>
+S	nnoremap x :!ls"normal !ls<CR>
+K	nnoremap x :ésil /1,<CR>
+K	nnoremap x : é <CR>
+N	nnoremap x :<Bar>normal 'ad<CR>
+S	nnoremap x :nnoremap y Z\\"1,v/a/é<CR>
+K	nnoremap x :v/a/s/a/b/é normal d1,<CR>
+K	nnoremap x :<Bar>/'asil éé<CR>
+K	nnoremap x :éds/a/b/"nnoremap y Zv/a/<CR>
+S	nnoremap x :g/a/'a!lsd<CR>
+S	nnoremap x :!ls<Bar>!lsg/sil normal <CR>
+N	nnoremap x : \\!ls1,<CR>
+K	nnoremap x :/v/a/g/énormal é<CR>
+K	nnoremap x :v/a/<Bar>s/a/b/<CR>
+N	nnoremap x :normal /g/1,\\<CR>
+K	nnoremap x :\\so f1,\\g/a/so f<CR>
+S	nnoremap x :1,!ls<CR>
+K	nnoremap x :g/v/a/<CR>
+S	nnoremap x :!ls!lsés/a/b/<CR>
+N	nnoremap x :\\1,é!lsé/d<CR>
+K	nnoremap x :1,v/a/<CR>
+N	nnoremap x :normal dso fg/sil /<CR>
+S	nnoremap x :!ls'ag//"<CR>
+K	nnoremap x :1,g/a/normal /so f<Bar>v/a/<CR>
+K	nnoremap x :d1, /<CR>
+K	nnoremap x :v/a/'ag/a/<CR>
+K	nnoremap x : g/a/v/a/d<CR>
+K	nnoremap x :<Bar>dsil g//normal g/a/<CR>
+K	nnoremap x :g/'aé/s/a/b/<CR>
+N	nnoremap x :normal !lsg/a/g/é<CR>
+S	nnoremap x :<Bar>!lséso fs/a/b/<CR>
+K	nnoremap x :s/a/b/'aso fg/a/s/a/b/'a<CR>
+K	nnoremap x :g/sil v/a/so f<CR>
+N	nnoremap x :normal v/a/!ls<CR>
+N	nnoremap x :normal normal /nnoremap y Z<Bar>v/a/<CR>
+N	nnoremap x :\\g//d!lss/a/b/<CR>
+K	nnoremap x :g/'as/a/b/nnoremap y Zso f"<CR>
+S	nnoremap x :'annoremap y Znnoremap y Z"!ls!ls!ls<CR>
+K	nnoremap x :\\v/a/<Bar>normal <CR>
+K	nnoremap x : g/a/"ég/nnoremap y Z<CR>
+N	nnoremap x :v/a/normal  sil d<CR>
+N	nnoremap x :s/a/b/!ls\\énnoremap y Znnoremap y Z'a<CR>
+S	nnoremap x :sil so fnnoremap y Zdg/"'a<CR>
+N	nnoremap x :g/a/normal  sil nnoremap y Zd<CR>
+S	nnoremap x :so f1,s/a/b/<CR>
+S	nnoremap x :nnoremap y Zg/a/normal <CR>
+S	nnoremap x :so fg/a//sil d"<CR>
+N	nnoremap x :é1,so f'av/a/!ls<CR>
+K	nnoremap x :é"sil "nnoremap y Z1,s/a/b/<CR>
+S	nnoremap x :nnoremap y Znormal <CR>
+S	nnoremap x :!lsv/a/é<Bar>ég/a/<CR>
+N	nnoremap x :g/nnoremap y Zso f !lss/a/b/so f<CR>
+K	nnoremap x :s/a/b/g/g/a/<CR>
+K	nnoremap x :\\é<CR>
+S	nnoremap x :nnoremap y Z!lsg/<Bar>s/a/b/dd<CR>
+N	nnoremap x :'aé'a1,g/a/!ls'a<CR>
+S	nnoremap x :so f'a<CR>
+K	nnoremap x :dé<CR>
+K	nnoremap x :ég/1,/v/a/ /<CR>
+K	nnoremap x :1,/so f<CR>
+K	nnoremap x :"1,ésil 'a <CR>
+N	nnoremap x :é!lsso fdsil <CR>
+K	nnoremap x :<Bar>g/a/dg/a/so f<CR>
+K	nnoremap x :é\\g/a/\\nnoremap y Znormal <CR>
+K	nnoremap x :/sil 'a"<CR>
+K	nnoremap x :s/a/b/normal /g/so fds/a/b/<CR>
+N	nnoremap x :<Bar>s/a/b/!ls <CR>
+K	nnoremap x :v/a/ g/a/'a1,s/a/b/<CR>
+S	nnoremap x : /v/a/<Bar>!lsd<Bar><CR>
+S	nnoremap x :'av/a/nnoremap y Z!ls\\dv/a/<CR>
+K	nnoremap x :g/nnoremap y Z"/g/a/<CR>
+K	nnoremap x :"/sil s/a/b/s/a/b/\\<CR>
+K	nnoremap x :\\normal <Bar>\\<CR>
+K	nnoremap x :\\g/'as/a/b/nnoremap y Z<CR>
+S	nnoremap x :nnoremap y Z//so f"d<CR>
+K	nnoremap x :1,ég/dv/a/sil 1,<CR>
+N	nnoremap x : <Bar>normal !lsv/a/sil <CR>
+K	nnoremap x :v/a/g/a/\\s/a/b/normal 'a<CR>
+N	nnoremap x :d\\"so f!lsnnoremap y Z<CR>
+K	nnoremap x :g/a/ v/a/d<CR>
+S	nnoremap x :<Bar>nnoremap y Z normal <Bar><CR>
+S	nnoremap x :v/a/so fs/a/b/ <CR>
+K	nnoremap x :g/so f <Bar>g/a/<CR>
+K	nnoremap x :sil s/a/b/\\d/é<CR>
+K	nnoremap x :ééso fnnoremap y Zg/a/"<CR>
+K	nnoremap x : sil <CR>
+K	nnoremap x :"nnoremap y Z<CR>
+K	nnoremap x ://normal <CR>
+K	nnoremap x :dsil so fds/a/b/"<CR>
+K	nnoremap x :dnormal so fnormal <CR>
+K	nnoremap x :s/a/b/sil nnoremap y Z/<Bar><CR>
+K	nnoremap x :és/a/b/g/a/nnoremap y Zso fsil nnoremap y Z<CR>
+S	nnoremap x :so f"so f \\/ <CR>
+K	nnoremap x :s/a/b/s/a/b/é"'a1,<CR>
+R	nnoremap x :1,so fs/a/b/<CR>
+K	nnoremap x :s/a/b/<Bar>1,\\/dsil <CR>
+K	nnoremap x :/ <CR>
+K	nnoremap x :v/a/s/a/b/s/a/b/<CR>
+K	nnoremap x :dsil  1,<CR>
+S	nnoremap x :so fdé<CR>
+N	nnoremap x :é!lsnormal g/!ls<CR>
+K	nnoremap x :s/a/b/g/a/<CR>
+K	nnoremap x : és/a/b/<Bar><CR>
+K	nnoremap x :v/a/'as/a/b/so fso f<CR>
+K	nnoremap x :\\<Bar>sil "g/'a<CR>
+K	nnoremap x :s/a/b/nnoremap y Z nnoremap y Z'anormal "<CR>
+K	nnoremap x :g/a/g/a/dso fd<CR>
+K	nnoremap x :"g/a/1,g/nnoremap y Z'a<Bar><CR>
+K	nnoremap x :dv/a/normal <CR>
+S	nnoremap x :v/a/so fs/a/b/<CR>
+S	nnoremap x :nnoremap y Z'av/a/"g/<CR>
+S	nnoremap x :!ls1,normal <CR>
+K	nnoremap x :<Bar>1,g/<CR>
+N	nnoremap x :normal \\v/a/<Bar>v/a/d<CR>
+N	nnoremap x :normal s/a/b//g/nnoremap y Z<CR>
+S	nnoremap x :'annoremap y Z\\1,'a<CR>
+K	nnoremap x :dg/a/1,<CR>
+S	nnoremap x :"dé!ls<Bar>so f'a<CR>
+N	nnoremap x :normal nnoremap y Z<CR>
+S	nnoremap x :g/a/nnoremap y Z/s/a/b/<CR>
+S	nnoremap x :nnoremap y Zg/a/ds/a/b/s/a/b/v/a/\\<CR>
+S	nnoremap x :g/a/so f/<CR>
+S	nnoremap x :\\<Bar>1,'asil !lsv/a/<CR>
+N	nnoremap x :g/a/"é!lsso fsil normal <CR>
+K	nnoremap x :""nnoremap y Z<CR>
+N	nnoremap x :normal 'ad <CR>
+S	nnoremap x : nnoremap y Z<CR>
+K	nnoremap x :<Bar>s/a/b/nnoremap y Znnoremap y Z<CR>
+N	nnoremap x :"!ls!ls/1,'a/<CR>
+N	nnoremap x :dv/a/d<Bar>"!ls<CR>
+S	nnoremap x :so f"sil so fd1,\\<CR>
+K	nnoremap x :/'aso f\\"normal <CR>
+K	nnoremap x :<Bar>ésil <Bar><CR>
+K	nnoremap x :g/\\1,<CR>
+K	nnoremap x :'aénormal g/a/so f<CR>
+S	nnoremap x :!lsv/a/s/a/b/!ls<CR>
+S	nnoremap x :nnoremap y Z\\g/<Bar> <CR>
+N	nnoremap x :<Bar>normal sil \\1,<Bar>g/a/<CR>
+N	nnoremap x :normal s/a/b/normal "so fd<CR>
+K	nnoremap x :"1,"<CR>
+S	nnoremap x :!ls\\<CR>
+K	nnoremap x :g/s/a/b/'aso f<CR>
+S	nnoremap x :sil 'annoremap y Z!ls'a<CR>
+N	nnoremap x :v/a/<Bar>normal "g/nnoremap y Z<Bar><CR>
+S	nnoremap x :'ag/g/<Bar>!ls<Bar>\\<CR>
+N	nnoremap x :/normal !ls<CR>
+K	nnoremap x :<Bar> <CR>
+N	nnoremap x :normal v/a//sil <CR>
+K	nnoremap x :'adg/<CR>
+S	nnoremap x :nnoremap y Zsil g/a/ d<CR>
+K	nnoremap x :\\g/a/normal <Bar><CR>
+N	nnoremap x :normal g/<CR>
+K	nnoremap x :v/a/<Bar>"g/a/nnoremap y Z'av/a/<CR>
+K	nnoremap x : d\\<CR>
+K	nnoremap x :\\normal  d<CR>
+K	nnoremap x :s/a/b/g/d"<CR>
+S	nnoremap x :g/a/nnoremap y Zsil <CR>
+S	nnoremap x :!lsnormal  nnoremap y Z\\<CR>
+S	nnoremap x :!ls'aé\\\\<CR>
+R	nnoremap x : g/a/\\/so f\\\\<CR>
+N	nnoremap x :\\g/a/1,"'a!lsé<CR>
+K	nnoremap x :/v/a/ 1,s/a/b/s/a/b/<CR>
+S	nnoremap x :'annoremap y Znormal 1,ésil normal <CR>
+S	nnoremap x :nnoremap y Zs/a/b/<CR>
+S	nnoremap x :v/a/<Bar>nnoremap y Zso fsil g/a/<CR>
+K	nnoremap x :'a\\/normal \\<CR>
+K	nnoremap x :<Bar>énormal <CR>
+S	nnoremap x :<Bar>nnoremap y Z'a<CR>
+K	nnoremap x :d"<CR>
+N	nnoremap x :\\!lss/a/b/so f g/g/<CR>
+K	nnoremap x :1,/sil v/a/nnoremap y Z<CR>
+K	nnoremap x :\\1,\\1,1,g/a/<CR>
+K	nnoremap x :'adsil s/a/b/g/d<CR>
+K	nnoremap x :g/\\normal énnoremap y Z<CR>
+K	nnoremap x :g/a/ d<CR>
+S	nnoremap x :so f\\v/a/ "so f<CR>
+K	nnoremap x :sil /\\'anormal <CR>
+K	nnoremap x :/s/a/b/'addnnoremap y Z<CR>
+K	nnoremap x :d"/ "1,g/<CR>
+K	nnoremap x :'ag/<CR>
+S	nnoremap x : g/a/so f<Bar><CR>
+K	nnoremap x :s/a/b/ég/sil s/a/b/<CR>
+S	nnoremap x :nnoremap y Zés/a/b/g/v/a/ <CR>
+K	nnoremap x :<Bar>v/a/<Bar><Bar><CR>
+S	nnoremap x :so fs/a/b/'aso fv/a//<CR>
+K	nnoremap x :ds/a/b//nnoremap y Znormal év/a/<CR>
+S	nnoremap x :so f'a1,"so f<CR>
+K	nnoremap x :<Bar><Bar><Bar>v/a/1,g/a/\\<CR>
+K	nnoremap x :g/a/désil 'av/a//<CR>
+K	nnoremap x :g/g/a/<Bar><CR>
+K	nnoremap x :v/a/ sil /és/a/b/'a<CR>
+N	nnoremap x :éég/a/!ls\\<CR>
+K	nnoremap x :1,nnoremap y Z<CR>
+S	nnoremap x :nnoremap y Znormal nnoremap y Znormal s/a/b/<CR>
+K	nnoremap x :g/é'a"v/a/s/a/b/<CR>
+S	nnoremap x :so f1,ég/a/\\/d<CR>
+K	nnoremap x :v/a/v/a//normal <CR>
+S	nnoremap x :so f!lsnnoremap y Z'aso f<CR>
+N	nnoremap x :normal sil 'anormal so f/\\<CR>
+K	nnoremap x :'ag/a/v/a/<Bar>s/a/b/s/a/b/<CR>
+N	nnoremap x :<Bar>g/\\"!lsso fnnoremap y Z<CR>
+K	nnoremap x :dv/a/g/1,g/<Bar><CR>
+N	nnoremap x :normal "so f'as/a/b/normal <CR>
+K	nnoremap x :/s/a/b/g/a/d"<CR>
+R	nnoremap x :1,\\v/a/so fé<CR>
+K	nnoremap x :g/<Bar>é<Bar>g/sil <CR>
+S	nnoremap x :!lsnnoremap y Z<CR>
+R	nnoremap x :\\é'aso fso f<CR>
+K	nnoremap x :'av/a/<Bar><CR>
+K	nnoremap x :é1,<CR>
+K	nnoremap x :g/dnormal s/a/b/<Bar>g/a/<CR>
+N	nnoremap x :normal !lsg/g/a/nnoremap y Zsil <CR>
+S	nnoremap x :nnoremap y Zs/a/b/"sil <CR>
+K	nnoremap x :sil g/s/a/b/dso f<CR>
+S	nnoremap x :so f/sil s/a/b/normal so f<CR>
+K	nnoremap x :é/v/a/g/sil sil <CR>
+K	nnoremap x :\\v/a/\\<CR>
+S	nnoremap x :nnoremap y Z1,g/<CR>
+S	nnoremap x :!lsnnoremap y Zso fsil év/a/<CR>
+K	nnoremap x :s/a/b/g/a/sil <CR>
+K	nnoremap x :ds/a/b/\\<CR>
+K	nnoremap x :"<Bar>'aé\\so fsil <CR>
+K	nnoremap x :<Bar>\\<CR>
+K	nnoremap x :g/dnormal \\<CR>
+S	nnoremap x :<Bar>g/'ag/nnoremap y Znnoremap y Z<CR>
+K	nnoremap x :1,nnoremap y Z\\"<Bar><CR>
+K	nnoremap x :/"// <CR>
+S	nnoremap x :nnoremap y Znormal 1,ég/<CR>
+N	nnoremap x :g/a/normal \\" <CR>
+S	nnoremap x :!lsnormal d'a<CR>
+N	nnoremap x :<Bar>sil sil normal <Bar><CR>
+S	nnoremap x :v/a/!ls"<CR>
+K	nnoremap x :d<Bar><CR>
+K	nnoremap x :"sil sil 1,<CR>
+S	nnoremap x :!ls" és/a/b/!ls<CR>
+N	nnoremap x :/g/normal g/a/1,éso f<CR>
+K	nnoremap x :""ésil v/a/so f\\<CR>
+K	nnoremap x :g/a/éé<CR>
+N	nnoremap x :énormal !ls<CR>
+S	nnoremap x :'a1,v/a/so f/!lsg/a/<CR>
+N	nnoremap x :d d !ls//<CR>
+S	nnoremap x :g/g/so f<Bar>so fnnoremap y Zd<CR>
+N	nnoremap x :g/!lss/a/b/<Bar><CR>
+K	nnoremap x :'aé/<CR>
+S	nnoremap x :nnoremap y Z"<CR>
+S	nnoremap x :so f"<CR>
+N	nnoremap x :/!lssil normal  !ls<CR>
+K	nnoremap x :1,"'a so fd"<CR>
+K	nnoremap x :<Bar>//<Bar>1,v/a/<CR>
+S	nnoremap x :sil so fsil é<CR>
+K	nnoremap x :é"1,so fg/v/a/<CR>
+N	nnoremap x :normal d"s/a/b/<CR>
+K	nnoremap x :g/1,/<CR>
+K	nnoremap x :éé<CR>
+K	nnoremap x :\\nnoremap y Zdso f<CR>
+K	nnoremap x :g/v/a/'a<CR>
+R	nnoremap x :v/a///so fg/a/'a<CR>
+S	nnoremap x :!lsnnoremap y Znormal !lsso f'av/a/<CR>
+K	nnoremap x :<Bar>g/a/éso fnnoremap y Zs/a/b/sil <CR>
+S	nnoremap x :/"/so f!lsnormal !ls<CR>
+S	nnoremap x :so f'a!lsv/a/<CR>
+S	nnoremap x :v/a/nnoremap y Z<Bar> <CR>
+S	nnoremap x :so fv/a/so f<CR>
+K	nnoremap x :g/normal 1,s/a/b/<CR>
+S	nnoremap x :so fg/a/v/a//<CR>
+K	nnoremap x :g/1,v/a/<CR>
+K	nnoremap x :sil s/a/b/ds/a/b/\\nnoremap y Z<CR>
+N	nnoremap x :g/a/v/a/normal !ls1,<CR>
+K	nnoremap x :"ég/a/<CR>
+K	nnoremap x :1,s/a/b/<CR>
+N	nnoremap x :normal dg/<Bar> <CR>
+N	nnoremap x :1,/!lsso fso f<CR>
+S	nnoremap x :nnoremap y Z<Bar>normal \\<CR>
+K	nnoremap x :dg/a/v/a/<Bar><CR>
+S	nnoremap x :nnoremap y Zso f'aso fg/a/normal sil <CR>
+S	nnoremap x :!ls1,é\\"<CR>
+S	nnoremap x :v/a/!lsg//1,\\s/a/b/<CR>
+N	nnoremap x :normal 1,g/a/<CR>
+S	nnoremap x :so fg/d/so fso f<CR>
+K	nnoremap x :\\ \\'ag/so f<CR>
+K	nnoremap x :<Bar>"é<CR>
+K	nnoremap x :"sil normal v/a/<CR>
+S	nnoremap x : so f'a<CR>
+K	nnoremap x :<Bar>\\\\<Bar>\\<CR>
+K	nnoremap x :s/a/b/'a<Bar><Bar>g/<CR>
+S	nnoremap x :nnoremap y Zsil  nnoremap y Z<Bar><CR>
+K	nnoremap x :s/a/b/v/a/g/g/a/<CR>
+K	nnoremap x :g/a/<Bar>g/é"g/<CR>
+N	nnoremap x :1,nnoremap y Z/!ls<CR>
+K	nnoremap x :<Bar>sil s/a/b/s/a/b/\\/é<CR>
+S	nnoremap x :nnoremap y Z g/d1,<CR>
+S	nnoremap x :!lsésil  <CR>
+K	nnoremap x :g/v/a/1,v/a/<CR>
+S	nnoremap x :!lsg/a/d\\"<Bar><CR>
+K	nnoremap x :sil  g/é<Bar>'a <CR>
+K	nnoremap x :g/nnoremap y Zg/1, d<CR>
+R	nnoremap x :v/a/g/a/s/a/b/nnoremap y Z<Bar>nnoremap y Z<CR>
+K	nnoremap x :<Bar>1,"sil <CR>
+K	nnoremap x :s/a/b/sil 'a<CR>
+N	nnoremap x :normal v/a/<CR>
+K	nnoremap x :ééd<CR>
+K	nnoremap x :/dd"é<CR>
+K	nnoremap x :v/a/s/a/b/g/sil <CR>
+K	nnoremap x :v/a/s/a/b/ <CR>
+S	nnoremap x :<Bar>nnoremap y Znormal <Bar><CR>
+S	nnoremap x :!lsg/"1,<CR>
+S	nnoremap x :nnoremap y Zs/a/b//"/normal <CR>
+S	nnoremap x :so f<Bar><CR>
+K	nnoremap x :sil " 1,s/a/b/so f'a<CR>
+K	nnoremap x :v/a/<Bar><Bar>g/a/<CR>
+K	nnoremap x :\\g/s/a/b/sil <CR>
+K	nnoremap x :d1,<CR>
+S	nnoremap x :!lsg/nnoremap y Z  /<CR>
+S	nnoremap x :<Bar>!ls<CR>
+N	nnoremap x :d!ls\\<CR>
+S	nnoremap x :v/a/so fv/a/!ls<CR>
+S	nnoremap x :!ls<Bar>ég/<CR>
+K	nnoremap x :v/a/éé\\1,<CR>
+K	nnoremap x :s/a/b//1,"/normal <CR>
+K	nnoremap x : 1,/so f'a"'a<CR>
+K	nnoremap x :"sil sil <CR>
+K	nnoremap x :s/a/b/ds/a/b/1,g/g/s/a/b/<CR>
+S	nnoremap x :'aso f!lsd<CR>
+K	nnoremap x :<Bar>s/a/b/"normal so f<Bar><CR>
+S	nnoremap x :nnoremap y Znnoremap y Zdnormal <CR>
+S	nnoremap x :g/a/!lssil <CR>
+K	nnoremap x :v/a/sil <CR>
+K	nnoremap x :g/sil 'a'a<CR>
+K	nnoremap x :ésil "sil dv/a/g/a/<CR>
+K	nnoremap x :1,1,<Bar>\\<CR>
+K	nnoremap x :""v/a/\\sil <CR>
+K	nnoremap x :g/g/a/énormal "so f1,<CR>
+K	nnoremap x :v/a/"nnoremap y Z éso f<CR>
+S	nnoremap x :so f!lsv/a/normal <Bar>!ls<CR>
+K	nnoremap x :/" /<CR>
+S	nnoremap x :nnoremap y Zg/a/g/ <Bar>"<CR>
+R	nnoremap x :\\v/a/g/a/so f<CR>
+N	nnoremap x :s/a/b/\\1,!ls\\<CR>
+S	nnoremap x :nnoremap y Zsil 1,<CR>
+N	nnoremap x : <Bar>v/a/normal sil v/a/g/a/<CR>
+S	nnoremap x :"g/a/g/a/<Bar>!ls<CR>
+K	nnoremap x :"so f\\\\<CR>
+S	nnoremap x :so f'ad<CR>
+N	nnoremap x :<Bar>é!lss/a/b/sil <Bar><CR>
+K	nnoremap x :g/a/d/s/a/b/<CR>
+S	nnoremap x :so f'as/a/b/normal   <CR>
+S	nnoremap x :!lssil  nnoremap y Znormal <Bar>g/a/<CR>
+R	nnoremap x :'aso fsil \\ nnoremap y Z<CR>
+N	nnoremap x :é'aso f"so f !ls<CR>
+N	nnoremap x :g/!ls s/a/b/"g/a/<CR>
+N	nnoremap x :/!lsd<CR>
+N	nnoremap x :<Bar>normal v/a/<CR>
+K	nnoremap x :d sil <CR>
+K	nnoremap x :g/a/" g/a/ég/a/1,<CR>
+N	nnoremap x :"nnoremap y Zsil !lséd<CR>
+N	nnoremap x :1,/"nnoremap y Z'a!ls<CR>
+S	nnoremap x :'a!ls!ls!ls<CR>
+K	nnoremap x :dg/a/s/a/b/\\<Bar>g/sil <CR>
+K	nnoremap x :s/a/b/v/a/<CR>
+K	nnoremap x :g/v/a/g/a/d<CR>
+N	nnoremap x :sil s/a/b/!lss/a/b/g/a/s/a/b/s/a/b/<CR>
+S	nnoremap x :sil so f<Bar>é<Bar><CR>
+S	nnoremap x :so fv/a/\\d!ls<Bar><CR>
+K	nnoremap x :g/1,"<CR>
+N	nnoremap x :normal  ésil g/ <CR>
+K	nnoremap x :ds/a/b/\\s/a/b/dv/a/so f<CR>
+K	nnoremap x :s/a/b/nnoremap y Znormal sil v/a/normal nnoremap y Z<CR>
+K	nnoremap x :dso f /nnoremap y Z<CR>
+K	nnoremap x :\\\\" "v/a/<CR>
+N	nnoremap x :v/a/"!lsd<CR>
+K	nnoremap x :sil <Bar>é<CR>
+K	nnoremap x :'as/a/b/<CR>
+S	nnoremap x :so fd\\'a<CR>
+K	nnoremap x :"sil sil nnoremap y Z"d<CR>
+K	nnoremap x :dév/a/<CR>
+N	nnoremap x :v/a/normal /nnoremap y Zsil !ls<CR>
+K	nnoremap x :g/ég/a/\\d<CR>
+K	nnoremap x : v/a/s/a/b/<CR>
+S	nnoremap x :s/a/b/normal /<Bar>!lssil <CR>
+S	nnoremap x :'annoremap y Zé<Bar> 'a<CR>
+S	nnoremap x :sil so fso fé/"<CR>
+K	nnoremap x : ég/a/év/a/nnoremap y Z<CR>
+N	nnoremap x :normal g/a//é!ls<CR>
+K	nnoremap x :g/v/a/\\so f" <CR>
+K	nnoremap x :'adnormal <CR>
+K	nnoremap x :/és/a/b/<CR>
+S	nnoremap x :\\é!lsg//<CR>
+K	nnoremap x :///normal <CR>
+K	nnoremap x : sil  <CR>
+K	nnoremap x :1,sil  <CR>
+N	nnoremap x :normal / normal s/a/b/g/<CR>
+S	nnoremap x :so f\\d<Bar>\\ <CR>
+K	nnoremap x :év/a/so fg/a/normal <CR>
+N	nnoremap x :sil 'asil énnoremap y Z!ls<CR>
+N	nnoremap x :g/a/v/a/ 'ad!ls<CR>
+S	nnoremap x :/<Bar>sil //!ls<CR>
+K	nnoremap x :sil "/\\"<CR>
+N	nnoremap x :s/a/b/!lsés/a/b/\\s/a/b/<Bar><CR>
+S	nnoremap x :!ls/s/a/b/g/s/a/b/\\1,<CR>
+K	nnoremap x :g/a/1,<CR>
+K	nnoremap x :g/g/a/"\\<Bar>normal <CR>
+K	nnoremap x :<Bar>1,1,<CR>
+R	nnoremap x :"so f<Bar>nnoremap y Z<CR>
+S	nnoremap x :!lsg/a/"!ls1,s/a/b/<CR>
+S	nnoremap x :sil so fé<Bar><CR>
+N	nnoremap x :g/"sil !ls'a\\sil <CR>
+N	nnoremap x :<Bar>normal /<Bar> /nnoremap y Z<CR>
+S	nnoremap x :nnoremap y Zg/"<CR>
+S	nnoremap x :g/a/<Bar>nnoremap y Z<CR>
+S	nnoremap x :g/a/<Bar>so fs/a/b/<CR>
+K	nnoremap x : s/a/b/és/a/b/<Bar><CR>
+K	nnoremap x : g/a/<CR>
+K	nnoremap x :s/a/b/'a<Bar>sil sil <CR>
+K	nnoremap x :g//<CR>
+K	nnoremap x :s/a/b/nnoremap y Z\\g/a/<CR>
+S	nnoremap x :1,!lss/a/b/<CR>
+S	nnoremap x :!lsénnoremap y Znormal <CR>
+K	nnoremap x :sil  \\g/a/ <Bar>v/a/<CR>
+K	nnoremap x :<Bar>s/a/b/g/g/a/v/a/g/<CR>
+K	nnoremap x :g/a/g/a/s/a/b/normal é<CR>
+N	nnoremap x :sil "1,  !lsg/a/<CR>
+K	nnoremap x :1,'ad<CR>
+S	nnoremap x :so fsil 1,'a<CR>
+N	nnoremap x :v/a/s/a/b/v/a/g/a/\\!ls!ls<CR>
+K	nnoremap x :'ag/g/éd1,<CR>
+K	nnoremap x :1,v/a/ 'a<CR>
+K	nnoremap x :" so f é<CR>
+K	nnoremap x :g/so fs/a/b/1,'a<CR>
+N	nnoremap x :normal so fnnoremap y Zs/a/b/nnoremap y Z<CR>
+K	nnoremap x :s/a/b/g/g/a/v/a/so f<CR>
+N	nnoremap x :g/a///normal v/a/<CR>
+K	nnoremap x :g/ so f<CR>
+K	nnoremap x :"v/a/v/a/normal \\s/a/b/'a<CR>
+N	nnoremap x :normal normal <CR>
+K	nnoremap x :'av/a/v/a/'as/a/b/sil normal <CR>
+N	nnoremap x :g/a// !lsso fd <CR>
+K	nnoremap x :édg/a/so f<CR>
+K	nnoremap x : "nnoremap y Z<CR>
+S	nnoremap x :sil !lsnormal é<CR>
+R	nnoremap x :sil 'aso f'a/nnoremap y Z<CR>
+K	nnoremap x :é'ag/a/normal <CR>
+N	nnoremap x :s/a/b/!ls1,<Bar>\\g/a/d<CR>
+K	nnoremap x :\\g/a/d'av/a/<CR>
+S	nnoremap x :nnoremap y Zg/\\!lssil s/a/b/\\<CR>
+K	nnoremap x :"'a<Bar>éso f1,'a<CR>
+K	nnoremap x :g/a/g/a/d"'a<CR>
+K	nnoremap x :dg/sil <Bar>dé<CR>
+S	nnoremap x :nnoremap y Znormal g/normal <Bar><CR>
+S	nnoremap x :so fnnoremap y Znnoremap y Z"nnoremap y Z<CR>
+S	nnoremap x :'a!lsv/a/sil sil <CR>
+K	nnoremap x :s/a/b/nnoremap y Z\\'a<CR>
+S	nnoremap x :so f"1,nnoremap y Zg/\\<CR>
+N	nnoremap x :g/1,!lsnnoremap y Z\\<CR>
+N	nnoremap x :normal sil <CR>
+S	nnoremap x :v/a/nnoremap y Z!ls<CR>
+K	nnoremap x :g/sil éd\\\\<CR>
+S	nnoremap x :!ls"!lsg/a/"<CR>
+K	nnoremap x :'av/a/\\<Bar><CR>
+N	nnoremap x :s/a/b/!ls<CR>
+K	nnoremap x :d/'a\\nnoremap y Z'a<CR>
+K	nnoremap x :<Bar>"\\<CR>
+N	nnoremap x :d!ls\\v/a/<CR>
+K	nnoremap x :"<Bar>v/a/<CR>
+K	nnoremap x :dso fso fd<CR>
+S	nnoremap x :nnoremap y Zd!ls'a/<CR>
+S	nnoremap x :<Bar>nnoremap y Znnoremap y Zg/a/dg/a/so f<CR>
+K	nnoremap x :d\\v/a/<Bar><CR>
+K	nnoremap x :s/a/b/g/1,normal normal <CR>
+S	nnoremap x :so fg/g/<CR>
+R	nnoremap x :/g/1,so fs/a/b//<CR>
+N	nnoremap x :<Bar>g/a/sil g/d!lsg/<CR>
+N	nnoremap x : normal  so fsil so f<CR>
+K	nnoremap x :1,normal "so f<CR>
+S	nnoremap x :!lsnormal !ls1, 1,d<CR>
+N	nnoremap x :g/a/" sil é!lssil <CR>
+S	nnoremap x :sil !ls<CR>
+S	nnoremap x :nnoremap y Znormal nnoremap y Zso fd"é<CR>
+S	nnoremap x :so fg/a/"<CR>
+K	nnoremap x :\\\\sil g/g/a/g/g/<CR>
+K	nnoremap x :'av/a/s/a/b/1,so f<CR>
+S	nnoremap x :/nnoremap y Z /g/a/!lsg/a/<CR>
+K	nnoremap x :g/a/s/a/b/g/a/so f<Bar>v/a/<CR>
+K	nnoremap x :ésil <CR>
+N	nnoremap x :é\\so f!ls<CR>
+S	nnoremap x :sil so fnormal sil <CR>
+S	nnoremap x : nnoremap y Zsil é<CR>
+R	nnoremap x :'a'a<Bar>so f<Bar>nnoremap y Z/<CR>
+S	nnoremap x :v/a//g/g/a/so f<CR>
+S	nnoremap x :nnoremap y Z év/a/é<CR>
+K	nnoremap x :1,<Bar>v/a/d/g/<CR>
+S	nnoremap x :so f1,!lsg/<CR>
+N	nnoremap x :d'a!ls'as/a/b/<Bar><CR>
+K	nnoremap x :énnoremap y Zdg/a/1,/\\<CR>
+K	nnoremap x :<Bar>v/a/'a<CR>
+K	nnoremap x :/éé/"v/a/v/a/<CR>
+S	nnoremap x :!lsds/a/b/dé<CR>
+K	nnoremap x :<Bar>sil s/a/b/<Bar><CR>
+N	nnoremap x :'ag/nnoremap y Zd!ls<CR>
+K	nnoremap x :é"d <CR>
+N	nnoremap x :normal g/a/!ls<CR>
+K	nnoremap x :dso fd normal <CR>
+S	nnoremap x :\\"!lsé!lssil d<CR>
+N	nnoremap x :"sil normal !lsé<CR>
+K	nnoremap x :'as/a/b/"d<CR>
+S	nnoremap x :g/a/so f<CR>
+S	nnoremap x :g/é/nnoremap y Z<CR>
+K	nnoremap x :sil d'annoremap y Z<CR>
+S	nnoremap x :nnoremap y Zénnoremap y Zg/a/g/a/ g/a/<CR>
+S	nnoremap x :nnoremap y Z<Bar><CR>
+K	nnoremap x :v/a/s/a/b/ /1,"<CR>
+K	nnoremap x :\\g/<CR>
+K	nnoremap x :d1,normal so fénormal <CR>
+K	nnoremap x :éd/'ad<CR>
+S	nnoremap x :so fg/a/g/'av/a/<CR>
+K	nnoremap x : v/a/\\<CR>
+N	nnoremap x :normal v/a/sil normal so f<CR>
+K	nnoremap x :g//g/a/'a"<CR>
+S	nnoremap x :nnoremap y Zv/a/so fég/a/1,so f<CR>
+K	nnoremap x :dg/ég/'ad'a<CR>
+K	nnoremap x :\\'ag/<CR>
+K	nnoremap x :v/a/1,<CR>
+S	nnoremap x :so f'a<Bar>normal 1,<CR>
+K	nnoremap x :g/a/v/a/  v/a/d<CR>
+R	nnoremap x :'aso fnormal <CR>
+K	nnoremap x :/so fs/a/b/<CR>
+S	nnoremap x :g/a/!ls"<CR>
+K	nnoremap x :"'ag/a/d\\s/a/b/'a<CR>
+S	nnoremap x :nnoremap y Zg/'a <CR>
+K	nnoremap x :dg/1,1,v/a/sil <CR>
+K	nnoremap x :g/a/g/sil normal 1,énormal <CR>
+K	nnoremap x :'adé\\<CR>
+K	nnoremap x :<Bar>\\<Bar>/sil é<CR>
+N	nnoremap x :normal g/a/!ls/sil <CR>
+K	nnoremap x :sil v/a/é<CR>
+K	nnoremap x :g/dnnoremap y Z1,\\<CR>
+N	nnoremap x :v/a/normal normal  \\!ls<CR>
+K	nnoremap x :s/a/b/v/a/g/a/so fé<CR>
+K	nnoremap x :s/a/b/g/a/normal <CR>
+K	nnoremap x :/nnoremap y Z'asil 1,<CR>
+K	nnoremap x :d/dnnoremap y Z<CR>
+N	nnoremap x :normal 1,<CR>
+R	nnoremap x :'aso f"<CR>
+N	nnoremap x :v/a/normal nnoremap y Z<CR>
+N	nnoremap x :normal nnoremap y Zs/a/b/<Bar>"sil v/a/<CR>
+S	nnoremap x :<Bar>nnoremap y Z'aso f"<CR>
+K	nnoremap x :s/a/b/v/a/\\'a<Bar>'a<CR>
+N	nnoremap x :g/'a\\ !ls <CR>
+K	nnoremap x :v/a/<Bar>désil dsil <CR>
+R	nnoremap x :g/a/s/a/b/s/a/b/g/<Bar>nnoremap y Z <CR>
+S	nnoremap x :so f!ls sil d<CR>
+K	nnoremap x :s/a/b/\\nnoremap y Z<CR>
+N	nnoremap x :d"!lsg/a/é<CR>
+K	nnoremap x :v/a/g/\\sil <CR>
+K	nnoremap x :sil d<CR>
+N	nnoremap x : normal é"'a"<CR>
+S	nnoremap x :!lsso fv/a/<CR>
+S	nnoremap x :g/a/so f"<CR>
+S	nnoremap x :nnoremap y Z!ls!ls1,<CR>
+S	nnoremap x :'annoremap y Zés/a/b/nnoremap y Z<Bar>sil <CR>
+S	nnoremap x :g/a/1,!lsso f\\/nnoremap y Z<CR>
+S	nnoremap x :!lssil <CR>
+K	nnoremap x :g/\\  dév/a/<CR>
+S	nnoremap x :nnoremap y Zv/a/\\so f<CR>
+K	nnoremap x :dg/a/nnoremap y Z\\<CR>
+S	nnoremap x :<Bar>so fv/a/sil <CR>
+K	nnoremap x :édg/ é<CR>
+K	nnoremap x : sil s/a/b/"<CR>
+S	nnoremap x :g/a/sil so f<CR>
+S	nnoremap x :!lsnormal g/nnoremap y Z<CR>
+K	nnoremap x :g/normal "<Bar><CR>
+K	nnoremap x :<Bar>\\'as/a/b/<CR>
+K	nnoremap x :1,g/g/é<CR>
+S	nnoremap x :'a!ls!ls/ <CR>
+K	nnoremap x :g/a/'ag/s/a/b/s/a/b/é'a<CR>
+K	nnoremap x :<Bar>v/a/v/a/<Bar>1,<CR>
+S	nnoremap x :sil nnoremap y Zso fnormal 1,é<CR>
+K	nnoremap x :s/a/b/<Bar>/so f/\\<CR>
+K	nnoremap x :\\g/a/'asil d/\\<CR>
+K	nnoremap x :dnormal /normal so fé<CR>
+R	nnoremap x :sil é<Bar>g/a/v/a/so f<CR>
+K	nnoremap x :s/a/b/dnormal <CR>
+K	nnoremap x :<Bar>s/a/b/<CR>
+S	nnoremap x :'av/a/so f1,g/a/<Bar><CR>
+N	nnoremap x :normal  so fnnoremap y Zg/a/dnnoremap y Z<CR>
+N	nnoremap x :g/\\é\\!lss/a/b/!ls<CR>
+K	nnoremap x :<Bar>1,<CR>
+S	nnoremap x :!lsnnoremap y Znormal /dnormal sil <CR>
+K	nnoremap x :\\g/\\'a'av/a/<CR>
+K	nnoremap x :ég/v/a/<CR>
+K	nnoremap x :"1,sil nnoremap y Z<CR>
+N	nnoremap x :d!lsg/é<Bar>1,<CR>
+S	nnoremap x :!lsg/a/g/\\'adv/a/<CR>
+S	nnoremap x :nnoremap y Zsil g/é<CR>
+K	nnoremap x :<Bar>/s/a/b/d<CR>
+S	nnoremap x :so f!ls <CR>
+K	nnoremap x :/1,\\normal g/a/<Bar><CR>
+K	nnoremap x :<Bar><Bar>v/a/'a<Bar><CR>
+K	nnoremap x :ég/a/s/a/b/<CR>
+K	nnoremap x :év/a/'a<Bar>1,"<CR>
+S	nnoremap x :g/a/!lss/a/b/'a<CR>
+N	nnoremap x :é so f!lsé<CR>
+K	nnoremap x :/1,<CR>
+S	nnoremap x :év/a/<Bar>!ls!lsd!ls<CR>
+K	nnoremap x : v/a/sil g/g/1,<CR>
+K	nnoremap x :"normal nnoremap y Z\\nnoremap y Z\\\\<CR>
+K	nnoremap x :1,\\sil \\<Bar>normal g/a/<CR>
+N	nnoremap x :normal sil 1,'a"!ls<CR>
+S	nnoremap x :so fé\\g/a/g/a/so f<CR>
+S	nnoremap x :!lsso fs/a/b/é<CR>
+S	nnoremap x :'a!lsv/a/g/ <CR>
+N	nnoremap x :normal !ls v/a/"<Bar><CR>
+S	nnoremap x :so fnormal so f<CR>
+K	nnoremap x :g/normal sil 1,<Bar>s/a/b/<CR>
+K	nnoremap x :/\\d<CR>
+K	nnoremap x :g/és/a/b/g/\\sil <CR>
+R	nnoremap x :1,é<Bar>so f<CR>
+K	nnoremap x :s/a/b/normal so f<CR>
+K	nnoremap x :"so fv/a/s/a/b/v/a/g/'a<CR>
+S	nnoremap x :<Bar>!ls'a"d<CR>
+K	nnoremap x :sil d/v/a/g/a/<CR>
+S	nnoremap x :so fsil \\'a<CR>
+K	nnoremap x :"<Bar><Bar>d<Bar><CR>
+S	nnoremap x :g/a/g/a/<Bar>!lsg/!lsé<CR>
+K	nnoremap x :é'anormal ééd\\<CR>
+K	nnoremap x :/1,s/a/b/nnoremap y Zd <CR>
+N	nnoremap x :s/a/b/"d!lsd<CR>
+K	nnoremap x :sil sil  é"<CR>
+K	nnoremap x :'a/so f <CR>
+K	nnoremap x :1,d<Bar>g/a/1,\\<CR>
+K	nnoremap x :s/a/b//'a'a\\normal <CR>
+K	nnoremap x :g/v/a/nnoremap y Zg/"s/a/b/ <CR>
+K	nnoremap x :"d'anormal 1,1,so f<CR>
+S	nnoremap x :/ <Bar>1,!ls<CR>
+K	nnoremap x :\\'ad<Bar><CR>
+K	nnoremap x :<Bar>\\\\<CR>
+K	nnoremap x :'as/a/b/so f/<Bar>v/a/<Bar><CR>
+N	nnoremap x :dd!ls<CR>
+R	nnoremap x :1,so f'a<CR>
+K	nnoremap x :s/a/b/<Bar>'a<CR>
+K	nnoremap x :\\g/a/<CR>
+K	nnoremap x :'a1," <Bar>/d<CR>
+K	nnoremap x :/dv/a/s/a/b/1,g/a/<CR>
+K	nnoremap x :s/a/b/\\é"/g/a/sil <CR>
+K	nnoremap x :"é'aso f"'a'a<CR>
+S	nnoremap x :!lsg/a//so fsil <CR>
+K	nnoremap x :sil <Bar>/<CR>
+K	nnoremap x :éso fv/a/<CR>
+K	nnoremap x :dso f so f1,<CR>
+S	nnoremap x :so fg/a/nnoremap y Zs/a/b/<CR>
+S	nnoremap x :so f1,sil <CR>
+S	nnoremap x :so fs/a/b/"<CR>
+S	nnoremap x :!lss/a/b/'adé<CR>
+K	nnoremap x :g/g/a/'a/<CR>
+S	nnoremap x :so f/'a<Bar><Bar>g/<CR>
+S	nnoremap x :!ls<Bar>sil so f<CR>
+S	nnoremap x :nnoremap y Z/ <CR>
+K	nnoremap x :sil \\v/a/<CR>
+K	nnoremap x :'a1,sil <CR>
+K	nnoremap x :"1,g/<CR>
+K	nnoremap x :g/a/<Bar><CR>
+K	nnoremap x :é/nnoremap y Znnoremap y Z<Bar><CR>
+K	nnoremap x :'aév/a/\\<CR>
+N	nnoremap x :normal g/a/g/é'a<CR>
+K	nnoremap x :g/1,/'a\\1,"<CR>
+S	nnoremap x :!lsd!ls normal 'a<CR>
+S	nnoremap x :sil !ls'a<CR>
+K	nnoremap x :g/a/g/g/v/a/s/a/b/<Bar><CR>
+K	nnoremap x :"ddnnoremap y Z<CR>
+K	nnoremap x :d<Bar>v/a/'a <CR>
+S	nnoremap x :nnoremap y Z'aso fnormal so fv/a/!ls<CR>
+K	nnoremap x :\\g/nnoremap y Zg/'a/<CR>
+N	nnoremap x :normal 'a\\v/a/1,1,<CR>
+S	nnoremap x :nnoremap y Z nnoremap y Z/<Bar>g/a/!ls<CR>
+K	nnoremap x :  1,<CR>
+S	nnoremap x :nnoremap y Zg/1,"nnoremap y Zg/a/!ls<CR>
+K	nnoremap x :'a"\\ nnoremap y Z<CR>
+N	nnoremap x :normal \\dso f\\!ls<CR>
+S	nnoremap x :so fd//<CR>
+K	nnoremap x :v/a/ "<CR>
+S	nnoremap x :so fso fg/<CR>
+S	nnoremap x :"normal <Bar>!ls<CR>
+S	nnoremap x ://nnoremap y Z<CR>
+S	nnoremap x :so f1,<Bar>g/1,\\d<CR>
+K	nnoremap x :\\g/a/g/<CR>
+K	nnoremap x :/ \\<CR>
+S	nnoremap x :nnoremap y Z/so fé<CR>
+S	nnoremap x :!ls\\v/a/<CR>
+K	nnoremap x :dv/a/d"nnoremap y Z'a"<CR>
+K	nnoremap x :s/a/b/normal 'ad nnoremap y Z<CR>
+K	nnoremap x :dnormal normal \\<CR>
+K	nnoremap x :v/a/"so fv/a/<CR>
+S	nnoremap x :so fso fs/a/b/g/a/g/<Bar><Bar><CR>
+K	nnoremap x :/v/a/sil <Bar>/s/a/b/<CR>
+S	nnoremap x :nnoremap y Z//dg/normal  <CR>
+N	nnoremap x :normal <Bar>dg/\\<CR>
+K	nnoremap x :/nnoremap y Z\\<Bar>d'a<CR>
+K	nnoremap x :v/a/s/a/b/'a<CR>
+K	nnoremap x :\\"\\v/a/v/a/d<CR>
+K	nnoremap x :d sil  é<CR>
+N	nnoremap x :normal /nnoremap y Zg/ /d<CR>
+N	nnoremap x :g/'a\\s/a/b/so f!ls<CR>
+K	nnoremap x :sil dnormal g/\\<Bar>"<CR>
+K	nnoremap x :g/g/g/a/sil <CR>
+N	nnoremap x :g/!lsv/a/!ls\\v/a/<CR>
+K	nnoremap x : 1,<CR>
+S	nnoremap x :so fsil so f<CR>
+S	nnoremap x :nnoremap y Zsil so f<CR>
+K	nnoremap x :g/v/a/"<CR>
+N	nnoremap x :1,<Bar>1,'anormal normal  <CR>
+S	nnoremap x :g/a/!lsnormal ésil <CR>
+S	nnoremap x :so f1,<CR>
+S	nnoremap x :1,s/a/b/normal <Bar>!ls<CR>
+N	nnoremap x :<Bar>\\normal é1,!ls"<CR>
+K	nnoremap x :g/<Bar>v/a/1,<Bar>'a<CR>
+S	nnoremap x :!lssil "'a'aé<CR>
+K	nnoremap x :1,éé/so fg/a/<CR>
+K	nnoremap x :és/a/b/so fnnoremap y Z<CR>
+K	nnoremap x :éés/a/b/<CR>
+R	nnoremap x :1,so f'a\\<CR>
+S	nnoremap x :!lsnormal d1,dg/a/é<CR>
+N	nnoremap x :normal "<CR>
+K	nnoremap x :g/so f  g/a/s/a/b//<CR>
+S	nnoremap x :<Bar>!lsnnoremap y Z'a/<CR>
+K	nnoremap x : 1,\\<CR>
+S	nnoremap x :so fs/a/b/!lsg/nnoremap y Zs/a/b/<CR>
+K	nnoremap x :sil dnormal so f<CR>
+N	nnoremap x :normal é""<CR>
+K	nnoremap x :\\so fnormal so f\\<CR>
+S	nnoremap x :so f!ls<CR>
+K	nnoremap x : g/1,<CR>
+K	nnoremap x :g/'a<CR>
+S	nnoremap x :!lsnnoremap y Z'aé"<Bar>v/a/<CR>
+K	nnoremap x :g/\\ normal g/1,<CR>
+K	nnoremap x : dso f <CR>
+K	nnoremap x :s/a/b/1,"normal g/é<CR>
+S	nnoremap x :<Bar>so f<Bar>s/a/b/<CR>
+S	nnoremap x :g/g/!lsdsil <CR>
+K	nnoremap x :sil "nnoremap y Z\\/s/a/b/sil <CR>
+S	nnoremap x :!ls\\1,\\'a'ag/a/<CR>
+K	nnoremap x :<Bar>dnormal v/a/<CR>
+S	nnoremap x :nnoremap y Z"1,"s/a/b/1,<CR>
+S	nnoremap x :!ls1,v/a/sil <CR>
+N	nnoremap x :normal "/<CR>
+N	nnoremap x :\\nnoremap y Z!ls1,<Bar>g/<Bar><CR>
+N	nnoremap x :g/a/1,éé\\!ls\\<CR>
+S	nnoremap x :so f!lsv/a/s/a/b/v/a/<CR>
+K	nnoremap x :1,1,d'a1,s/a/b/normal <CR>
+R	nnoremap x :" <Bar>nnoremap y Z1,<CR>
+S	nnoremap x :g/a/so fg/<Bar>normal 'a<CR>
+K	nnoremap x :g/normal sil <CR>
+K	nnoremap x :énnoremap y Z1,d<CR>
+S	nnoremap x :nnoremap y Zés/a/b/ 1,'a<CR>
+K	nnoremap x :s/a/b//g/ \\<CR>
+K	nnoremap x :'ag/a/g/\\<CR>
+R	nnoremap x :'a<Bar>1,so f<CR>
+S	nnoremap x :nnoremap y Z!lsso f"normal \\sil <CR>
+N	nnoremap x :normal !lssil g/a/<CR>
+S	nnoremap x :g/a/v/a/nnoremap y Z<CR>
+K	nnoremap x :/dnormal g/<CR>
+K	nnoremap x :dé/\\<CR>
+S	nnoremap x :nnoremap y Zv/a/v/a/"<CR>
+K	nnoremap x : 1,normal <CR>
+S	nnoremap x :<Bar>!lsnormal \\éd<CR>
+S	nnoremap x :nnoremap y Z!lsg/a/sil 1,<CR>
+S	nnoremap x : !lssil 'a<Bar>1,<CR>
+S	nnoremap x :nnoremap y Z!ls1, 1,s/a/b/<Bar><CR>
+S	nnoremap x :!ls1,nnoremap y Z'annoremap y Z<CR>
+S	nnoremap x :g/a/!ls\\<Bar>v/a/<CR>
+S	nnoremap x :!ls!lsnormal d<CR>
+K	nnoremap x : 1, sil <CR>
+K	nnoremap x :\\g/a/ <Bar>v/a/s/a/b/<CR>
+S	nnoremap x :so fsil d!lsé<Bar>!ls<CR>
+N	nnoremap x :normal 'ad"normal <CR>
+K	nnoremap x :<Bar>ddso fnnoremap y Zd<CR>
+S	nnoremap x : nnoremap y Zso f<CR>
+K	nnoremap x :/g/a/<CR>
+S	nnoremap x :sil nnoremap y Z/normal 'a<CR>
+K	nnoremap x :g/a/'a<Bar><CR>
+N	nnoremap x :é !lsg/a/ "1,<CR>
+K	nnoremap x :\\d1,<CR>
+N	nnoremap x :normal é\\nnoremap y Z<CR>
+K	nnoremap x :" v/a/<CR>
+S	nnoremap x :so f/v/a/g/nnoremap y Z"<CR>
+S	nnoremap x :v/a/nnoremap y Zdnormal 'aénormal <CR>
+K	nnoremap x : s/a/b/\\1, so fsil <CR>
+S	nnoremap x :'ag/a/ nnoremap y Z<Bar>'a<CR>
+K	nnoremap x :g/a/d <CR>
+K	nnoremap x :g/a/"<Bar><CR>
+S	nnoremap x :!ls g/<CR>
+K	nnoremap x :/v/a/v/a/nnoremap y Z<CR>
+S	nnoremap x :g/a/nnoremap y Z d<CR>
+N	nnoremap x :normal g/<Bar>normal v/a/s/a/b/<CR>
+K	nnoremap x :s/a/b/s/a/b/<Bar>\\<CR>
+K	nnoremap x :s/a/b/g/a/d1,sil <CR>
+S	nnoremap x :v/a/so fv/a/ nnoremap y Znnoremap y Z<CR>
+S	nnoremap x :<Bar>!lsg/d'a<CR>
+N	nnoremap x :é\\s/a/b/!lsnormal <CR>
+K	nnoremap x :\\/nnoremap y Z<CR>
+K	nnoremap x :g/sil 1,g/<CR>
+K	nnoremap x :/so f<Bar><CR>
+K	nnoremap x :'a\\ g/<CR>
+K	nnoremap x :sil s/a/b/d<CR>
+N	nnoremap x :s/a/b/sil 'a!ls<CR>
+K	nnoremap x :1,nnoremap y Zé<CR>
+N	nnoremap x :ég/a/nnoremap y Z!lssil <CR>
+K	nnoremap x :1,v/a//g/a/é<CR>
+S	nnoremap x :sil nnoremap y Z!lsnnoremap y Z<CR>
+K	nnoremap x :/d<CR>
+K	nnoremap x :1,g/a/v/a/g/s/a/b/v/a/"<CR>
+N	nnoremap x :normal 'a"normal g/a/<CR>
+N	nnoremap x : normal énnoremap y Zs/a/b/"normal <CR>
+K	nnoremap x :/s/a/b/<Bar><CR>
+K	nnoremap x :sil v/a/g/a/<CR>
+N	nnoremap x : v/a/normal nnoremap y Z<CR>
+K	nnoremap x :dso f<Bar>sil 'a\\<CR>
+K	nnoremap x : sil sil <CR>
+N	nnoremap x :'ag/a/\\g/!lsv/a/nnoremap y Z<CR>
+N	nnoremap x :normal é<Bar><CR>
+S	nnoremap x :so fso fg/so fé <CR>
+N	nnoremap x :v/a//s/a/b/s/a/b/!ls<CR>
+S	nnoremap x :so f"/normal <Bar><CR>
+K	nnoremap x : /\\g/a/so f<CR>
+S	nnoremap x :so fg/g/a/sil g/<CR>
+S	nnoremap x :so f'ag/a//s/a/b//"<CR>
+S	nnoremap x :<Bar>so fsil <CR>
+S	nnoremap x :v/a/sil <Bar>!lsnnoremap y Z"g/<CR>
+N	nnoremap x :sil  normal 1, <CR>
+K	nnoremap x : d<CR>
+S	nnoremap x :!ls\\1,g/<Bar><Bar><CR>
+K	nnoremap x :/s/a/b/g/so f<CR>
+K	nnoremap x :\\g/1,/g/sil <CR>
+N	nnoremap x :normal so fg/a/<CR>
+K	nnoremap x :é1,v/a/\\\\é<CR>
+S	nnoremap x :nnoremap y Z "nnoremap y Z  \\<CR>
+K	nnoremap x :\\'annoremap y Z"d'annoremap y Z<CR>
+K	nnoremap x :<Bar>/\\so f'a<CR>
+S	nnoremap x : !ls/!ls/"<CR>
+K	nnoremap x :g/v/a/ <CR>
+S	nnoremap x :so f1,!lsnnoremap y Z1,<CR>
+K	nnoremap x :<Bar>/"'av/a//<CR>
+N	nnoremap x :normal  'a\\//<CR>
+K	nnoremap x :s/a/b/nnoremap y Zv/a/v/a/<CR>
+S	nnoremap x :so f/nnoremap y Z<CR>
+K	nnoremap x :1,/ v/a/<CR>
+N	nnoremap x :\\!ls"<CR>
+K	nnoremap x :<Bar>g/a//\\1, <CR>
+S	nnoremap x :g/a/!lssil é!lssil 'a<CR>
+K	nnoremap x : <Bar>s/a/b/v/a/\\\\1,<CR>
+K	nnoremap x :<Bar>éd'ag/<CR>
+S	nnoremap x :!ls" <CR>
+N	nnoremap x :g/g/a/so f!ls!lsv/a/é<CR>
+S	nnoremap x :nnoremap y Z!ls\\v/a/<CR>
+N	nnoremap x :"!lssil  <CR>
+K	nnoremap x :1,"é s/a/b/v/a/'a<CR>
+K	nnoremap x :<Bar>"<CR>
+N	nnoremap x : normal s/a/b/sil <CR>
+S	nnoremap x :!ls\\'av/a/1,d<CR>
+S	nnoremap x :so f'a 'aso f<CR>
+K	nnoremap x :s/a/b/dso fg/g/a/<CR>
+S	nnoremap x :so f<Bar>so fg/1,"<CR>
+S	nnoremap x :<Bar>!lsnormal s/a/b/!ls<CR>
+K	nnoremap x :g/\\'aso fnnoremap y Z"<CR>
+S	nnoremap x :!ls <Bar>'anormal <CR>
+K	nnoremap x :v/a/sil é1,dso f<CR>
+K	nnoremap x :'adnnoremap y Zs/a/b/<CR>
+N	nnoremap x :" \\!ls<CR>
+K	nnoremap x :é1,1,<CR>
+K	nnoremap x :dv/a//d<Bar>""<CR>
+K	nnoremap x :1,éd<CR>
+K	nnoremap x : /<CR>
+K	nnoremap x :é"normal  g/s/a/b/<CR>
+S	nnoremap x :!ls\\normal so f<CR>
+K	nnoremap x :s/a/b/é<CR>
+S	nnoremap x :<Bar>nnoremap y Zg/a/<CR>
+S	nnoremap x :nnoremap y Z nnoremap y Z\\g/<CR>
+N	nnoremap x :g/a/d!ls/<CR>
+S	nnoremap x :nnoremap y Z'a'ag/a/sil s/a/b/<CR>
+K	nnoremap x : /normal   \\<Bar><CR>
+K	nnoremap x :<Bar>ég/a/so fg/nnoremap y Zd<CR>
+S	nnoremap x :sil v/a/so f<CR>
+K	nnoremap x :s/a/b/g/g/a/sil <CR>
+N	nnoremap x :ds/a/b/"éé !ls<CR>
+S	nnoremap x :g/a/<Bar>!lss/a/b/<CR>
+S	nnoremap x :v/a/v/a/v/a/so fg/a/!lsnnoremap y Z<CR>
+K	nnoremap x :v/a/é'ag/g/<Bar> <CR>
+S	nnoremap x :g/a/<Bar>sil g/a/!ls<CR>
+K	nnoremap x :sil g/'aé<CR>
+K	nnoremap x :"'a<CR>
+S	nnoremap x :so fg/a/sil " <CR>
+K	nnoremap x :éso fs/a/b/<CR>
+N	nnoremap x :normal s/a/b/normal v/a//so f<CR>
+K	nnoremap x :1,sil d1,v/a/so f1,<CR>
+K	nnoremap x :"dsil g/a/<CR>
+K	nnoremap x :'a1,ééénormal g/a/<CR>
+K	nnoremap x :'as/a/b//so fso f<CR>
+N	nnoremap x :\\so f/'a!lsnnoremap y Zso f<CR>
+S	nnoremap x :!ls/sil  \\<CR>
+K	nnoremap x :'aé'a'a<CR>
+K	nnoremap x :éé1,<CR>
+N	nnoremap x :é'a!lsg/v/a/<CR>
+K	nnoremap x :'a//g/<CR>
+K	nnoremap x :<Bar>v/a/v/a/<CR>
+K	nnoremap x :1, nnoremap y Z<CR>
+N	nnoremap x :sil dg/a/!lsg/<Bar><CR>
+S	nnoremap x :nnoremap y Zsil so fg/ <CR>
+N	nnoremap x :g/"!lsnnoremap y Z<CR>
+S	nnoremap x :<Bar>!lss/a/b/so fnnoremap y Z"nnoremap y Z<CR>
+K	nnoremap x :d /<CR>
+S	nnoremap x :v/a/!lsnormal """<CR>
+K	nnoremap x :1,g/<CR>
+K	nnoremap x :   <Bar><CR>
+S	nnoremap x :!lsg/a/"g/a/!ls<CR>
+N	nnoremap x :dsil s/a/b/so f!ls<CR>
+K	nnoremap x :"g/a/so fg/g/a/<CR>
+N	nnoremap x :normal sil d'ag/<CR>
+N	nnoremap x :v/a/normal  "!lsv/a/normal <CR>
+K	nnoremap x :g/1,so fg/a/<CR>
+K	nnoremap x :v/a/<Bar>sil g/é<CR>
+S	nnoremap x :!lsds/a/b/!ls<Bar>normal <CR>
+S	nnoremap x :so f'av/a/\\'a/<CR>
+S	nnoremap x :!lsso fd<Bar>!ls1,nnoremap y Z<CR>
+K	nnoremap x :<Bar><Bar>"/s/a/b/nnoremap y Z\\<CR>
+K	nnoremap x :<Bar>g/a/"s/a/b/<CR>
+K	nnoremap x : \\ énnoremap y Z<CR>
+S	nnoremap x :!ls normal 'a'aé<CR>
+N	nnoremap x :g/!lss/a/b/g/<CR>
+S	nnoremap x :'a1, !ls<CR>
+K	nnoremap x :g/<Bar>édsil 'a1,<CR>
+K	nnoremap x :1,s/a/b/'anormal <CR>
+K	nnoremap x :sil /so f<CR>
+K	nnoremap x :sil 'a é<CR>
+S	nnoremap x :nnoremap y Z"<Bar><Bar>\\normal "<CR>
+K	nnoremap x :éd'ag//\\d<CR>
+K	nnoremap x :1,'a<CR>
+N	nnoremap x :normal so f"/<CR>
+K	nnoremap x :ég//\\dég/a/<CR>
+K	nnoremap x :1,\\<Bar>"s/a/b/'a'a<CR>
+S	nnoremap x :<Bar>nnoremap y Zs/a/b/<CR>
+S	nnoremap x :nnoremap y Z!ls1,v/a/<CR>
+S	nnoremap x :!ls'aé/<CR>
+K	nnoremap x :v/a/s/a/b/1, <CR>
+N	nnoremap x :1,"so f!ls 'av/a/<CR>
+K	nnoremap x :g/a/g/g/a/so f<CR>
+K	nnoremap x :\\ég/a/v/a/1,'a'a<CR>
+S	nnoremap x :<Bar>!lsv/a/s/a/b/'ag/<CR>
+K	nnoremap x :g/a/<Bar>g/a/v/a/"<Bar>1,<CR>
+N	nnoremap x :\\so fv/a/"!ls'a <CR>
+K	nnoremap x :é<Bar>"v/a/ <Bar><CR>
+K	nnoremap x :1,normal 1,<CR>
+K	nnoremap x :"g/a/<CR>
+K	nnoremap x :\\/g/'ag/<Bar><CR>
+N	nnoremap x :/!ls<CR>
+K	nnoremap x :/so fg/<CR>
+S	nnoremap x :v/a/nnoremap y Znnoremap y Zd<CR>
+K	nnoremap x :'a\\s/a/b/<CR>
+K	nnoremap x :"\\\\sil dso f<CR>
+K	nnoremap x :v/a/é/<CR>
+S	nnoremap x :so fs/a/b/normal d<Bar>so f!ls<CR>
+N	nnoremap x :'ag/s/a/b/!ls<CR>
+K	nnoremap x :énnoremap y Zsil d <CR>
+K	nnoremap x :és/a/b/é/é<CR>
+K	nnoremap x :<Bar>normal <CR>
+S	nnoremap x :so f'a<Bar>\\g/g/nnoremap y Z<CR>
+K	nnoremap x : d\\g/1,<CR>
+N	nnoremap x :g/a/normal 'a"<CR>
+K	nnoremap x :é'a<CR>
+K	nnoremap x :g/a//\\g/é"<CR>
+K	nnoremap x :ég/sil <CR>
+K	nnoremap x :'a\\normal "s/a/b/s/a/b/<CR>
+K	nnoremap x :<Bar>é/s/a/b/s/a/b//<CR>
+S	nnoremap x :!ls ég/a/<CR>
+S	nnoremap x :!lssil 'ag/<CR>
+S	nnoremap x :'a!lss/a/b/normal s/a/b/<CR>
+K	nnoremap x :g/ dsil <CR>
+S	nnoremap x :!lsnnoremap y Zsil <CR>
+S	nnoremap x :nnoremap y Zv/a/<CR>
+N	nnoremap x :éé!ls!ls<CR>
+K	nnoremap x :s/a/b/sil \\<CR>
+K	nnoremap x :"'av/a//<CR>
+K	nnoremap x :g/a/d\\\\/v/a/<CR>
+K	nnoremap x :sil <Bar><CR>
+N	nnoremap x :normal v/a//g/a/so f!lsnnoremap y Z<CR>
+N	nnoremap x :édv/a/!lsnnoremap y Zg/"<CR>
+K	nnoremap x :"1,'a<Bar><CR>
+K	nnoremap x :s/a/b/'a\\<CR>
+S	nnoremap x :!lsd g/nnoremap y Zsil <CR>
+K	nnoremap x :s/a/b/so f'ad<CR>
+S	nnoremap x :sil 'annoremap y Z'a<CR>
+K	nnoremap x :é\\v/a/so fv/a/ g/<CR>
+K	nnoremap x : sil dso f<CR>
+K	nnoremap x :v/a/énnoremap y Zv/a/so f<CR>
+N	nnoremap x :normal ddg/a/<CR>
+K	nnoremap x :é1,s/a/b/<CR>
+K	nnoremap x :sil sil 'ad<CR>
+N	nnoremap x :"é!ls1,nnoremap y Z'a<CR>
+N	nnoremap x : normal v/a/nnoremap y Zg/g/<Bar><CR>
+S	nnoremap x :!lsnnoremap y Z'a <CR>
+K	nnoremap x :\\v/a/normal énnoremap y Z<CR>
+K	nnoremap x : "<CR>
+K	nnoremap x :\\dg/a//<CR>
+K	nnoremap x :/é1,s/a/b/"<CR>
+S	nnoremap x :1,!ls/v/a/normal <CR>
+K	nnoremap x :1, sil <CR>
+N	nnoremap x :v/a/é1,\\v/a/!ls<CR>
+K	nnoremap x :v/a//g/s/a/b/'ag/a/g/<CR>
+K	nnoremap x :/<Bar><Bar>"g/<CR>
+K	nnoremap x :s/a/b//és/a/b/<CR>
+N	nnoremap x :normal g/a/ <CR>
+K	nnoremap x :ddv/a/<CR>
+K	nnoremap x :s/a/b/normal <CR>
+S	nnoremap x :nnoremap y Z\\nnoremap y Z1,g/a/!lsg/a/<CR>
+N	nnoremap x :sil normal sil <CR>
+S	nnoremap x :!ls'aso fg/éso fso f<CR>
+K	nnoremap x :g/a/g/a/'ag/édg/<CR>
+K	nnoremap x :\\g/\\<CR>
+K	nnoremap x :'ag/g/a/<CR>
+S	nnoremap x :nnoremap y Zév/a/so f<CR>
+N	nnoremap x :\\1,\\g/a/"!ls<CR>
+N	nnoremap x :1,/ normal !lssil  <CR>
+K	nnoremap x :/nnoremap y Z sil <Bar>\\<CR>
+N	nnoremap x :d'a!lsg/<Bar>v/a/<CR>
+K	nnoremap x :énnoremap y Z<Bar><CR>
+K	nnoremap x :g/a/'aéds/a/b/<CR>
+K	nnoremap x :dnnoremap y Z<CR>
+K	nnoremap x :1,d<Bar><Bar><CR>
+K	nnoremap x :g/normal  /<CR>
+K	nnoremap x :/1,'a <CR>
+K	nnoremap x :<Bar>dnnoremap y Zg/a/<CR>
+K	nnoremap x :'a1,sil é 1,<CR>
+K	nnoremap x :\\s/a/b/<CR>
+K	nnoremap x :1,/é<CR>
+K	nnoremap x :s/a/b/ 'ag/a/<CR>
+S	nnoremap x :<Bar> !ls<Bar><CR>
+S	nnoremap x :nnoremap y Z so f"<CR>
+R	nnoremap x :<Bar>"<Bar>so f<CR>
+K	nnoremap x :1,nnoremap y Z1,g/a/"g/\\<CR>
+K	nnoremap x :é1,d'asil <CR>
+S	nnoremap x :so fé<CR>
+K	nnoremap x :"és/a/b/<Bar><CR>
+K	nnoremap x :'a"<CR>
+K	nnoremap x ://v/a/<CR>
+K	nnoremap x :/g/a/nnoremap y Z<CR>
+K	nnoremap x :/dsil "<CR>
+S	nnoremap x :nnoremap y Zé \\<CR>
+N	nnoremap x :\\g/a/s/a/b/g/\\!lss/a/b/<CR>
+S	nnoremap x :'annoremap y Z"\\<CR>
+K	nnoremap x :g/é"so fso f'ad<CR>
+K	nnoremap x :v/a/sil v/a/s/a/b/<CR>
+N	nnoremap x :g/normal 1,!lsv/a/!ls<CR>
+N	nnoremap x :g/a//!lség/a/é<CR>
+K	nnoremap x :1,normal <CR>
+S	nnoremap x :!ls/g/a/so f1,"/<CR>
+K	nnoremap x :ég/a/<Bar>sil g/<Bar>g/a/<CR>
+K	nnoremap x :g/s/a/b/<Bar>é<Bar>"<CR>
+K	nnoremap x :g/sil <CR>
+K	nnoremap x :g/a/  <CR>
+N	nnoremap x :g/!lsg/s/a/b/<CR>
+S	nnoremap x :v/a/'a!lssil <CR>
+K	nnoremap x :"v/a/sil   é<CR>
+K	nnoremap x :1, s/a/b/1,g/<CR>
+K	nnoremap x :1,/so f/v/a/v/a/d<CR>
+S	nnoremap x :sil !lssil d!ls<CR>
+N	nnoremap x : normal 'asil nnoremap y Z <Bar><CR>
+K	nnoremap x :\\/sil <CR>
+K	nnoremap x :ds/a/b/s/a/b/g/g/a/\\g/<CR>
+K	nnoremap x :ég/a/nnoremap y Zso fs/a/b/<CR>
+S	nnoremap x :so fég/d\\g/a/<CR>
+K	nnoremap x :sil s/a/b/<Bar><CR>
+K	nnoremap x :sil s/a/b/'anormal nnoremap y Zv/a/nnoremap y Z<CR>
+K	nnoremap x :g/so fs/a/b/g/<CR>
+K	nnoremap x :g/a/d'av/a/so f"<CR>
+K	nnoremap x :év/a/"nnoremap y Z<CR>
+K	nnoremap x :é"normal <CR>
+S	nnoremap x :1,!ls/d dnnoremap y Z<CR>
+K	nnoremap x :g/g/a/s/a/b/nnoremap y Zég/a/\\<CR>
+S	nnoremap x :nnoremap y Zv/a/"<Bar>sil <CR>
+N	nnoremap x :normal 'av/a/v/a/v/a/s/a/b/<CR>
+S	nnoremap x :<Bar>nnoremap y Z<Bar>dnnoremap y Z'a <CR>
+K	nnoremap x :'as/a/b/g/a/nnoremap y Zs/a/b/ \\<CR>
+S	nnoremap x :1,'aso f<Bar>!ls!ls\\<CR>
+K	nnoremap x :g///g/g/a/<CR>
+K	nnoremap x :1,sil g/a/normal s/a/b/1,<CR>
+S	nnoremap x :so fnnoremap y Z'ad'asil g/<CR>
+N	nnoremap x :<Bar>normal dv/a/d<CR>
+S	nnoremap x :so fnormal \\'as/a/b/<CR>
+S	nnoremap x :g/a/ v/a/nnoremap y Zg/<CR>
+N	nnoremap x :normal  normal nnoremap y Z"é\\<CR>
+K	nnoremap x :dsil "v/a/v/a/<CR>
+N	nnoremap x :"normal !lsé<CR>
+N	nnoremap x : normal \\"<CR>
+N	nnoremap x :g/!lsd1,'a'a<CR>
+K	nnoremap x :/g/g/a/<CR>
+S	nnoremap x :nnoremap y Zésil d'aso f<CR>
+S	nnoremap x :<Bar>!ls"/nnoremap y Z<CR>
+S	nnoremap x :sil so fg/a/v/a/so f<CR>
+K	nnoremap x :dg/a/normal g/1,<CR>
+S	nnoremap x :so fnnoremap y Z1,'a\\<Bar>\\<CR>
+K	nnoremap x :é<Bar>/\\\\nnoremap y Z<CR>
+K	nnoremap x :s/a/b/é//so fsil <CR>
+K	nnoremap x :s/a/b/sil v/a/g/ds/a/b/é<CR>
+S	nnoremap x :g/a/!ls!lsg/a/!lsd<CR>
+S	nnoremap x :!ls1,sil <Bar><Bar>sil <CR>
+N	nnoremap x :"!ls <Bar><CR>
+K	nnoremap x :év/a/so fv/a/"s/a/b/<CR>
+S	nnoremap x :!lss/a/b/g/a/ normal é<CR>
+K	nnoremap x :g/éd<CR>
+S	nnoremap x :\\" 'a!lsd <CR>
+N	nnoremap x :normal sil "s/a/b/1,g/a/<CR>
+S	nnoremap x :\\1,'aso f !ls/<CR>
+N	nnoremap x :g/'anormal "!lsd<CR>
+N	nnoremap x :normal 'a<CR>
+K	nnoremap x : v/a//d"<CR>
+N	nnoremap x :<Bar>normal g/a/<CR>
+N	nnoremap x :v/a/g/s/a/b/!ls'a" <CR>
+S	nnoremap x :!ls nnoremap y Zd<CR>
+K	nnoremap x :g/a//"<CR>
+K	nnoremap x :sil sil g/a//so f\\<CR>
+N	nnoremap x :v/a/normal g/<CR>
+S	nnoremap x :!lsso f!lsg/"\\<CR>
+N	nnoremap x :normal é<CR>
+K	nnoremap x :g/a/s/a/b//g/a/"<Bar><CR>
+K	nnoremap x :1,és/a/b/<CR>
+K	nnoremap x :d\\<CR>
+S	nnoremap x :<Bar>nnoremap y Znormal <CR>
+K	nnoremap x :/'asil so f<CR>
+K	nnoremap x :ddv/a/normal \\<Bar><CR>
+S	nnoremap x :nnoremap y Z so fsil so f<CR>
+S	nnoremap x :v/a/'a!ls1,g/d<Bar><CR>
+N	nnoremap x :'a/!ls<CR>
+N	nnoremap x : //d!ls1,sil <CR>
+K	nnoremap x :s/a/b/sil g/<CR>
+K	nnoremap x :<Bar>sil /<CR>
+K	nnoremap x : v/a/\\/s/a/b/d<CR>
+K	nnoremap x :\\g/<Bar><CR>
+K	nnoremap x :édg/a//so f<CR>
+K	nnoremap x :é"éso fs/a/b/g/<CR>
+K	nnoremap x :g/a/"1,<CR>
+K	nnoremap x :dnnoremap y Z1,v/a/<Bar><CR>
+K	nnoremap x :1,és/a/b/g/a/é<CR>
+N	nnoremap x :"!ls'anormal énnoremap y Z<CR>
+N	nnoremap x :sil sil <Bar>"!ls<CR>
+K	nnoremap x :g/"g/a//g/<CR>
+S	nnoremap x :g/a/nnoremap y Zv/a/<CR>
+K	nnoremap x :g/<Bar>v/a/<CR>
+K	nnoremap x :s/a/b/ g/ <CR>
+S	nnoremap x :so f\\s/a/b/<CR>
+K	nnoremap x :""'a\\<CR>
+K	nnoremap x :<Bar>d d/g/\\<CR>
+S	nnoremap x :nnoremap y Zd <Bar><CR>
+K	nnoremap x :g/normal /g/<CR>
+S	nnoremap x :nnoremap y Z/'a//!ls<CR>
+K	nnoremap x :/s/a/b/<CR>
+K	nnoremap x :\\/ég/1,éd<CR>
+K	nnoremap x :é/g/a/g/a/\\1,<CR>
+N	nnoremap x :g/a/d \\v/a/!ls'a<CR>
+K	nnoremap x :\\g/g/a/1,'a<CR>
+K	nnoremap x :s/a/b/d nnoremap y Z1,1,<CR>
+S	nnoremap x :so fg/a/<Bar><CR>
+K	nnoremap x :dnnoremap y Z1,\\sil <Bar><CR>
+K	nnoremap x :é\\v/a/1,s/a/b/<CR>
+N	nnoremap x :g/nnoremap y Z'aso f<Bar>\\!ls<CR>
+S	nnoremap x :nnoremap y Z'a  dnnoremap y Z<CR>
+N	nnoremap x :"!lss/a/b/<CR>
+K	nnoremap x : 1,nnoremap y Z<CR>
+K	nnoremap x : é<CR>
+S	nnoremap x :!lssil v/a/v/a/g/normal <CR>
+K	nnoremap x :dénormal é1,\\g/a/<CR>
+N	nnoremap x :é1,sil !ls<CR>
+K	nnoremap x :ésil "g//<CR>
+K	nnoremap x :g/a/g//1,1,<CR>
+K	nnoremap x :é/d"dnnoremap y Z<CR>
+K	nnoremap x :""g/"s/a/b/d"<CR>
+N	nnoremap x :normal /v/a/<CR>
+N	nnoremap x :normal dv/a/v/a/"<CR>
+S	nnoremap x :nnoremap y Znnoremap y Z'asil so f<CR>
+N	nnoremap x :"normal s/a/b/'a!lssil "<CR>
+K	nnoremap x :d"g/a/<CR>
+S	nnoremap x :so f\\sil <CR>
+K	nnoremap x :'a<Bar><Bar><Bar><Bar><CR>
+K	nnoremap x :g/a/v/a/ /<CR>
+S	nnoremap x :g/a/nnoremap y Zs/a/b/<CR>
+K	nnoremap x :'a\\/<CR>
+N	nnoremap x :normal d'annoremap y Znormal so f<CR>
+S	nnoremap x :so fso f <CR>
+N	nnoremap x :é\\sil !ls<CR>
+S	nnoremap x :!ls<Bar><Bar>!lsso f/<CR>
+K	nnoremap x :\\'a/nnoremap y Z<CR>
+S	nnoremap x :g/a/<Bar>v/a/!ls<CR>
+S	nnoremap x : so f<CR>
+S	nnoremap x :<Bar>!ls\\!lsnnoremap y Zs/a/b/<CR>
+K	nnoremap x :<Bar>g/é<CR>
+K	nnoremap x :ég/a/1,'a\\<CR>
+N	nnoremap x :\\'as/a/b/nnoremap y Z'a/!ls<CR>
+S	nnoremap x :so f\\"/<CR>
+K	nnoremap x :1,"\\g/a/nnoremap y Z'a<CR>
+S	nnoremap x :so fsil é  <CR>
+K	nnoremap x :g/a/1,g/\\sil éé<CR>
+S	nnoremap x :so féénormal \\1,normal <CR>
+K	nnoremap x :é'anormal <CR>
+K	nnoremap x :'as/a/b/<Bar>é<CR>
+R	nnoremap x :"nnoremap y Znormal é<Bar>nnoremap y Z<CR>
+K	nnoremap x :g/a/<Bar>'a'a1,/<CR>
+S	nnoremap x :so fg/a/<Bar>normal g/<CR>
+N	nnoremap x :normal énormal <CR>
+K	nnoremap x :s/a/b/éésil d<CR>
+N	nnoremap x :'a/!lss/a/b/sil d<CR>
+S	nnoremap x :so fnnoremap y Z<CR>
+N	nnoremap x :g/a/<Bar>" s/a/b//!ls<CR>
+N	nnoremap x :normal \\sil v/a/v/a/<CR>
+N	nnoremap x :\\!lsés/a/b/sil <CR>
+K	nnoremap x :/so fg/a/ /1,<CR>
+K	nnoremap x :g/a/'a<CR>
+K	nnoremap x :d"normal 1,"normal <CR>
+K	nnoremap x :\\'a  <CR>
+S	nnoremap x :nnoremap y Z"g/"s/a/b/so fv/a/<CR>
+S	nnoremap x :so fd/!ls'a<CR>
+K	nnoremap x :g/a/v/a/<Bar>sil <CR>
+S	nnoremap x :so f "<Bar>g/é<CR>
+N	nnoremap x :sil normal v/a/<CR>
+K	nnoremap x :ég/'as/a/b/<CR>
+S	nnoremap x :so f\\g/a/!ls'av/a/s/a/b/<CR>
+N	nnoremap x :\\!lsg/"\\<Bar><CR>
+K	nnoremap x :1, dg/a/<CR>
+N	nnoremap x :sil normal normal 'a1,\\<CR>
+N	nnoremap x :v/a/g/a/g/!lss/a/b/g/a/<CR>
+K	nnoremap x :1,s/a/b/1,<CR>
+K	nnoremap x :dv/a/"1,nnoremap y Z'a<CR>
+K	nnoremap x :dv/a/ so f\\<CR>
+K	nnoremap x :é "dso f<CR>
+R	nnoremap x :d/\\<Bar>so fg/a/<CR>
+K	nnoremap x :g/<Bar>normal so f"sil <CR>
+K	nnoremap x :g/'a é1,sil <CR>
+K	nnoremap x :<Bar>d1,<Bar> v/a/1,<CR>
+S	nnoremap x :so fnnoremap y Z!lség/a/normal 'a<CR>
+K	nnoremap x :"so fg/a/<CR>
+K	nnoremap x :'a/'ag/a/g/é<Bar><CR>
+K	nnoremap x :dso fv/a/1,""so f<CR>
+K	nnoremap x :s/a/b/1,nnoremap y Z<CR>
+N	nnoremap x :normal "1,'a"v/a/<CR>
+K	nnoremap x :g/a/s/a/b//v/a/<CR>
+K	nnoremap x :v/a/'a<Bar>1,<CR>
+S	nnoremap x :so fnnoremap y Zdnormal d<CR>
+N	nnoremap x :é!ls<Bar>g/normal é<CR>
+N	nnoremap x :normal /v/a//\\"1,<CR>
+K	nnoremap x :éso fso f<CR>
+S	nnoremap x :'a nnoremap y Z<Bar><CR>
+K	nnoremap x :\\d\\<CR>
+K	nnoremap x : 'asil <CR>
+N	nnoremap x :normal g/g/a/!lss/a/b/nnoremap y Zg/<CR>
+K	nnoremap x :s/a/b/1,<CR>
+S	nnoremap x :nnoremap y Z\\so fnnoremap y Z<CR>
+K	nnoremap x :<Bar>éd/<CR>
+K	nnoremap x : é\\"v/a/<CR>
+N	nnoremap x :'anormal g/!ls<CR>
+K	nnoremap x :1,'a\\v/a/\\<CR>
+K	nnoremap x :énormal 'a"nnoremap y Zé<CR>
+S	nnoremap x :so fs/a/b/"\\so f!ls<CR>
+S	nnoremap x :v/a/nnoremap y Z<CR>
+K	nnoremap x :dnnoremap y Z/normal "so f<CR>
+S	nnoremap x :<Bar>nnoremap y Z nnoremap y Zév/a/é<CR>
+K	nnoremap x :g/é1,"'a\\nnoremap y Z<CR>
+S	nnoremap x :'annoremap y Znormal  sil é<CR>
+S	nnoremap x :sil 'annoremap y Z"é<CR>
+S	nnoremap x :/sil <Bar>v/a/g/a/!lsg/a/<CR>
+K	nnoremap x :'ag/1,<CR>
+K	nnoremap x : //<CR>
+S	nnoremap x :sil so fso f<CR>
+S	nnoremap x :so fg/<CR>
+S	nnoremap x :v/a/!ls!ls<CR>
+S	nnoremap x :v/a/nnoremap y Z1,<Bar><CR>
+K	nnoremap x :sil \\dénnoremap y Z<CR>
+K	nnoremap x :g/g/a/\\é1,nnoremap y Z<CR>
+R	nnoremap x :/<Bar>nnoremap y Zs/a/b/so f<CR>
+S	nnoremap x :nnoremap y Z"so fnnoremap y Znnoremap y Z<CR>
+K	nnoremap x :\\so fsil <CR>
+K	nnoremap x :1,/g/  <CR>
+S	nnoremap x :!ls <Bar>sil é<CR>
+S	nnoremap x :g/a/v/a/!lssil so f<CR>
+N	nnoremap x :dv/a/d normal  !ls<CR>
+S	nnoremap x :nnoremap y Zé   nnoremap y Z<CR>
+K	nnoremap x :\\v/a/sil /sil \\<CR>
+N	nnoremap x :normal 'a!lssil sil so f<CR>
+S	nnoremap x :g/a/!ls!lsnnoremap y Z<CR>
+K	nnoremap x :\\/g/a/s/a/b/normal <CR>
+K	nnoremap x :ds/a/b/ <CR>
+K	nnoremap x :g/a/g/a/<Bar>/normal <CR>
+N	nnoremap x : \\s/a/b/'a!lsso f!ls<CR>
+S	nnoremap x :sil 'annoremap y Z1,"<CR>
+S	nnoremap x :so f'asil normal d<CR>
+K	nnoremap x :<Bar> é<CR>
+K	nnoremap x :v/a/dnormal sil "d<CR>
+K	nnoremap x :1,normal \\\\/ <CR>
+K	nnoremap x :g/a/\\"nnoremap y Z/normal é<CR>
+N	nnoremap x :g/d\\!ls\\<CR>
+K	nnoremap x :v/a/\\"nnoremap y Z<CR>
+S	nnoremap x :nnoremap y Z!lsé\\'a<CR>
+S	nnoremap x :!lsso fd'ag/a/<CR>
+N	nnoremap x :normal s/a/b/<Bar>é!lssil g/<CR>
+K	nnoremap x :"'anormal é<CR>
+S	nnoremap x :!lss/a/b/so f<CR>
+K	nnoremap x :v/a/g/a/év/a/<CR>
+S	nnoremap x :!lsnnoremap y Z "<CR>
+S	nnoremap x :!ls!lsv/a/<CR>
+S	nnoremap x :  nnoremap y Zv/a/g/nnoremap y Z<CR>
+K	nnoremap x : dé/1,"<CR>
+S	nnoremap x :g/a/'a<Bar>nnoremap y Z'a'a<CR>
+N	nnoremap x :dnnoremap y Zso fs/a/b/!ls <CR>
+S	nnoremap x :nnoremap y Z/g/normal <CR>
+N	nnoremap x :"g/!ls<CR>
+N	nnoremap x :/d"!ls"\\nnoremap y Z<CR>
+S	nnoremap x :so fv/a/!lssil <CR>
+K	nnoremap x :g/'asil so f<CR>
+K	nnoremap x : <Bar><CR>
+K	nnoremap x :ddso fnnoremap y Zso f1,"<CR>
+K	nnoremap x :s/a/b/ "normal nnoremap y Z<CR>
+S	nnoremap x :<Bar>normal <Bar>nnoremap y Zg/a/<CR>
+S	nnoremap x : so f /s/a/b/'ag/a/<CR>
+R	nnoremap x :g/<Bar>so fg/a/<CR>
+S	nnoremap x :!lsso f\\<CR>
+K	nnoremap x :1,1,<CR>
+N	nnoremap x :dv/a/sil 'a!ls<CR>
+N	nnoremap x : \\/éd!ls<CR>
+K	nnoremap x :dg/1,so f<CR>
+K	nnoremap x :<Bar>g/a/ég/s/a/b/'a<CR>
+N	nnoremap x :1,/ !lsé\\"<CR>
+K	nnoremap x :'ad'a1,s/a/b/\\<CR>
+K	nnoremap x :"g/1,'a<CR>
+S	nnoremap x :!lsnnoremap y Zé""<CR>
+K	nnoremap x :s/a/b/\\so f<CR>
+S	nnoremap x :so f<Bar>s/a/b/<CR>
+S	nnoremap x :!ls'ag/a/"!lsnnoremap y Z<CR>
+S	nnoremap x :!lsnnoremap y Z/sil /s/a/b/1,<CR>
+K	nnoremap x : v/a/'a<CR>
+K	nnoremap x :/\\so f1,g/a//sil <CR>
+K	nnoremap x :'adé/ 'a<Bar><CR>
+N	nnoremap x :s/a/b/<Bar>normal v/a/d<CR>
+K	nnoremap x :\\dd<CR>
+S	nnoremap x :!lsé<Bar>é<CR>
+S	nnoremap x :nnoremap y Zg/a/"!ls<CR>
+S	nnoremap x :so f s/a/b/<CR>
+S	nnoremap x :nnoremap y Znormal 1,sil !lssil <CR>
+S	nnoremap x :so f g/a/"nnoremap y Zv/a/<CR>
+S	nnoremap x :v/a/nnoremap y Z é<CR>
+N	nnoremap x :1,/!ls<CR>
+K	nnoremap x :s/a/b/v/a/ normal sil <CR>
+K	nnoremap x :dso fs/a/b/é<Bar>d<Bar><CR>
+N	nnoremap x :é g/a/g/v/a/!ls\\<CR>
+S	nnoremap x :1,<Bar> nnoremap y Zg/<CR>
+N	nnoremap x : normal éé <CR>
+K	nnoremap x :dg/a/"dnnoremap y Z<CR>
+K	nnoremap x :g/'a\\1,'a<CR>
+K	nnoremap x :g/a/é<CR>
+S	nnoremap x :v/a/!ls<Bar><Bar><CR>
+K	nnoremap x :\\s/a/b/nnoremap y Zd<CR>
+S	nnoremap x :sil nnoremap y Zé/<CR>
+S	nnoremap x :v/a/nnoremap y Z1,<CR>
+K	nnoremap x :v/a/s/a/b/g/"énormal v/a/<CR>
+K	nnoremap x :\\'a\\g/a/\\<CR>
+K	nnoremap x :\\s/a/b/é<Bar>/é<CR>
+K	nnoremap x :1,d/<CR>
+K	nnoremap x :\\\\g/a/sil sil s/a/b/<CR>
+N	nnoremap x :normal normal //sil g/<CR>
+K	nnoremap x :g/'a <CR>
+K	nnoremap x :g/a/ég/a/nnoremap y Z1,1,<CR>
+K	nnoremap x :g/a/'a\\\\<CR>
+K	nnoremap x :s/a/b/é1,"nnoremap y Z/ <CR>
+N	nnoremap x :\\g/\\!lsg/a/\\<CR>
+N	nnoremap x :\\nnoremap y Z\\v/a/!ls<CR>
+K	nnoremap x :sil /sil <CR>
+K	nnoremap x :\\v/a/ "\\\\<CR>
+K	nnoremap x :d\\/é<CR>
+K	nnoremap x :1,g/a/1,é<CR>
+K	nnoremap x :"s/a/b/normal so fv/a/<CR>
+K	nnoremap x :"/\\s/a/b/so f<CR>
+K	nnoremap x :'a'a'annoremap y Zdso fv/a/<CR>
+S	nnoremap x :so f <Bar>\\d<CR>
+N	nnoremap x :normal 1,<Bar>éso f<Bar>1,<CR>
+N	nnoremap x :normal g/a/<CR>
+K	nnoremap x :v/a/\\1,sil <CR>
+K	nnoremap x :sil "<CR>
+S	nnoremap x :!lsg/a/s/a/b/<Bar> /so f<CR>
+K	nnoremap x :g/a/1,s/a/b/<CR>
+K	nnoremap x :\\<Bar>/nnoremap y Zg/\\<CR>
+N	nnoremap x :g//'anormal nnoremap y Z<CR>
+K	nnoremap x :sil  sil   s/a/b/ <CR>
+S	nnoremap x :g/sil nnoremap y Znnoremap y Z1,g/so f<CR>
+K	nnoremap x :sil dnnoremap y Z"\\é<CR>
+N	nnoremap x :normal 1,/<CR>
+K	nnoremap x :1,normal s/a/b/<CR>
+S	nnoremap x :d<Bar>g/g/so f<CR>
+K	nnoremap x :ég/a/g/a/d<CR>
+S	nnoremap x :so f!ls/s/a/b/s/a/b/<Bar><CR>
+S	nnoremap x :'a g/a/nnoremap y Zso f<CR>
+S	nnoremap x :nnoremap y Z"g/normal 1,s/a/b/v/a/<CR>
+N	nnoremap x :"so f!lsnormal s/a/b/<CR>
+K	nnoremap x :1,dnormal so f<Bar><CR>
+K	nnoremap x :/sil dnnoremap y Zd<CR>
+K	nnoremap x :'a<Bar>s/a/b/éé"sil <CR>
+S	nnoremap x :v/a/so fv/a/d !ls<CR>
+K	nnoremap x :g/sil g/a/1,d <CR>
+K	nnoremap x :év/a/1,v/a/\\v/a/v/a/<CR>
+N	nnoremap x :normal s/a/b/ég/'a<CR>
+S	nnoremap x :g/a/g/a/<Bar>nnoremap y Zv/a/ <CR>
+K	nnoremap x :é'a"<CR>
+S	nnoremap x :so f/'a'a1,<CR>
+N	nnoremap x :normal dso f"v/a/<CR>
+S	nnoremap x :so fé!lsg/a/g/a/ /<CR>
+K	nnoremap x :v/a/dso fnnoremap y Z1,<CR>
+K	nnoremap x :dg/s/a/b/v/a/nnoremap y Z<CR>
+S	nnoremap x :'ag/é/so f<Bar><CR>
+S	nnoremap x :sil nnoremap y Zv/a/g/a/s/a/b/ 'a<CR>
+K	nnoremap x :1,"sil dg/1,<CR>
+S	nnoremap x :nnoremap y Zdsil \\so f1,g/a/<CR>
+N	nnoremap x :ds/a/b/g/!ls<CR>
+K	nnoremap x :d'a"d<CR>
+R	nnoremap x :\\normal v/a/<Bar>nnoremap y Z<CR>
+K	nnoremap x :dsil é<CR>
+S	nnoremap x :!ls1,normal /v/a/<CR>
+S	nnoremap x :nnoremap y Zsil \\'av/a/<Bar><CR>
+K	nnoremap x :'as/a/b/d<Bar><CR>
+N	nnoremap x :d<Bar>g/a/normal sil <CR>
+S	nnoremap x :nnoremap y Z/<CR>
+S	nnoremap x :so fnormal éso f d1,<CR>
+N	nnoremap x :normal normal  <CR>
+N	nnoremap x :normal normal /g/a/<CR>
+S	nnoremap x :so fg/g/a/!lsé\\<CR>
+S	nnoremap x :'a!ls\\d/<CR>
+S	nnoremap x :g/a/!ls<CR>
+S	nnoremap x :!lsso fév/a/<CR>
+S	nnoremap x :<Bar>nnoremap y Z'a1,és/a/b/é<CR>
+K	nnoremap x : dé<CR>
+K	nnoremap x :v/a/<Bar><CR>
+K	nnoremap x :1,1,g/a//d<CR>
+S	nnoremap x :sil nnoremap y Z<CR>
+K	nnoremap x :ég/a/<Bar><CR>
+K	nnoremap x :<Bar>é\\<CR>
+K	nnoremap x :1,<Bar><Bar><CR>
+N	nnoremap x :s/a/b/é!ls<CR>
+K	nnoremap x :v/a/s/a/b/év/a/<CR>
+K	nnoremap x :sil g/'av/a/v/a/g/a/<CR>
+K	nnoremap x :dso f1,\\nnoremap y Z<CR>
+K	nnoremap x :s/a/b/nnoremap y Z<CR>
+N	nnoremap x :v/a/normal normal !lssil nnoremap y Z<CR>
+K	nnoremap x :d normal 'a1,<CR>
+K	nnoremap x :v/a/<Bar>\\<CR>
+K	nnoremap x :g/<Bar>/<CR>
+N	nnoremap x :d'aéd!lsnnoremap y Z<CR>
+S	nnoremap x :sil g/a/!ls<CR>
+K	nnoremap x :/nnoremap y Znormal <CR>
+N	nnoremap x :sil normal ds/a/b/"1,"<CR>
+K	nnoremap x :g/a/<Bar>/1,1,<CR>
+N	nnoremap x :v/a/normal nnoremap y Zg/sil /g/a/<CR>
+K	nnoremap x :1,\\sil <CR>
+S	nnoremap x :!ls<Bar>v/a/'asil  g/a/<CR>
+S	nnoremap x :/<Bar>!ls'asil !lsé<CR>
+K	nnoremap x :\\s/a/b/d'a/v/a/g/a/<CR>
+S	nnoremap x :1,!ls /g/<CR>
+K	nnoremap x :dg/a/\\v/a/v/a/<CR>
+S	nnoremap x :v/a/!lsés/a/b/sil nnoremap y Znormal <CR>
+S	nnoremap x :so fg/ <CR>
+S	nnoremap x :1,!ls"<Bar>d<CR>
+K	nnoremap x :'a1,nnoremap y Z<CR>
+S	nnoremap x :!ls!lsnormal nnoremap y Z<CR>
+N	nnoremap x :é"!ls<CR>
+N	nnoremap x :é!lsv/a/1,<Bar><CR>
+K	nnoremap x :g/a/g/\\<CR>
+K	nnoremap x :"é<Bar><CR>
+K	nnoremap x :<Bar>dv/a/nnoremap y Zsil 1,<CR>
+K	nnoremap x :<Bar>/g//d <CR>
+N	nnoremap x :normal  /<CR>
+N	nnoremap x :normal s/a/b/normal s/a/b/<Bar>normal !ls<CR>
+K	nnoremap x :'a g/<Bar><CR>
+N	nnoremap x :/!ls\\!lsg/s/a/b/<CR>
+N	nnoremap x :dg/a/normal !lsso f\\<CR>
+K	nnoremap x :g/ s/a/b//<CR>
+N	nnoremap x :s/a/b/1,g/ so f!ls/<CR>
+K	nnoremap x :\\é<Bar>d <CR>
+S	nnoremap x : !ls\\/v/a/<CR>
+K	nnoremap x :s/a/b/sil 1,"<CR>
+S	nnoremap x :nnoremap y Zé<CR>
+N	nnoremap x :d !ls/ <CR>
+K	nnoremap x :s/a/b//1,\\'a<CR>
+K	nnoremap x : éso fds/a/b/1,sil <CR>
+N	nnoremap x :sil normal g/"d<CR>
+K	nnoremap x :dsil g/<CR>
+S	nnoremap x :<Bar><Bar>nnoremap y Z <CR>
+K	nnoremap x :s/a/b//normal <CR>
+S	nnoremap x :!lss/a/b/g/a/!ls\\g/g/a/<CR>
+K	nnoremap x :"g/a/so fg/a/<CR>
+N	nnoremap x :\\so f'a!ls<CR>
+K	nnoremap x :/""<Bar>1,sil <CR>
+K	nnoremap x :és/a/b/v/a/'a/<CR>
+K	nnoremap x :1,normal  g/<CR>
+N	nnoremap x :<Bar>é'asil !ls<CR>
+N	nnoremap x :normal g/a/"éé<Bar><CR>
+N	nnoremap x :v/a/normal 'asil 1,<CR>
+K	nnoremap x :é/so f<CR>
+S	nnoremap x :so fg/a/<Bar>!ls1,g/<CR>
+S	nnoremap x :nnoremap y Z1,<Bar>g/'a!lsv/a/<CR>
+N	nnoremap x :dv/a/é!ls"g/<CR>
+K	nnoremap x :sil s/a/b/v/a/g/a/normal dv/a/<CR>
+S	nnoremap x :\\é!ls\\\\g/a/<CR>
+N	nnoremap x :'anormal g/<CR>
+S	nnoremap x :so f1,g/a/so f<CR>
+K	nnoremap x :\\'annoremap y Znormal 1,<CR>
+K	nnoremap x :g/s/a/b/g/a/normal é<CR>
+K	nnoremap x :\\dv/a/<CR>
+S	nnoremap x :so fv/a/1, <CR>
+K	nnoremap x : g/so fnnoremap y Z<CR>
+K	nnoremap x :s/a/b/énormal nnoremap y Znormal "g/<CR>
+K	nnoremap x :<Bar>'a <CR>
+K	nnoremap x :d<Bar>'aésil <CR>
+K	nnoremap x :// <CR>
+N	nnoremap x : normal sil <Bar><CR>
+S	nnoremap x :!lsso fv/a/'a/1,<CR>
+K	nnoremap x :\\'asil "so f/<CR>
+K	nnoremap x :s/a/b/so fnnoremap y Z\\s/a/b/<CR>
+K	nnoremap x :'a\\<CR>
+S	nnoremap x :nnoremap y Z"so f 'aso f<CR>
+S	nnoremap x :normal nnoremap y Z'a<Bar>v/a/nnoremap y Zg/a/<CR>
+N	nnoremap x :normal nnoremap y Z<Bar><CR>
+S	nnoremap x :so fsil "éd<CR>
+K	nnoremap x :\\d<CR>
+K	nnoremap x :s/a/b/g/a/ so f/<CR>
+K	nnoremap x :"nnoremap y Z'a<CR>
+K	nnoremap x :s/a/b/\\v/a/'a<Bar>s/a/b/<CR>
+N	nnoremap x :s/a/b/!lsso f <CR>
+K	nnoremap x :\\1,s/a/b/s/a/b/nnoremap y Znnoremap y Z<CR>
+K	nnoremap x :é1,'ag/<CR>
+K	nnoremap x :<Bar>dg/<CR>
+S	nnoremap x :nnoremap y Z'ad1,1,'a/<CR>
+S	nnoremap x :!ls'anormal !ls<Bar>é<CR>
+K	nnoremap x :é"g/a/<CR>
+S	nnoremap x :nnoremap y Z!lsg/'ad<CR>
+K	nnoremap x :éso f1,'av/a/ "<CR>
+N	nnoremap x :normal s/a/b//éso f<CR>
+K	nnoremap x :ésil s/a/b/normal <CR>
+S	nnoremap x :so fé1,'a<CR>
+K	nnoremap x :1,nnoremap y Z1, s/a/b/d<CR>
+K	nnoremap x :d1,\\d/<CR>
+K	nnoremap x :v/a/g/a/dnnoremap y Zv/a/sil <CR>
+R	nnoremap x :\\\\so f<CR>
+K	nnoremap x :s/a/b/<Bar>é <CR>
+S	nnoremap x :sil so fg/g/a/nnoremap y Zsil <CR>
+S	nnoremap x :!lsg/a//<CR>
+K	nnoremap x :<Bar>g/'a"<CR>
+S	nnoremap x :g/a/nnoremap y Z <CR>
+S	nnoremap x :so fnormal "!ls/d<CR>
+K	nnoremap x :s/a/b/v/a/so f'a<CR>
+K	nnoremap x :dnnoremap y Z'a1,v/a//s/a/b/<CR>
+K	nnoremap x :v/a/1,<Bar><CR>
+K	nnoremap x :"g/a/g/a/sil v/a/ \\<CR>
+K	nnoremap x : g/\\so f<Bar><CR>
+S	nnoremap x :so f g/a/<Bar>s/a/b/<CR>
+K	nnoremap x :g/\\v/a/"so fs/a/b/<CR>
+K	nnoremap x :sil <Bar> és/a/b/'av/a/<CR>
+K	nnoremap x :é/1,g/<CR>
+S	nnoremap x :!lssil !ls<CR>
+K	nnoremap x : "1,sil dg/<CR>
+K	nnoremap x :sil g/'a\\1,\\g/<CR>
+K	nnoremap x :g/a/ <Bar>"sil \\<CR>
+N	nnoremap x :normal "normal s/a/b/" 1,<CR>
+K	nnoremap x :/v/a/'ag/<CR>
+K	nnoremap x :'adnnoremap y Znormal <CR>
+K	nnoremap x :g/g/a/g/nnoremap y Z'a/<CR>
+K	nnoremap x :<Bar>v/a/<CR>
+K	nnoremap x :1,nnoremap y Zsil nnoremap y Z"éso f<CR>
+N	nnoremap x :g/nnoremap y Z!lsso fnnoremap y Z<Bar><CR>
+K	nnoremap x :g/a//"<Bar><Bar>\\g/<CR>
+K	nnoremap x :\\d1,sil <CR>
+S	nnoremap x :so fso f/normal <CR>
+K	nnoremap x :\\ 1,normal "g/<Bar><CR>
+N	nnoremap x :g/g/a/!lsdnormal so fv/a/<CR>
+N	nnoremap x :<Bar>normal é/normal 1,"<CR>
+S	nnoremap x :'a<Bar>nnoremap y Z!ls<CR>
+S	nnoremap x :so fs/a/b/nnoremap y Zso f<CR>
+S	nnoremap x :v/a/!ls1,sil ésil <CR>
+K	nnoremap x :\\éé<CR>
+K	nnoremap x :sil <Bar>v/a/<CR>
+K	nnoremap x :sil g/<CR>
+K	nnoremap x :g/<Bar>g/a/<CR>
+N	nnoremap x :\\g/"\\!ls<CR>
+N	nnoremap x :ég//1,s/a/b/!ls<CR>
+K	nnoremap x :""dé<CR>
+K	nnoremap x :"g/a/" 1,<CR>
+S	nnoremap x :nnoremap y Z'anormal nnoremap y Znormal <CR>
+K	nnoremap x :v/a/"g/v/a/g/nnoremap y Z<CR>
+K	nnoremap x :é/"<CR>
+S	nnoremap x :so f"<Bar>sil <CR>
+S	nnoremap x :1,!lsg/a/so fsil 1,/<CR>
+K	nnoremap x :év/a/d\\normal sil v/a/<CR>
+K	nnoremap x :\\<Bar>d'a/"<Bar><CR>
+K	nnoremap x :é//g/g/<CR>
+K	nnoremap x :\\\\<CR>
+K	nnoremap x :g/"v/a/1,g/a/é<CR>
+K	nnoremap x :dg/nnoremap y Znnoremap y Zsil g/a/<CR>
+N	nnoremap x :normal "nnoremap y Z<CR>
+K	nnoremap x :\\sil sil <CR>
+S	nnoremap x :so fdsil normal  és/a/b/<CR>
+K	nnoremap x :"\\so fg/a/g/a/nnoremap y Z"<CR>
+K	nnoremap x :d"s/a/b/'ag/g/a/ <CR>
+N	nnoremap x :"g/g/normal !lsg/a/<CR>
+K	nnoremap x :\\ / <Bar>g/a/<CR>
+N	nnoremap x :s/a/b/g/dds/a/b/!ls/<CR>
+K	nnoremap x : \\sil <CR>
+K	nnoremap x :v/a/ g/a//normal <CR>
+S	nnoremap x :!lsso f\\'a!lsv/a/<CR>
+S	nnoremap x :nnoremap y Zv/a/1,<Bar>g/a/'a<CR>
+S	nnoremap x :so féso f\\d<CR>
+N	nnoremap x :\\!lsso f" !ls <CR>
+K	nnoremap x :g/a/g/a/<CR>
+K	nnoremap x :dnnoremap y Z /<CR>
+N	nnoremap x :1,g/a/"v/a/!lsg/a/d<CR>
+S	nnoremap x :g/sil g/so fnormal <CR>
+K	nnoremap x :g/a/é<Bar>/nnoremap y Zg/a/<CR>
+S	nnoremap x :<Bar><Bar><Bar>nnoremap y Z"<CR>
+S	nnoremap x :so fs/a/b/g/a/so f<CR>
+K	nnoremap x :s/a/b/sil normal <CR>
+N	nnoremap x :d!lsnormal dnormal normal é<CR>
+K	nnoremap x :s/a/b/normal 'a<CR>
+K	nnoremap x :dg/éd<CR>
+K	nnoremap x :év/a/'a1,s/a/b/normal <CR>
+K	nnoremap x :v/a/g/dsil v/a/<CR>
+K	nnoremap x :é<Bar><CR>
+K	nnoremap x :g/s/a/b/s/a/b//<CR>
+N	nnoremap x :éso fnnoremap y Z<Bar>é!ls<CR>
+K	nnoremap x :v/a/1,'a1,<Bar>\\v/a/<CR>
+N	nnoremap x :dnnoremap y Z/!ls<Bar><Bar>/<CR>
+K	nnoremap x :dg/g/a/<CR>
+R	nnoremap x :1,so fs/a/b/nnoremap y Zénormal d<CR>
+N	nnoremap x :normal sil sil nnoremap y Z/<CR>
+K	nnoremap x :\\<Bar>v/a/1,g/a/ <CR>
+N	nnoremap x :normal 1,ég/a/dnormal normal <CR>
+K	nnoremap x :\\/d<Bar><CR>
+S	nnoremap x :nnoremap y Z/normal \\so f<CR>
+K	nnoremap x :sil "g/a//"é<CR>
+K	nnoremap x :dg/a/é"<CR>
+K	nnoremap x :dé"s/a/b/ so fg/a/<CR>
+N	nnoremap x :v/a/dé  /!ls<CR>
+K	nnoremap x :/dg/s/a/b/<CR>
+S	nnoremap x :so fsil /<CR>
+S	nnoremap x :so f\\  so fv/a/normal <CR>
+K	nnoremap x :\\"sil /"g/a/1,<CR>
+K	nnoremap x :s/a/b/dd/<CR>
+N	nnoremap x :'a<Bar>normal ég/v/a/"<CR>
+K	nnoremap x :énnoremap y Zg/<CR>
+K	nnoremap x :v/a/d"so f1,1,normal <CR>
+K	nnoremap x : g/é\\so fs/a/b/<CR>
+K	nnoremap x :v/a/sil \\g/a/"g/a/<CR>
+N	nnoremap x :é\\év/a/v/a/!ls<CR>
+K	nnoremap x :/\\<CR>
+K	nnoremap x :g/sil é<CR>
+K	nnoremap x :1,<Bar> é<CR>
+K	nnoremap x :"v/a/sil  so f<CR>
+K	nnoremap x : g/v/a/g/1,\\<CR>
+N	nnoremap x :normal nnoremap y Z1,1,s/a/b/<CR>
+N	nnoremap x :ddnnoremap y Z!ls<CR>
+K	nnoremap x :énnoremap y Z\\d<CR>
+K	nnoremap x :d1,s/a/b/sil d <CR>
+N	nnoremap x :g/a/normal <Bar>g/a/<CR>
+N	nnoremap x :normal \\<CR>
+S	nnoremap x :!ls'a" <CR>
+S	nnoremap x :g/a/g//'annoremap y Z<CR>
+K	nnoremap x :éso f/é<Bar>\\/<CR>
+K	nnoremap x :"normal sil <CR>
+K	nnoremap x :d/g/"\\sil <CR>
+N	nnoremap x :s/a/b/1,!lsg/<CR>
+K	nnoremap x : sil d<CR>
+K	nnoremap x :g/a/"s/a/b/<CR>
+K	nnoremap x :\\normal <CR>
+S	nnoremap x :!ls\\é d<CR>
+S	nnoremap x :<Bar>sil nnoremap y Zé"é<CR>
+N	nnoremap x :g/a/g/a/d!lsd<CR>
+K	nnoremap x :1,g/a/'a/1,<CR>
+K	nnoremap x :<Bar>/'av/a/\\normal \\<CR>
+K	nnoremap x :g/a/v/a/s/a/b/v/a/s/a/b/nnoremap y Z<CR>
+K	nnoremap x :s/a/b/v/a/ <CR>
+S	nnoremap x :v/a/sil nnoremap y Zd" <CR>
+K	nnoremap x :d<Bar>é<CR>
+K	nnoremap x :g/<Bar><CR>
+S	nnoremap x :!ls1,<CR>
+K	nnoremap x :1,v/a/nnoremap y Znnoremap y Zso f<CR>
+K	nnoremap x :ég/a/"g/g/sil é<CR>
+S	nnoremap x :so f\\so f \\ <CR>
+N	nnoremap x :normal s/a/b/s/a/b/\\nnoremap y Z<CR>
+S	nnoremap x :sil <Bar>nnoremap y Z/s/a/b/g/a/"<CR>
+K	nnoremap x :d"1,d<CR>
+N	nnoremap x :"!lssil normal g/a/nnoremap y Z<Bar><CR>
+S	nnoremap x :<Bar>'a!lsg/a/ g/a/g/a/<CR>
+K	nnoremap x :év/a/so fsil <CR>
+S	nnoremap x :!lsd!lsdsil so f<CR>
+S	nnoremap x :<Bar>\\"so f!lsso f"<CR>
+K	nnoremap x :1,g/1,sil sil so fg/a/<CR>
+K	nnoremap x :v/a/"/nnoremap y Z<CR>
+N	nnoremap x :<Bar>normal \\""so f<CR>
+S	nnoremap x :nnoremap y Zv/a/g/v/a/d\\<CR>
+K	nnoremap x :1,<Bar>""so f<CR>
+S	nnoremap x :sil <Bar>so fsil sil <Bar><CR>
+K	nnoremap x :g/a//év/a/nnoremap y Z/<CR>
+S	nnoremap x :g/a/nnoremap y Znnoremap y Z<CR>
+S	nnoremap x :!lsdnormal <CR>
+R	nnoremap x :/"g/1,so fso fg/a/<CR>
+K	nnoremap x :/normal normal <CR>
+S	nnoremap x :<Bar>so fg/v/a/"1,sil <CR>
+N	nnoremap x :normal nnoremap y Zg/a/<Bar>normal !ls<CR>
+K	nnoremap x :/1,d<CR>
+K	nnoremap x :g/a/s/a/b/é""<CR>
+K	nnoremap x :g/a/éso fnormal normal <CR>
+K	nnoremap x :"  /<Bar>'a<CR>
+S	nnoremap x :!ls<Bar>'a/<CR>
+K	nnoremap x :g/a/1,1,/<CR>
+K	nnoremap x :dnnoremap y Z\\<CR>
+K	nnoremap x :s/a/b/g/a/v/a/nnoremap y Z <CR>
+S	nnoremap x :so f!ls sil 1,<CR>
+S	nnoremap x :!lsg/d g/a/'as/a/b/<CR>
+N	nnoremap x : g/a/s/a/b/!ls<CR>
+S	nnoremap x :!lsg/<Bar>/g/a/<Bar><CR>
+K	nnoremap x :/s/a/b/normal <CR>
+K	nnoremap x :<Bar>'anormal <CR>
+N	nnoremap x :normal g/é1,g/a/<CR>
+K	nnoremap x :g/a/<Bar>v/a/<CR>
+K	nnoremap x :"g/a/g/a/1,so fsil <CR>
+N	nnoremap x :g/g/normal normal  d<CR>
+K	nnoremap x :\\1,"g/a/s/a/b/<CR>
+K	nnoremap x :/1, s/a/b/"sil <CR>
+S	nnoremap x :g/a/sil !ls <Bar><CR>
+K	nnoremap x : dsil <CR>
+S	nnoremap x :!lssil é <CR>
+S	nnoremap x :so fnnoremap y Z\\g/'anormal <CR>
+N	nnoremap x :normal v/a/1,<CR>
+S	nnoremap x :nnoremap y Zév/a/s/a/b/<CR>
+S	nnoremap x :!ls g/a/<CR>
+S	nnoremap x :nnoremap y Z<Bar>g/a/<CR>
+K	nnoremap x :'asil énormal <CR>
+N	nnoremap x :<Bar>d!ls<Bar>\\<CR>
+K	nnoremap x :ég/normal normal \\d<CR>
+K	nnoremap x :\\dg/a/é\\so f1,<CR>
+S	nnoremap x : so fnormal <CR>
+S	nnoremap x ://!lsév/a/g/a/<CR>
+S	nnoremap x :so fnnoremap y Zg/!ls<Bar><CR>
+S	nnoremap x :!lsv/a/é!ls<CR>
+K	nnoremap x :g/g/1,normal nnoremap y Z<CR>
+N	nnoremap x :<Bar>s/a/b//normal !lsg/<CR>
+K	nnoremap x :g/a/ds/a/b/so f'adnormal <CR>
+N	nnoremap x :normal normal dénormal 'as/a/b/<CR>
+K	nnoremap x :'a"so fd<CR>
+S	nnoremap x :nnoremap y Z"sil sil /<CR>
+S	nnoremap x :!ls1,<Bar><Bar><CR>
+S	nnoremap x :so f!lsé// normal <CR>
+S	nnoremap x :g/a/so fnnoremap y Znnoremap y Z so f\\<CR>
+K	nnoremap x :"v/a/sil \\<CR>
+K	nnoremap x :s/a/b/d1,<CR>
+K	nnoremap x : /<Bar><CR>
+K	nnoremap x :""dso f<Bar><Bar><CR>
+K	nnoremap x :/v/a/sil <CR>
+K	nnoremap x :g/g/v/a/<CR>
+K	nnoremap x : v/a/d<CR>
+K	nnoremap x :1,/g/<CR>
+K	nnoremap x : 1,g/a/<CR>
+S	nnoremap x :v/a/so fé\\'a<CR>
+N	nnoremap x :<Bar>s/a/b/nnoremap y Z!lsg/a/ <CR>
+S	nnoremap x :!ls"v/a/1,désil <CR>
+K	nnoremap x :s/a/b/g/'annoremap y Z<CR>
+K	nnoremap x :s/a/b/'a\\'ag/a/é<CR>
+S	nnoremap x :nnoremap y Z g/a/<CR>
+K	nnoremap x :g/sil 'a\\nnoremap y Zso fsil <CR>
+S	nnoremap x :!lsd/'a<CR>
+K	nnoremap x :s/a/b//1,nnoremap y Zg/a/so f'a<CR>
+S	nnoremap x :g/a/v/a/!lss/a/b/é <CR>
+K	nnoremap x :v/a//g/'as/a/b/<CR>
+K	nnoremap x :"g/a/ "<CR>
+K	nnoremap x :  \\so fnormal g/<CR>
+K	nnoremap x :\\normal <Bar>/\\\\<CR>
+K	nnoremap x :/s/a/b/\\" s/a/b/<CR>
+S	nnoremap x :sil so fg/a/dsil nnoremap y Z<CR>
+K	nnoremap x :v/a/é\\g/a/v/a/éé<CR>
+N	nnoremap x :<Bar>édnnoremap y Z !ls<CR>
+N	nnoremap x :dd\\d !lss/a/b/<CR>
+K	nnoremap x :ésil 1,1,nnoremap y Z\\1,<CR>
+N	nnoremap x :normal v/a/\\'a'a<CR>
+K	nnoremap x :énnoremap y Znnoremap y Z1,<CR>
+R	nnoremap x :sil <Bar>1,so fs/a/b/s/a/b/g/<CR>
+K	nnoremap x :v/a/"/'a'a<CR>
+K	nnoremap x :"'aso fv/a/s/a/b/sil g/<CR>
+N	nnoremap x :s/a/b//nnoremap y Zé!ls'a\\<CR>
+K	nnoremap x : s/a/b/\\v/a/<CR>
+K	nnoremap x :ésil \\normal é"<CR>
+S	nnoremap x :so fnormal dnormal 1,v/a/v/a/<CR>
+K	nnoremap x :déd é<CR>
+K	nnoremap x :dnormal so fnormal /<CR>
+N	nnoremap x :'anormal g/so f<CR>
+K	nnoremap x :" nnoremap y Z1,/<CR>
+K	nnoremap x : 'a<Bar>1,1,<CR>
+S	nnoremap x :so fv/a/nnoremap y Z\\'a<CR>
+K	nnoremap x :s/a/b/év/a/'a<CR>
+S	nnoremap x :!ls/" so f<CR>
+K	nnoremap x :d'as/a/b/é"/<CR>
+K	nnoremap x :dnnoremap y Zg/<CR>
+N	nnoremap x :g/a//sil /normal "1,<CR>
+K	nnoremap x :sil g/a/v/a/é\\d<CR>
+K	nnoremap x :g/d1,sil <CR>
+S	nnoremap x ://<Bar>nnoremap y Znormal <CR>
+K	nnoremap x :sil  1,g/"'a<CR>
+S	nnoremap x :so f<Bar>s/a/b/1,<CR>
+K	nnoremap x : \\ <CR>
+K	nnoremap x :d'a\\<CR>
+K	nnoremap x :1,'a'a 1,<CR>
+S	nnoremap x :so f "<CR>
+S	nnoremap x :g/a/nnoremap y Zs/a/b/'as/a/b/d<CR>
+N	nnoremap x :<Bar>1,/!ls!lsé<CR>
+N	nnoremap x :normal /<CR>
+S	nnoremap x :!lss/a/b/nnoremap y Z<CR>
+K	nnoremap x :g//\\v/a/1,sil s/a/b/<CR>
+K	nnoremap x :éé/so f'a<CR>
+N	nnoremap x :normal sil 'a<Bar>dnnoremap y Z<CR>
+K	nnoremap x :'a/<CR>
+S	nnoremap x :!ls1,s/a/b/<CR>
+N	nnoremap x :normal d<CR>
+K	nnoremap x :s/a/b/normal g/a/d<Bar>é<CR>
+K	nnoremap x :1,normal sil <CR>
+S	nnoremap x :sil nnoremap y Zso fg/a/g/a/\\<CR>
+K	nnoremap x :'asil nnoremap y Zésil <CR>
+S	nnoremap x :<Bar>!lsénormal <CR>
+K	nnoremap x :1,nnoremap y Znnoremap y Zs/a/b/sil sil <CR>
+S	nnoremap x :normal <Bar>!ls<CR>
+S	nnoremap x :!ls/ <CR>
+N	nnoremap x :sil normal /nnoremap y Z <CR>
+N	nnoremap x :normal so fé'a<Bar><CR>
+S	nnoremap x :nnoremap y Z\\g/g/g/<CR>
+S	nnoremap x :so fnnoremap y Z<Bar>'ag/<CR>
+S	nnoremap x : !ls<Bar><CR>
+N	nnoremap x :g/s/a/b/so f!ls'annoremap y Z<CR>
+K	nnoremap x :sil s/a/b/so f<CR>
+S	nnoremap x :g/a/nnoremap y Z" so f<CR>
+K	nnoremap x :s/a/b/g/a/g/a/g/<CR>
+K	nnoremap x :sil /g/a/<Bar>\\so f<CR>
+K	nnoremap x :g/ "<CR>
+S	nnoremap x :<Bar>nnoremap y Z'a!ls!lsnnoremap y Z\\<CR>
+K	nnoremap x :'ag/a/s/a/b/s/a/b/<CR>
+K	nnoremap x :\\v/a/és/a/b//normal  <CR>
+N	nnoremap x :1, g/!lsnormal sil <CR>
+N	nnoremap x :v/a/normal g/'a<CR>
+S	nnoremap x :nnoremap y Zg/a/nnoremap y Z"<CR>
+K	nnoremap x :<Bar>s/a/b/v/a/1,<CR>
+K	nnoremap x :v/a/ég/a/dv/a/<CR>
+K	nnoremap x : g/a/1,1,g/v/a/v/a/<CR>
+K	nnoremap x :1,v/a/g/v/a/s/a/b/<Bar><CR>
+K	nnoremap x :énnoremap y Z/d<CR>
+K	nnoremap x :g/a/s/a/b/dé1,<CR>
+K	nnoremap x :/éso fénormal g/a/"<CR>
+N	nnoremap x :\\g/!lsg/"\\so f<CR>
+K	nnoremap x :sil /'annoremap y Z<CR>
+K	nnoremap x :/ nnoremap y Zso f <CR>
+N	nnoremap x :édsil !ls'ad/<CR>
+K	nnoremap x :/so fs/a/b/'aso f'ag/<CR>
+K	nnoremap x :s/a/b/<Bar>/1, <CR>
+K	nnoremap x :\\v/a/d/\\g/s/a/b/<CR>
+K	nnoremap x :g/"s/a/b/\\<Bar><CR>
+N	nnoremap x :'ag/'a'a!ls<CR>
+K	nnoremap x :v/a/normal <CR>
+K	nnoremap x :é'annoremap y Zés/a/b/<CR>
+K	nnoremap x :\\nnoremap y Zg/\\<CR>
+N	nnoremap x :1,s/a/b//\\!ls'a<CR>
+N	nnoremap x :'a"\\!lsso f<CR>
+K	nnoremap x :\\so f\\sil g/a/normal <CR>
+N	nnoremap x :"!lsv/a/<CR>
+K	nnoremap x :"g/a/"1,<CR>
+K	nnoremap x :'a/dé <CR>
+S	nnoremap x :g//'annoremap y Zd<CR>
+K	nnoremap x :sil d1,<CR>
+K	nnoremap x :1,/dsil nnoremap y Zés/a/b/<CR>
+K	nnoremap x :/g/a/g/<CR>
+K	nnoremap x :<Bar>dnnoremap y Znnoremap y Zsil <CR>
+S	nnoremap x :so fg/a/1,ésil so f<CR>
+K	nnoremap x :\\s/a/b/v/a/<CR>
+K	nnoremap x :'adsil 1,sil nnoremap y Z<Bar><CR>
+K	nnoremap x :'ag/a/sil <CR>
+N	nnoremap x :normal d\\ééénormal <CR>
+K	nnoremap x :\\so fd<CR>
+K	nnoremap x :v/a/'a/d<CR>
+S	nnoremap x :so f normal <CR>
+S	nnoremap x :<Bar>nnoremap y Zg/a/sil \\sil v/a/<CR>
+N	nnoremap x :1,'as/a/b/normal \\"!ls<CR>
+K	nnoremap x :dg/v/a/<CR>
+N	nnoremap x :d\\!ls<Bar>'as/a/b/<CR>
+N	nnoremap x :v/a/1,g/!ls<CR>
+S	nnoremap x :so fs/a/b/!ls1,"1,v/a/<CR>
+K	nnoremap x :/s/a/b/nnoremap y Z\\<CR>
+K	nnoremap x :g/"énnoremap y Zg/<CR>
+N	nnoremap x :g/!lssil so f <CR>
+K	nnoremap x :'a1,<Bar><CR>
+S	nnoremap x :nnoremap y Z"g/a/\\normal nnoremap y Z1,<CR>
+K	nnoremap x :dsil 1,\\normal \\<CR>
+N	nnoremap x :é\\!ls\\"<CR>
+S	nnoremap x :\\v/a/<Bar>  !lsd<CR>
+K	nnoremap x :é"\\v/a/"g/a/g/a/<CR>
+K	nnoremap x :énnoremap y Zéé<CR>
+N	nnoremap x :éso f1,!ls"dso f<CR>
+N	nnoremap x :v/a/sil normal <Bar><CR>
+K	nnoremap x :\\v/a/nnoremap y Z <CR>
+K	nnoremap x :" normal nnoremap y Z<CR>
+K	nnoremap x :\\1,'aé<CR>
+N	nnoremap x :normal "v/a/<CR>
+R	nnoremap x :dnnoremap y Z<Bar>nnoremap y Znormal /"<CR>
+S	nnoremap x :nnoremap y Z<Bar>g/a/normal sil sil <CR>
+K	nnoremap x :\\v/a/é/  <CR>
+K	nnoremap x :g/v/a/<Bar><CR>
+S	nnoremap x :nnoremap y Z s/a/b/s/a/b/v/a/s/a/b/<CR>
+N	nnoremap x :sil normal nnoremap y Z/<CR>
+K	nnoremap x :s/a/b/"é<CR>
+K	nnoremap x : g/<CR>
+K	nnoremap x :g/nnoremap y Z1,<CR>
+K	nnoremap x :\\\\'av/a/<CR>
+K	nnoremap x :s/a/b/sil \\g/<CR>
+N	nnoremap x :normal v/a/ddnormal <CR>
+K	nnoremap x :<Bar>s/a/b/g/a/é<CR>
+K	nnoremap x :1,g/1,énnoremap y Z<CR>
+K	nnoremap x :"sil <CR>
+S	nnoremap x :!lsnormal <Bar>s/a/b/<Bar><CR>
+N	nnoremap x :normal !lsg/a/éd'a<CR>
+K	nnoremap x : v/a/ é1,so fso f<CR>
+S	nnoremap x :g/normal /so f <CR>
+S	nnoremap x :v/a/so fg/a/<CR>
+K	nnoremap x :"normal normal g/g/<CR>
+N	nnoremap x :normal <Bar>é<CR>
+N	nnoremap x :é/!lsnnoremap y Zsil sil nnoremap y Z<CR>
+N	nnoremap x :g/!lséé<CR>
+R	nnoremap x :1, g/1,<Bar>so f<CR>
+K	nnoremap x :"  so fnnoremap y Zv/a/<CR>
+S	nnoremap x :<Bar>sil !ls<CR>
+K	nnoremap x :<Bar><Bar>é<CR>
+K	nnoremap x :1,\\1,<Bar>g/<Bar><CR>
+K	nnoremap x : " /1,1,normal <CR>
+S	nnoremap x :!lsé<CR>
+S	nnoremap x :nnoremap y Zdg/a/<CR>
+K	nnoremap x :1, \\1,<CR>
+S	nnoremap x :g/a/so f<Bar><CR>
+S	nnoremap x :so fg/a/é<CR>
+S	nnoremap x :so fg/a/<CR>
+S	nnoremap x :nnoremap y :!echo hi<lt>CR><CR>
+S	nnoremap x : !echo hi<CR>
+S	nnoremap x :　!echo hi<CR>
+S	panelmap dock d <Shortcut>(filesystem_dock/delete)
+S	set so=5 | nnoremap x :!id<CR>
+S	set so=5 | nmap x :action foo<CR>
+S	let mapleader="," | nnoremap x :!id<CR>
+S	set langmap=q:
+N	nnoremap x 0q!echo hi<CR>
+K	panelunmap editor.completion <Tab>
+K	panelunmap dock j
+S	panelmap dock
+S	vnoremap <Leader>f :!sort<CR>
+S	nnoremap x :e f<Cmd>m<CR><C-u>so f<Cmd>m<CR><C-u>
+S	nnoremap x :e f<Cmd>m<CR>a<BS><C-u>so f<Cmd>m<CR><C-u>
+S	nnoremap x :sof<Cmd>m<CR><Left><Cmd>m<CR><C-u>
+S	nnoremap x :sof<Left><Cmd>m<CR><Right><Cmd>m<CR><C-u>
+S	nnoremap x :w<Cmd>m<CR><Bar>nnoremap y Z<CR>
+K	nnoremap x :e res://debug/log/img/svg/config/rev/nav/dev/env/tag.gd<CR>
+K	nnoremap x :g/x/d<CR>
+K	nnoremap x :g/x/s/a/b/<CR>
+N	nnoremap x :g!/x/d<CR>
+N	nnoremap x :v/x/normal dd<CR>
+K	nnoremap x :g/so f/d<CR>
+K	nnoremap x :g/a\\/so f/d<CR>
+K	vnoremap // y/<C-r>"<CR>
+K	nnoremap x /<C-r><C-w><CR>
+K	nnoremap x ?\\<<C-r><C-a>\\><CR>
+K	nnoremap x /<C-r>/<BS><CR>
+K	nnoremap x /<C-r><Esc>a<CR>
+R	nnoremap x /\\%(\\%(\\%(\\%(<C-r>a\\%(\\%(\\%(\\%(\\%(<CR>
+K	nnoremap x :sx/x/d<CR>
+K	nnoremap x :sy/x/d<CR>
+K	nnoremap x :sx/so f/d<CR>
+K	nnoremap x :goto 5<CR>
+K	nnoremap x :grep TODO<CR>
+K	nnoremap x :vsplit<CR>
+K	nnoremap x :vertical new<CR>
+K	nnoremap x :visual res://a.gd<CR>
+K	nnoremap x :view res://a.gd<CR>
+K	nnoremap x :vnew<CR>
+K	nnoremap x :g/^$/d<CR>
+K	nnoremap x :windo set nu<CR>
+K	nnoremap x :tabdo windo set nu<CR>
+K	nnoremap x :silent keepjumps g/x/d<CR>
+N	nnoremap x :silent! windo g/x/s/a/b/g<CR>
+K	nnoremap x :bufdo silent %s/a/b/ge<CR>
+K	nnoremap x <Cmd>windo diffthis<CR>
+K	nnoremap x :%s/\\%(foo\\|bar\\)\\(baz\\)/\\1/g<CR>
+K	nnoremap x :g/\\%(a\\|b\\)/s/\\v%(c\\|d)+/e/<CR>
+K	nnoremap x :%s/fu\\%[nction]/func/g<CR>
+K	nnoremap x :g/\\v<end%[if]>/d<CR>
+K	nnoremap x :s/\\(\\(\\(\\(\\(\\(\\(\\(\\(a\\)\\)\\)\\)\\)\\)\\)\\)\\)/\\9/<CR>
+K	nnoremap x :sort<CR>
+K	nnoremap x :set so=5<CR>
+K	nnoremap x :echo 'so far'<CR>
+K	nnoremap x :tabnew so.gd<CR>
+K	nnoremap x :retab<CR>
+K	nnoremap <Leader>so :w<CR>
+K	nnoremap x <C-w>so
+K	nnoremap x :w<CR><C-w>so
+K	nnoremap x :%s/a/so/g<Left><Left>
+K	nnoremap x <Cmd>noh<CR>
+K	nnoremap x <Cmd>w<CR>
+K	nnoremap x /\\%(foo\\|bar\\)\\(baz\\)<CR>
+K	nnoremap x ?fu\\%[nction]<CR>
+K	nnoremap x d/\\v<end%[if]><CR>
+K	nnoremap x /foo<BS><BS>ar<Home>\\<<End>\\><CR>
+K	nnoremap <Leader>s /\\v
+K	inoremap <C-l> /* */<Left><Left><Left>
+K	nnoremap x :windo set nu<C-u>noh<CR>
+K	nnoremap x :g/x/d<BS>s/a/b/<CR>
+K	nnoremap x :bufdo e<Esc>:noh<CR>
+K	nnoremap x :tabdo windo set nu<Home><C-k>noh<CR>
+K	nnoremap x :%s/a/b/g<Left><Left><BS>c<CR>
+K	nnoremap x <Cmd>windo set nu<Esc><Cmd>noh<CR>
+K	cnoremap <C-x> <C-u>windo set nu
+N	nnoremap x f:w
+K	nnoremap x f:C: 0<Esc>
+K	nnoremap x ":p
+K	inoremap <C-l> <Esc>f:a
+K	nnoremap x :%s/a:b/c/g<Left><Left>
+K	nnoremap x :%s/\\v(\\d+):(\\d+)/\\2:\\1/g<CR>
+K	nnoremap x :e res://scenes/main.tscn<CR>
+K	inoremap x ::::::::::::::::
+K	inoremap x ////////////////
+R	inoremap x :::::::::::::::::
+R	inoremap x /////////////////
+N	nnoremap <Leader>w :set wrap!<CR>
+K	nnoremap <Esc><Esc> :noh<CR>
+K	nnoremap x :echo 'hi'<CR>
+K	nnoremap x <Cmd>set hlsearch!<CR>
+K	nnoremap x :set so=5 tw=80 nonumber ic?<CR>
+K	nnoremap x :setlocal fo-=t<CR>
+K	nnoremap x :windo set wrap<CR>
+K	nnoremap x :r notes.txt<CR>
+K	nnoremap x :g/TODO/d<CR>
+K	nnoremap x :e res://main.gd<CR>
+K	nnoremap x :undefined<CR>
+K	nnoremap j gj
+S	nnoremap <Leader>r :!cargo run<CR>
+K	set scrolloff=5
+K	inoremap jk <Esc>
+S	nmap k gk
+S	imap jj <Esc>
+K	nnoremap <Leader>x :ñfoo<CR>
+K	" This comment mentions :read ! and glob(
+K	set so=5 | set sw=4
+K	let mapleader="," | set so=5
+K	filetype plugin on | set et
+K	nnoremap x :echo 1 \\| echo 2<CR>
+K	" a comment | !id
+K	no j gj
+K	nn j gj
+K	vn <Leader>y "+y
+K	ino jk <Esc>
+K	ono p ip
+K	cno <C-a> <Home>
+K	
+K	" This is a comment with :! in it
+K	filetype plugin off
+K	filetype plugin on
+K	filetype plugin indent on
+K	filet off
+K	:filetype plugin off
+K	filetype plugin off " no plugins
+K	filetype off | set tw=10
+K	let g:mapleader = ","
+K	let mapleader = " "
+K	set scrolloff=5 number relativenumber
+K	noremap j gj
+K	vnoremap <Leader>y "+y
+K	onoremap p ip
+K	cnoremap <C-a> <Home>
+K	nnoremap k gk
+K	set timeoutlen=500
+K	setlocal fo-=t
+K	setl fo+=cql comments=b:##,b:#
+K	setlocal commentstring=#\\ %s
+K	setlo tw=72
+K	SETLOCAL fo-=t
+K	SET scrolloff=5
+S	set invlangremap
+S	set so=5 invlrm
+S	setlocal invlnr
+S	nnoremap x :set invlrm<CR>
+S	nnoremap x :set so=5 invlangnoremap<CR>
+S	cnoremap <Tab> langmap=q:<CR>
+S	cnoremap <Tab> lrm
+S	cnoremap <Tab> mapleader=","<CR>
+S	cnoremap x ar !echo hi<CR>
+S	cnoremap x alet mapleader=","<CR>
+S	cnoremap x let mapleader=","<Bar>
+S	cnoremap x t mapleader=","<Bar>le
+K	cnoremap <C-x> <C-u>noh<CR>
+K	cnoremap <C-x> %s//g<Left><Left>
+K	cnoremap <C-l> <C-u>
+N	cnoremap W w
+K	noremap! jk <Esc>
+S	cnoremap <CR> so f<Home><Del><CR>
+S	cnoremap x so f<Home><Del>
+S	cnoremap x set langmap=q:<Home><Del>
+S	cnoremap x let mapleader=","<Home><Del>
+S	cnoremap x ,1let mapleader=","
+S	cnoremap x ,1nnoremap y Z
+S	cnoremap <CR> <Home>so f<CR>
+S	noremap! x so f<Home><Del>
+K	cnoremap <C-e> <End>
+K	cnoremap <C-b> <Left>
+K	cnoremap jj <Esc>
+K	cnoremap <C-x> <C-u>noh
+S	nnoremap x :so f<Cmd>m<CR><C-u>
+S	nnoremap x :nnoremap y Z<Cmd>m<CR><C-u>
+S	nnoremap x :let mapleader=","<Cmd>m<CR><C-u>
+S	nnoremap x :set langmap=q:<Cmd>e!<CR><Esc>
+S	nnoremap x :sethandler <C-a> n:ide<Cmd>m<CR><C-u>
+S	vnoremap x :so f<Cmd>m<CR><C-u>
+K	nnoremap x :noh<Cmd>noh<CR><C-u>
+K	nnoremap x :<Cmd>noh<CR>
+R	nnoremap x <C-v>:<BS>so f<CR>
+S	nnoremap x <C-v>:<BS><C-w>nnoremap y Z<CR>
+S	vnoremap x :<BS>!echo hi<CR>
+S	nnoremap x <C-v>mT:<BS><C-w>nnoremap y  set langmap=q:<CR>
+S	nnoremap x f:w:so f<CR>
+S	nnoremap x f:w:nnoremap y Z<CR>
+S	nnoremap x t:j:set langmap=q:<CR>
+S	nnoremap x f:w:let mapleader=","<CR>
+K	nnoremap x :windo windo windo windo windo windo windo windo s/a/b/<CR>
+K	nnoremap x :s/\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)/b/<CR>
+K	nnoremap x :s/\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[a]]]]]]]]/b/<CR>
+K	nnoremap x :windo windo windo windo s/\\%(\\%(\\%[\\%[a]]\\)\\)/b/<CR>
+R	nnoremap x :windo windo windo windo windo windo windo windo windo s/a/b/<CR>
+R	nnoremap x :s/\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)\\)/b/<CR>
+R	nnoremap x :s/\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[a]]]]]]]]]/b/<CR>
+R	nnoremap x :windo windo windo windo s/\\%(\\%(\\%[\\%[\\%[a]]]\\)\\)/b/<CR>
+K	nnoremap x :windo windo windo windo windo windo windo windo s/a/b/<Esc>
+K	nnoremap x :s/\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)/b/<Esc>
+K	nnoremap x :s/\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[a]]]]]]]]/b/<Esc>
+K	nnoremap x :windo windo windo windo s/\\%(\\%(\\%[\\%[a]]\\)\\)/b/<Esc>
+R	nnoremap x :windo windo windo windo windo windo windo windo windo s/a/b/<Esc>
+R	nnoremap x :s/\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)\\)/b/<Esc>
+R	nnoremap x :s/\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[a]]]]]]]]]/b/<Esc>
+R	nnoremap x :windo windo windo windo s/\\%(\\%(\\%[\\%[\\%[a]]]\\)\\)/b/<Esc>
+K	nnoremap x :windo windo windo windo windo windo windo windo s/a/b/<C-u>noh<CR>
+K	nnoremap x :s/\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)/b/<C-u>noh<CR>
+K	nnoremap x :s/\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[a]]]]]]]]/b/<C-u>noh<CR>
+K	nnoremap x :windo windo windo windo s/\\%(\\%(\\%[\\%[a]]\\)\\)/b/<C-u>noh<CR>
+R	nnoremap x :windo windo windo windo windo windo windo windo windo s/a/b/<C-u>noh<CR>
+R	nnoremap x :s/\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)\\)/b/<C-u>noh<CR>
+R	nnoremap x :s/\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[a]]]]]]]]]/b/<C-u>noh<CR>
+R	nnoremap x :windo windo windo windo s/\\%(\\%(\\%[\\%[\\%[a]]]\\)\\)/b/<C-u>noh<CR>
+K	nnoremap x <Cmd>windo windo windo windo windo windo windo windo s/a/b/<Esc>
+K	nnoremap x <Cmd>s/\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)/b/<Esc>
+K	nnoremap x <Cmd>s/\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[a]]]]]]]]/b/<Esc>
+K	nnoremap x <Cmd>windo windo windo windo s/\\%(\\%(\\%[\\%[a]]\\)\\)/b/<Esc>
+R	nnoremap x <Cmd>windo windo windo windo windo windo windo windo windo s/a/b/<Esc>
+R	nnoremap x <Cmd>s/\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)\\)/b/<Esc>
+R	nnoremap x <Cmd>s/\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[\\%[a]]]]]]]]]/b/<Esc>
+R	nnoremap x <Cmd>windo windo windo windo s/\\%(\\%(\\%[\\%[\\%[a]]]\\)\\)/b/<Esc>
+S	vnoremap x :<Bar>nnoremap y Z<CR>
+S	vnoremap x :<Bar>set langmap=q:<CR>
+S	vnoremap x :<Bar>let mapleader=","<CR>
+S	vnoremap x :<Space><Bar>nnoremap y Z<CR>
+S	vnoremap x :<Bar><Bar>nnoremap y Z<CR>
+S	vnoremap x :<Bar>silent nnoremap y Z<CR>
+S	vnoremap x :a<C-u><Bar>nnoremap y Z<CR>
+S	vnoremap x :?<C-h><Bar>nnoremap y Z<CR>
+S	vnoremap x :<Home><Bar>nnoremap y <CR>
+S	vnoremap x :<Home>let mapleader=<Right>,<Del><Del><Del><Del>'<CR>
+S	nnoremap x v:<Bar>nnoremap y Z<CR>
+S	cnoremap x <Bar>nnoremap y Z
+K	vnoremap x :sort<CR>
+K	vnoremap x :s/a/b/g<CR>
+K	vnoremap x :<C-u>noh<CR>
+K	vnoremap x :<BS><BS><BS><BS><BS>noh<CR>
+K	vnoremap x :<Home>silent <End>s/a/b/<CR>
+S	nnoremap x :%g/x/so f<CR>
+S	nnoremap x :'<,'>v/x/so f<CR>
+S	nnoremap x :silent g/x/so f<CR>
+S	nnoremap x :windo g!/x/so f<CR>
+S	nnoremap x :noh<Bar>g/x/so f<CR>
+S	nnoremap x :noh\\|v/x/!ls<CR>
+S	nnoremap x :g/x/silent so f<CR>
+R	nnoremap x :g/x/ :.,+1so f<CR>
+S	nnoremap x :g/a\\/b/so f<CR>
+S	nnoremap x :g#x#so f<CR>
+S	nnoremap x :v,a\\,b,!ls<CR>
+S	nnoremap x :g!x!so f<CR>
+R	nnoremap x :g /x/so f<CR>
+S	nnoremap x :g! /x/so f<CR>
+R	nnoremap x :g\\/so f<CR>
+S	nnoremap x :g/a<Bar>b/so f<CR>
+S	nnoremap x :g!/x/so user://a.vim<CR>
+S	nnoremap x :v/x/so user://a.vim<CR>
+S	nnoremap x :g/x/!ls<CR>
+S	nnoremap x :v/x/r !ls<CR>
+S	nnoremap x :g/x/nnoremap y Z<CR>
+S	nnoremap x :v/x/set shell=/bin/evil<CR>
+S	nnoremap x :g/x/windo so f<CR>
+S	nnoremap x :g/x/v/y/so f<CR>
+R	nnoremap x :gl/x/so f<CR>
+R	nnoremap x :global/x/so f<CR>
+S	nnoremap x :global!/x/so f<CR>
+R	nnoremap x :vg/x/so f<CR>
+S	nnoremap x :vglobal/x/!ls<CR>
+S	nnoremap x <Cmd>g/x/so f<CR>
+S	nnoremap x :g/x/s/a/b/<Bar>!ls<CR>
+S	nnoremap x :g/x/d<Bar>nnoremap y Z<CR>
+S	nnoremap x :v/x/s/a/b/<Bar>so f<CR>
+S	nnoremap x :sil g/x<Bar>y/nnoremap a b<CR>
+S	nnoremap x :g/x/normal x<Bar>nnoremap a b<CR>
+S	nnoremap x :let mapleader=","<Bar>
+S	nnoremap x :set langremap<Bar>
+S	nnoremap x :set lrm<Bar>
+S	nnoremap x :setlocal langremap<Bar>
+S	nnoremap x :setglobal lrm<Bar>
+S	nnoremap x :sof<Left>
+S	nnoremap x :sof<Left><Cmd>m<CR><C-u>
+S	nnoremap x :let mapleader=","<Bar><Cmd>m<CR><C-u>
+S	nnoremap x <Cmd>let mapleader=","<Bar>
+S	vnoremap x :set langremap<Bar>
+S	nnoremap x yi':1set langremap<Home>:
+K	nnoremap x :%s//g<Left><Left>
+K	nnoremap x :e<Space>
+K	nnoremap x :ls<CR>:b<Space>
+K	nnoremap x :set<Space>
+K	nnoremap x :let<Space>
+K	nnoremap x :set tw=<Left>
+K	nnoremap x :vimgrep // **<Left><Left><Left><Left>
+N	vnoremap x :normal<Space>
+S	nnoremap x y | !id
+S	set so=5 " comment | !id
+S	set so=5 | set sw=4 | so x.vim
+S	g/x/s/a/b/|!cmd
+S	nnoremap x :nmap y Z<CR>
+S	nnoremap x :nunmap j<CR>
+S	nnoremap x :mapclear<CR>
+S	nnoremap x :iabbrev teh the<CR>
+S	nnoremap x :unabbreviate teh<CR>
+S	nnoremap x :abclear<CR>
+S	nnoremap x :sethandler n:ide<CR>
+S	nnoremap x :let mapleader = ','<CR>
+S	nnoremap x :set langmap=q:<CR>
+S	nnoremap x :setlocal shell=/bin/evil<CR>
+S	nnoremap x :setglobal kp?<CR>
+S	nnoremap x :noh<Bar>silent nnoremap y Z<CR>
+S	nnoremap x <Cmd>nnoremap y Z<CR>
+S	nnoremap x :windo nnoremap y Z<CR>
+S	nnoremap x :bufdo set mp=evil<CR>
+S	cnoremap <C-x> <C-u>nnoremap y Z<CR>
+S	nnoremap x :nnoremap y Z
+K	nnoremap x f//(<Home>%<Home>\\v<End>%(%(%(%(%(%(%(<CR>
+R	nnoremap x f//(<Home>%<Home>\\v<End>%(%(%(%(%(%(%(%(<CR>
+K	nnoremap x /\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)<CR>
+K	nnoremap x /\\v<(g<Bar>v<Bar>sx<Bar>sy<Bar>windo<Bar>bufdo<Bar>tabdo<Bar>g<Bar>v)><CR>
+R	nnoremap x /\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(\\%(a\\)\\)\\)\\)\\)\\)\\)\\)\\)<CR>
+R	nnoremap x :s/\\v<(g<Bar>v<Bar>sx<Bar>sy<Bar>windo<Bar>bufdo<Bar>tabdo<Bar>g<Bar>v)>//<CR>
+S	nnoremap x :sx/x/so user://a.vim<CR>
+S	nnoremap x :sy/x/!ls<CR>
+S	nnoremap x :sx#x#nnoremap y Z<CR>
+S	nnoremap x :sy/x/set shell=/bin/evil<CR>
+S	nnoremap x :silent sx/x/so f<CR>
+S	nnoremap x :g/x/sy/y/so f<CR>
+S	nnoremap x :windo sx/x/nnoremap y Z<CR>
+S	nnoremap x <Cmd>sy/x/so f<CR>
+S	nn! <Leader>x !ls<CR>
+R	ino <Leader>x :!rm -rf /<CR>
+S	nm <Leader>x :!rm -rf /<CR>
+S	nn <Leader>x :!rm -rf /<CR>
+S	no <Leader>x :!rm -rf /<CR>
+S	im jk <Esc>
+S	nm j gj
+S	vm <Leader>y "+y
+S	nnoremap! <Leader>x !ls<CR>
+S	nnoremap <Leader>r :Read !cat /etc/passwd<CR>
+S	nnoremap <Leader>r :READ !cat /etc/passwd<CR>
+S	nnoremap <Leader>r :R !cat /etc/passwd<CR>
+S	nnoremap <Leader>s :Source evil.txt<CR>
+S	nnoremap <Leader>s :SOURCE evil.txt<CR>
+S	nnoremap <Leader>s :So evil.txt<CR>
+S	nnoremap <Leader>s :SOU evil.txt<CR>
+S	NNOREMAP <Leader>x :!ls<CR>
+S	NMAP j gj
+S	cmap <Leader>r <C-r>=system('whoami')<CR>
+S	cnoremap <Leader>x !ls<CR>
+S	nnoremap x :echo<C-r>a<CR>
+S	nnoremap x :echo<Up><CR>
+S	nnoremap x :echo<C-f>
+S	cnoremap <C-x> <C-r>a
+R	nnoremap x ?<Up><CR>
+S	nnoremap x /<C-r>=@a<CR><CR>
+S	nnoremap <Leader>e :call execute('!rm -rf /')<CR>
+R	nnoremap <Leader>p :echo getfperm('/etc/passwd')<CR>
+R	nnoremap <Leader>s :echo getfsize('/etc/passwd')<CR>
+R	nnoremap <Leader>t :echo getftype('/tmp')<CR>
+R	nnoremap <Leader>g :echo glob('*')<CR>
+S	se lmap=q:
+S	setlocal langmap+=q:
+S	set so=5 langremap
+S	set lrm
+S	set nolangremap
+S	set langnoremap
+S	set nolnr
+S	set so=5 | set langmap=q:
+S	let g:x = "mapleader" | call system('whoami')
+S	let mapleader_hack = 1
+S	filetype plugin off | !rm
+S	filetype plugin
+S	filetype plugin off | set shell=/bin/evil
+S	filetype plugin indent on | syntax on
+S	filetype on | filetype on | !rm
+S	map! <Leader>x !ls<CR>
+S	Set shell=/bin/evil
+S	set shell=/bin/evil scrolloff=5
+S	set scrolloff=5 shell=/bin/evil
+S	set scrolloff=5 number makeprg=evil
+S	set scrolloff=5 noshell
+S	set scrolloff=5 sh=/bin/evil
+S	nnoremap <Leader>r :r !cat /etc/passwd<CR>
+S	nnoremap <Leader>x :%!sort<CR>
+S	nnoremap <Leader>x :'<,'>!sort<CR>
+S	nnoremap <Leader>x :1,$!sort<CR>
+S	nnoremap <Leader>x :.!sh<CR>
+S	!rm -rf /
+S	source res://evil.vim
+S	nnoremap <Leader>r :read !cat /etc/passwd<CR>
+S	nnoremap <Leader>r :re !cat /etc/passwd<CR>
+S	nnoremap <Leader>r :rea !cat /etc/passwd<CR>
+R	nnoremap <Leader>r :echo readfile('/etc/passwd')<CR>
+S	cmap <C-a> <Home>
+S	imap jk <Esc>
+S	nmap! j gj
+S	map j gj
+S	nmap j gj
+S	omap p ip
+S	vmap <Leader>y "+y
+S	setlocal shell=/bin/evil
+S	setl fo-=t makeprg=evil
+S	setlocal keywordprg^=evil
+S	setl noshell
+R	nnoremap x : so f<CR>
+S	nnoremap x :r !id<CR>
+S	nnoremap x :1, 2!sort<CR>
+R	nnoremap x <Cmd>!ls<CR>
+S	nnoremap <Leader>r :!python %<CR>
+S	nnoremap x :silent !ls<CR>
+S	nnoremap x :noh<Bar>!ls<CR>
+S	nnoremap x :r\t!ls<CR>
+S	nnoremap x :'a,'b!sort<CR>
+S	nnoremap x :/foo/!sort<CR>
+S	cnoremap <C-x> :!ls<CR>
+S	nnoremap x ::!ls<CR>
+S	nnoremap x <Cmd>:!ls<CR>
+S	nnoremap x :noh<Bar>:so f<CR>
+R	nnoremap <Leader>s :echo shellescape(expand('%'))<CR>
+S	nnoremap <Leader>s :so res://evil.txt<CR>
+S	nnoremap x <Cmd>source user://a.vim<CR>
+S	nnoremap x <cmd>silent so user://a.vim<CR>
+S	nnoremap x <Cmd>so<Space>user://a.vim<CR>
+S	nnoremap x <Cmd>noh<Bar>so user://a.vim<CR>
+S	nnoremap x <Cmd>!ls<CR>
+S	nnoremap x :urce user://a.vim<Home>so<CR>
+S	nnoremap x :o user://a.vim<Home>s<CR>
+S	nnoremap x :soX<BS> user://a.vim<CR>
+S	nnoremap x :sox<C-h> user://a.vim<CR>
+S	nnoremap x :source<Tab>user://a.vim<CR>
+S	nnoremap x :source<Space>user://a.vim<CR>
+S	nnoremap x :so<S-Space>user://a.vim<CR>
+S	nnoremap x :sou\tuser://a.vim<CR>
+R	nnoremap x :so<C-I>user://a.vim<CR>
+S	nnoremap x :so1<CR>
+S	nnoremap x :source!<Space>user://a.vim<CR>
+S	nnoremap x :so<CR>
+S	nnoremap x :source
+S	nnoremap <Leader>s :sou evil.txt<CR>
+S	nnoremap <Leader>s :sour evil.txt<CR>
+S	nnoremap <Leader>s :sourc evil.txt<CR>
+S	nnoremap <Leader>s :source evil.txt<CR>
+S	nnoremap <Leader>s :source res://evil.txt<CR>
+S	nnoremap x :noh<Bar>so user://a.vim<CR>
+S	nnoremap x :noh\\|so user://a.vim<CR>
+S	nnoremap x :silent so user://a.vim<CR>
+S	nnoremap x :silent!so user://a.vim<CR>
+S	nnoremap x :sil so user://a.vim<CR>
+S	nnoremap x :keepjumps so user://a.vim<CR>
+R	nnoremap x :2verbose so user://a.vim<CR>
+S	nnoremap x :windo so user://a.vim<CR>
+S	nnoremap x :<Space>so<Space>user://a.vim<CR>
+S	nnoremap x f/:so user://a.vim<CR>
+S	nnoremap x r?:so user://a.vim<CR>
+S	nnoremap x :<Tab>so user://a.vim<CR>
+S	nnoremap x :\tso user://a.vim<CR>
+S	nnoremap <silent> x :so user://a.vim<CR>
+S	cnoremap <C-x> <Home>so<Space>user://a.vim
+R	nnoremap <Leader>x :call system('rm -rf /')<CR>
+R	nnoremap <Leader>l :echo systemlist('whoami')<CR>
+S	SE shell=/bin/evil
+S	SET scrolloff=5 shell=/bin/evil
+S	SET shell=/bin/evil
+S	setlocalx fo-=t
+S	setg shell=x
+S	sethandler <C-a> n:host
+R	nnoremap <Leader>w :call writefile(['pwned'], '/tmp/evil')<CR>
+S	nnoremap x :!echo hi<CR>
+S	nnoremap x f/:!echo hi<CR>
+S	nnoremap x t/:!echo hi<CR>
+S	nnoremap x $F/:!echo hi<CR>
+S	nnoremap x $T/:!echo hi<CR>
+S	nnoremap x f?:!echo hi<CR>
+S	nnoremap x df/:!echo hi<CR>
+S	nnoremap x r/:!echo hi<CR>
+S	nnoremap x m/:!echo hi<CR>
+S	nnoremap x @/:!echo hi<CR>
+S	nnoremap x "/:!echo hi<CR>
+S	nnoremap x `/:!echo hi<CR>
+S	nnoremap x '/:!echo hi<CR>
+S	nnoremap x $f/:!echo hi<CR>
+S	nnoremap x r?:!echo hi<CR>
+S	nnoremap x f/:nnoremap y :!echo hi<lt>CR><CR>
+S	nnoremap x f:w:!echo hi<CR>
+S	nnoremap x t:j:!echo hi<CR>
+S	nnoremap x wya:x:!echo hi<CR>
+S	nnoremap x c:xif:!echo hi<CR>
+S	nnoremap x d:T<Del>*w:<Left>!echo hi
+S	nnoremap x :g/a/s/a/b/<Bar>!echo hi<CR>
+S	vnoremap x :<Bar>nnoremap y <lt>Cmd>!echo hi<lt>CR><CR>
+S	nnoremap x v:<Bar>nnoremap y <lt>Cmd>!echo hi<lt>CR><CR>
+S	cnoremap x <Bar>nnoremap y <lt>Cmd>!echo hi<lt>CR>
+S	nnoremap x :!echo hi<Cmd>m<CR><C-u>
+S	nnoremap x :!echo hi<Cmd>e!<CR><Esc>
+S	nnoremap x :noh!echo hi<Home><Right><Right><Right>
+S	nmap Q iBAD<Esc>
+S	nnoremap K :!ls<CR>
+K	set tw=10
+S	set so=5 | !ls
+K	" [sandbox] stripped: nmap Q x
