@@ -156,6 +156,10 @@ pub(super) fn handle_external_command(id: HostRequestId, command: &str) -> HostR
 /// multi-line text) and piped via `cat`/`type` to the filter command. Stderr
 /// is discarded so it cannot corrupt the replacement text.
 pub(super) fn handle_filter(id: HostRequestId, input_text: &str, command: &str) -> HostResult {
+    // `!{motion}` sends no command; Vim runs nothing then (ex_cmds.c, do_bang()).
+    if command.trim().is_empty() {
+        return host_failure(id, "E34: No previous command");
+    }
     let windows = is_windows();
     let temp_result = write_temp_input(input_text);
     let (exit_code, output) = match temp_result {
@@ -363,6 +367,51 @@ fn starts_with_outdent_keyword(trimmed: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Vim runs no shell for a filter with no command (ex_cmds.c, do_bang()
+    /// and do_filter()); the range must be left as it is.
+    #[test]
+    fn empty_filter_command_runs_nothing() {
+        for command in ["", " \t"] {
+            let result = handle_filter(HostRequestId::new(1), "keep\n", command);
+            match result {
+                HostResult::Failure { error, .. } => {
+                    assert_eq!(error.as_str(), "E34: No previous command");
+                }
+                other => panic!("{command:?}: expected a failure, got {other:?}"),
+            }
+        }
+    }
+
+    /// `!!` sends a filter with no command; answered here, the line stays.
+    #[test]
+    fn bang_bang_leaves_the_line() {
+        use vim_core::execution::{HostRequest, HostSession};
+        use vim_core::keymap::KeyEvent;
+        use vim_core::state::StatusMessage;
+
+        let mut session = HostSession::new("keep\nmore\n");
+        let mut requests = Vec::new();
+        for _ in 0..2 {
+            requests.extend(session.process_key_host(KeyEvent::char('!')).host_requests);
+        }
+        let Some(HostRequest::FilterDocumentRange {
+            input_text,
+            command,
+            ..
+        }) = requests.first()
+        else {
+            panic!("expected a filter request, got {requests:?}");
+        };
+        let result = handle_filter(requests[0].id(), input_text.as_str(), command.as_str());
+        let response = session.complete_request_host(&result);
+        assert_eq!(session.text(), "keep\nmore\n");
+        assert!(
+            matches!(&response.message, Some(StatusMessage::Error(m)) if m.contains("E34")),
+            "{:?}",
+            response.message
+        );
+    }
 
     #[test]
     fn no_single_quotes_unchanged() {
