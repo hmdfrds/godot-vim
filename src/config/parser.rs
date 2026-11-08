@@ -150,9 +150,13 @@ fn parse_preset_marker(line: &str) -> Option<(String, bool)> {
 }
 
 /// Try to parse a line as a mapping command. Unmap variants are not yet
-/// recognized and fall through to `ConfigLine::Other`.
+/// recognized and fall through to `ConfigLine::Other`, and so does a line
+/// of more than one command, which the dialog keeps as written.
 fn try_parse_mapping_command(line: &str) -> Option<ParsedMapping> {
     let (prefix, noremap, rest) = parse_map_command_prefix(line)?;
+    if vim_core::grammar::split_ex_pipeline(line).len() > 1 {
+        return None;
+    }
 
     let rest = rest.trim();
     if rest.is_empty() {
@@ -514,6 +518,34 @@ nnoremap <Space>r :run<CR>
         assert!(matches!(doc.lines[4], ConfigLine::Setting(_)));
     }
 
+    /// vim-core splits a map command at a bare `|` (help `map_bar`), so a
+    /// line it splits is more than a mapping and is kept as written.
+    #[test]
+    fn a_line_of_several_commands_is_kept_verbatim() {
+        for line in [
+            "nnoremap x :echo 1|echo 2<CR>",
+            "nnoremap <leader>y :echo \"a|b\"<CR>",
+            "\" disabled: nnoremap x a|b",
+        ] {
+            let text = format!("{line}\n");
+            let doc = parse_config(&text);
+            assert!(
+                matches!(
+                    &doc.lines[..],
+                    [ConfigLine::Other(kept) | ConfigLine::Comment(kept)] if kept == line
+                ),
+                "{line}: {doc:?}"
+            );
+            assert_eq!(super::super::writer::serialize(&doc), text);
+        }
+        for line in ["nnoremap x :echo 1<Bar>echo 2<CR>", "nnoremap x a\\|b"] {
+            assert!(
+                matches!(&parse_config(line).lines[..], [ConfigLine::Mapping(_)]),
+                "{line}"
+            );
+        }
+    }
+
     #[test]
     fn disabled_user_mapping_roundtrip() {
         use super::super::types::ConfigDocument;
@@ -707,6 +739,9 @@ mod roundtrip_props {
             "panelmap dock j :!rm -rf /",
             "panelmapping dock j godotvim.item.next",
             "some_custom_thing",
+            "nnoremap x :echo 1<Bar>echo 2<CR>",
+            "nnoremap x :echo 1|echo 2<CR>",
+            "\" disabled: nnoremap x a|b",
         ];
         proptest::collection::vec(proptest::sample::select(RAW), 0..14).prop_map(|lines| {
             let mut text = lines.join("\n");

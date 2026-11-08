@@ -5,6 +5,93 @@ fresh install.
 
 ## From v1.9.3
 
+**Your vimrc now runs in full, and you see what fails.** Lines that
+GodotVim used to skip without a word now run, or report an error with the
+file and line, in Output (`user://.godot-vimrc:12: E492: Not an editor
+command: Foo`) and in `:messages`. Output shows them with Log Level at its
+default `Off`, the first 100 of a load and then how many more. The status
+bar says "Config file sourced" only when nothing failed; otherwise it
+counts the errors and the commands the Sandbox refused, and a config
+loaded at startup shows its count when the first script opens. A ported
+terminal vimrc can report many errors the first time: read them in Output
+and fence what is Vim-only, as below.
+
+**Vim commands GodotVim lacks report an error.** `syntax on`,
+`colorscheme`, `autocmd`, `highlight` and `call` give `E319: Sorry, the
+command is not available in this version`, and a misspelt command gives
+`E492`. Editor commands do not run from a vimrc: `:w`, `:e`, `:q`, `:!`,
+buffer and window commands, and GodotVim's own commands such as `:run`
+give `E523: Not allowed here`. A mapping to them works as before. Options
+GodotVim lacks, such as `set nocompatible` or `set mouse=a`, are accepted
+without a word where they gave E518.
+
+**Fence the Vim-only parts with `has()`.** `:if`, `:elseif`, `:else` and
+`:endif` work in a vimrc, and `has('godot')` is true in GodotVim, so one
+file can serve both:
+
+```vim
+if !has('godot')
+  syntax on
+  colorscheme desert
+endif
+```
+
+**A bare `|` ends a mapping, as in Vim.** `nnoremap <leader>y :echo
+"a|b"<CR>` maps `<leader>y` to `:echo "a` and reports `E471: Argument
+required` for the rest. Write `<Bar>` or `\|` for a `|` inside a mapping.
+The Mapping Dialog now writes `<Bar>` for a `|` you type, and keeps a line
+that holds several commands as you wrote it.
+
+**`let mapleader = "\<Space>"` works.** It makes Space the leader. Without
+the backslash, `"<Space>"` is a leader of seven keys, `<`, `S`, `p`, `a`,
+`c`, `e` and `>`, as in Vim. `let mapleader = " "` works too.
+
+**Reloading starts from a clean slate.** `:source`, saving key mappings
+and startup now also clear abbreviations and `:sethandler` keys and reset
+the leader to `\` before the file runs, as they already cleared mappings,
+so a line you delete takes effect. Options keep their values, as in Vim.
+The default multi-cursor bindings (`<C-S-Down>`, `<leader>mn` and the
+rest) are now installed when there is no vimrc, and when Project Vimrc is
+`Disabled`. In your own vimrc, `iabbrev` and the other abbreviation lines
+now load.
+
+**The project vimrc Sandbox judges what runs.** Under the default Sandbox
+policy a committed `res://.godot-vimrc` is no longer commented out line by
+line. GodotVim reads each command as it will run and allows or refuses
+that command; a refused one is listed in Output with its line and reason
+(`res://.godot-vimrc:7: E48: Not allowed in sandbox: nnoremap <leader>d
+:normal dd<CR> (runs keys)`), and the file is not changed. Refused now,
+though v1.9.3 kept them:
+
+- `<expr>` mappings, and mappings whose keys run a register (`@a`, `:@a`);
+- the `!` filter (`!ip`), `:normal`, and the command-line window (`q:`);
+- writes to a named file (`:w other.gd`) and `:mkvimrc`;
+- `:action` and `<Action>(...)` with a Godot editor shortcut such as
+  `editor/save_scene`; GodotVim's own `godotvim.*` actions still pass;
+- mappings to GodotVim's own commands (`:run`, `:save`,
+  `:GodotBreakpoint`, ...), which most of the presets use.
+
+Allowed now, though v1.9.3 stripped them: `:mapclear`, `:echo`, `:noh`,
+`:if` blocks, a `\` line continuing the line before it (judged with that
+line), and a `|` inside a `:set` comment. To keep a refused line, put it in
+your own vimrc, `user://.godot-vimrc` or the file named by Mapping >
+Config File Path, which are trusted. Only one file is read and
+`res://.godot-vimrc` wins over `user://.godot-vimrc`, so in a project with
+a committed vimrc use Config File Path, or set Security > Project Vimrc to
+`Trusted` for a project you trust.
+
+**`:g` and `:v` run the rest of the line.** Every `|` command after the
+pattern runs on each matching line in turn, so `:g/^/m0` reverses the
+lines. A command line splits at `|` as in Vim, and an error ends it:
+`:set nosuch | set ic` leaves 'ignorecase' off.
+
+**`:set` stops at its first bad argument**, with Vim's message, and
+`:set inv{option}` inverts the option. 'langremap' is on by default, as in
+Vim.
+
+**`i<Esc>` leaves no undo step**, so a `u` after it undoes the change
+before.
+
 **`u` after a macro that only moves undoes the change before it.** After
 `x`, a macro that changes nothing, such as one recorded with `qqjq` and
 played with `@q`, left the next `u` with nothing to undo. Now `u` restores

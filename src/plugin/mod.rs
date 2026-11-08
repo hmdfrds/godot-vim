@@ -32,9 +32,9 @@ use godot::classes::{
 use godot::global::Key;
 use godot::prelude::*;
 
-use crate::config::source::Loaded;
 use crate::controller::VimController;
 use crate::safety::{install_panic_hook, panic_guard};
+use source_cmd::LoadTarget;
 
 use floating::{disconnect_viewport_signals, TrackedWindow};
 use signals::{SIG_CONFIG_SAVED, SIG_TREE_EXITED, SIG_WINDOW_VISIBILITY_CHANGED};
@@ -1021,7 +1021,7 @@ impl GodotVimCore {
         let ok = panic_guard(
             "on_config_saved",
             || {
-                let loaded = self.source_config_from_disk("on_config_saved");
+                let loaded = self.load_vimrc(LoadTarget::Active, "on_config_saved");
                 let path = self.resolve_config_path().path;
                 if let Some(controller) = &mut self.controller {
                     controller.show_status(crate::config::source::status(&path, loaded));
@@ -1574,40 +1574,15 @@ impl GodotVimCore {
                 c.apply_settings(&s);
             }
         }
-        self.source_config_from_disk(caller);
-    }
-
-    /// Load the active vimrc from disk, apply the project-vimrc security
-    /// policy, and reload it into the engine.
-    fn source_config_from_disk(&mut self, caller: &str) -> Loaded {
-        let resolved = self.resolve_config_path();
-        let loaded = match crate::config::writer::read_file(&resolved.path) {
-            // No file: the engine keeps whatever options it has, so the caches
-            // below must be reconciled too, or a deleted vimrc leaves a stale
-            // table.
-            None => Loaded::Missing,
-            Some(text) => match crate::config::sandbox::apply_vimrc_policy(
-                &text,
-                resolved.is_project_level,
-                self.project_vimrc(),
-            ) {
-                None => Loaded::Disabled,
-                Some(policed) => {
-                    if let Some(controller) = &mut self.controller {
-                        controller.reload_config(&policed.text);
-                        log::info!("{caller}: sourced config from '{}'", resolved.path);
-                    }
-                    self.refresh_filetype_setup();
-                    Loaded::Sourced {
-                        stripped: policed.stripped,
-                        ignored_panel_lines: 0,
-                    }
-                }
-            },
-        };
-        self.rebuild_langmap();
-        self.rebuild_bindings();
-        loaded
+        let loaded = self.load_vimrc(LoadTarget::Active, caller);
+        // A clean load at startup is not news; a problem is shown, at the
+        // first attach when detached.
+        if loaded.has_problems() {
+            let path = self.resolve_config_path().path;
+            if let Some(controller) = &mut self.controller {
+                controller.show_status(crate::config::source::status(&path, loaded));
+            }
+        }
     }
 
     fn project_vimrc(&self) -> crate::settings::ProjectVimrc {
@@ -1625,11 +1600,9 @@ impl GodotVimCore {
     /// The swap is what makes it atomic: a fresh index is built to completion
     /// and only then installed, so one broken line can never leave a half-built
     /// table live.
-    fn rebuild_bindings(&mut self) {
+    fn rebuild_bindings(&mut self, lines: &[(u32, String)], source: &str) {
         let generation = self.bindings.generation.wrapping_add(1);
-        let text = self.read_sandboxed_config();
-        let source = self.resolve_config_path().path;
-        let (mut index, diagnostics) = build_index(&self.actions, text.as_deref(), &source);
+        let (mut index, diagnostics) = build_index(&self.actions, lines, source);
         for d in &diagnostics {
             // Warn-and-skip per line: one bad binding must not cost the user
             // the rest of their config. The log is the *secondary* channel and
@@ -1652,21 +1625,6 @@ impl GodotVimCore {
             "panelmap: rebuilt {} binding(s) at generation {generation}",
             self.bindings.len()
         );
-    }
-
-    /// The active vimrc's text, after the project-vimrc security policy.
-    ///
-    /// `None` when no config file exists — the zero-config case, where the
-    /// shipped defaults are the whole keyset.
-    fn read_sandboxed_config(&self) -> Option<String> {
-        let resolved = self.resolve_config_path();
-        let text = crate::config::writer::read_file(&resolved.path)?;
-        crate::config::sandbox::apply_vimrc_policy(
-            &text,
-            resolved.is_project_level,
-            self.project_vimrc(),
-        )
-        .map(|policed| policed.text)
     }
 
     /// `:panelmap` and `:panelmap <lhs>` — the introspector.
@@ -1829,19 +1787,18 @@ impl GodotVimCore {
 /// caller keeps needs `&mut self`, so the two could not be tested together at
 /// any price.
 ///
-/// `text` is the vimrc **after** the project-vimrc security policy, and `None`
-/// covers three states that must all behave identically: no config file at
-/// all, `ProjectVimrc::Disabled`, and a file the sandbox rejected outright.
-/// Applying the builtins outside that `if` is the whole reason it is a
-/// parameter rather than something read here — the naive placement means a
-/// security setting, or simply having no config, destroys the builtin
-/// Ctrl+hjkl defaults.
+/// `lines` are the panel lines the load policy claimed from the active
+/// vimrc, with their line numbers. No lines covers three states that must
+/// all behave identically: no config file at all, `ProjectVimrc::Disabled`,
+/// and a file whose panel lines were all refused. The builtins are applied
+/// whatever `lines` holds, or a security setting, or simply having no
+/// config, would destroy the builtin Ctrl+hjkl defaults.
 ///
 /// `source` is only ever a diagnostic label: it is what a rejected line is
 /// reported against, so `:panelmap` can name the file and the line number.
 fn build_index(
     registry: &crate::actions::action::ActionRegistry,
-    text: Option<&str>,
+    lines: &[(u32, String)],
     source: &str,
 ) -> (
     crate::actions::bind::BindingIndex,
@@ -1853,17 +1810,15 @@ fn build_index(
     // `config::path::resolve` picks exactly one vimrc (EditorSettings
     // override, else res://, else user://), never several. Layering between
     // files is not a thing here and must not become one.
-    if let Some(text) = text {
-        crate::actions::bind::apply_text(
-            &mut index,
-            registry,
-            text,
-            &vim_core::keymap::MappingOwner::User,
-            source,
-            crate::actions::bind::Provenance::User,
-            &mut diagnostics,
-        );
-    }
+    crate::actions::bind::apply_lines(
+        &mut index,
+        registry,
+        lines.iter().map(|(line, text)| (*line, text.as_str())),
+        &vim_core::keymap::MappingOwner::User,
+        source,
+        crate::actions::bind::Provenance::User,
+        &mut diagnostics,
+    );
     (index, diagnostics)
 }
 
@@ -1872,10 +1827,14 @@ mod build_index_tests {
     use super::build_index;
     use crate::actions::specs;
 
+    fn lines(text: &str) -> Vec<(u32, String)> {
+        (1..).zip(text.lines().map(str::to_owned)).collect()
+    }
+
     /// The shipped keyset with no user config at all — the zero-config case.
     fn builtin_count() -> usize {
         let reg = specs::registry();
-        build_index(&reg, None, "user://.godot-vimrc").0.len()
+        build_index(&reg, &[], "user://.godot-vimrc").0.len()
     }
 
     #[test]
@@ -1889,7 +1848,7 @@ mod build_index_tests {
             "the builtin defaults must load with no vimrc"
         );
         let reg = specs::registry();
-        let (index, diagnostics) = build_index(&reg, None, "user://.godot-vimrc");
+        let (index, diagnostics) = build_index(&reg, &[], "user://.godot-vimrc");
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
         assert!(
             index
@@ -1900,20 +1859,11 @@ mod build_index_tests {
     }
 
     #[test]
-    fn an_empty_vimrc_is_indistinguishable_from_no_vimrc() {
-        let reg = specs::registry();
-        assert_eq!(
-            build_index(&reg, Some(""), "user://.godot-vimrc").0.len(),
-            builtin_count()
-        );
-    }
-
-    #[test]
     fn a_user_line_layers_on_top_of_the_builtins() {
         let reg = specs::registry();
         let (index, diagnostics) = build_index(
             &reg,
-            Some("panelmap dock q godotvim.item.activate\n"),
+            &lines("panelmap dock q godotvim.item.activate\n"),
             "user://.godot-vimrc",
         );
         assert!(diagnostics.is_empty(), "{diagnostics:?}");
@@ -1941,7 +1891,7 @@ mod build_index_tests {
         let reg = specs::registry();
         let (index, diagnostics) = build_index(
             &reg,
-            Some(
+            &lines(
                 "panelmap dock q godotvim.item.activate\n\
                  panelmap dock w godotvim.item.nextt\n",
             ),

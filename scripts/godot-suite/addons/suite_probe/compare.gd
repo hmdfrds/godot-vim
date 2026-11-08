@@ -42,6 +42,10 @@ const INPUT_FIELDS := [
 # a message, reads as no mode.
 const MODE_RE := "^(?:recording @. )?(NORMAL|INSERT|VISUAL|V-LINE|V-BLOCK|SELECT|S-LINE|S-BLOCK|REPLACE|V-REPLACE|COMMAND|OP-PENDING)(?: \\(\\d+ cursors\\))?(?:  .+)?$"
 
+# The vimrc load report a startup with errors or refusals leaves in the
+# status bar of the first editor (src/config/source.rs, `status`).
+const LOAD_REPORT_RE := "(?:; see Output or :messages|panel keys come from the active config only)$"
+
 const HARNESS_RE := "^(?:now|confirm|reopen|wait(?::\\d+)?|(?:snap|set):[a-z0-9_-]+)$"
 
 
@@ -170,6 +174,10 @@ static func types_plain_key(toks: PackedStringArray) -> bool:
 		if t.length() == 1:
 			return true
 	return false
+
+
+static func is_load_report(bar: Variant) -> bool:
+	return typeof(bar) == TYPE_STRING and RegEx.create_from_string(LOAD_REPORT_RE).search(bar) != null
 
 
 static func mode_of(bar: Variant) -> Variant:

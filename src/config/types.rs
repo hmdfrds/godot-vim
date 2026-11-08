@@ -268,7 +268,31 @@ pub(crate) fn mapping_to_vim_command(m: &ParsedMapping) -> String {
         "map"
     };
     let prefix = mode_prefix_str(m.modes);
-    format!("{prefix}{noremap_str} {} {}", m.lhs, m.rhs)
+    format!(
+        "{prefix}{noremap_str} {} {}",
+        escape_bar(&m.lhs),
+        escape_bar(&m.rhs)
+    )
+}
+
+/// `keys` with each `|` that would end the map command written `<Bar>`.
+/// A `|` after `\` or CTRL-V is already part of the mapping (Vim's
+/// `map_bar`; ex_docmd.c `separate_nextcmd()`).
+fn escape_bar(keys: &str) -> std::borrow::Cow<'_, str> {
+    if !keys.contains('|') {
+        return keys.into();
+    }
+    let mut out = String::with_capacity(keys.len() + 8);
+    let mut escaped = false;
+    for c in keys.chars() {
+        if c == '|' && !escaped {
+            out.push_str("<Bar>");
+        } else {
+            out.push(c);
+        }
+        escaped = matches!(c, '\\' | '\u{16}');
+    }
+    out.into()
 }
 
 #[cfg(test)]
@@ -369,6 +393,25 @@ mod tests {
             kind: MappingKind::Recursive,
         };
         assert_eq!(mapping_to_vim_command(&m), "map <Leader>w :save<CR>");
+    }
+
+    /// A bare `|` ends a map command in Vim, so a `|` typed into the dialog
+    /// is written as `<Bar>`; one after `\\` or CTRL-V is already part of
+    /// the mapping (help `map_bar`; ex_docmd.c `separate_nextcmd()`).
+    #[test]
+    fn a_bar_in_a_mapping_is_written_as_bar() {
+        let m = ParsedMapping {
+            lhs: "<Leader>|".to_string(),
+            rhs: ":echo \"a|b\"<CR>a\\|b\u{16}|".to_string(),
+            modes: MapModePrefix::Normal,
+            kind: MappingKind::NonRecursive,
+        };
+        let line = mapping_to_vim_command(&m);
+        assert_eq!(
+            line,
+            "nnoremap <Leader><Bar> :echo \"a<Bar>b\"<CR>a\\|b\u{16}|"
+        );
+        assert_eq!(vim_core::grammar::split_ex_pipeline(&line).len(), 1);
     }
 
     #[test]
