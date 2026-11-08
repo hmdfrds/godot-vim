@@ -4,6 +4,8 @@
 //! shell commands are silently removed. This prevents a malicious
 //! `res://.godot-vimrc` from executing arbitrary commands on keypress.
 
+use super::policy::{is_blocked_option, panel_line_is_safe};
+
 /// Vim built-in functions that enable shell execution, file system access,
 /// or indirect code evaluation. Case-sensitive because Vim functions are
 /// case-sensitive (unlike ex-commands).
@@ -240,114 +242,7 @@ fn is_safe_command(trimmed: &str, reserve: &mut usize) -> bool {
         || (crate::config::panelmap::is_panel_line(trimmed) && panel_line_is_safe(trimmed))
 }
 
-/// Options that can execute shell commands or exfiltrate data, and the
-/// `langmap` family, which turns a key a right-hand side types into `:`.
-/// Both long and short forms must be listed (Vim accepts either).
-const BLOCKED_SET_OPTIONS: &[&str] = &[
-    "shell",
-    "sh",
-    "shellcmdflag",
-    "shcf",
-    "shellpipe",
-    "sp",
-    "shellredir",
-    "srr",
-    "shellquote",
-    "shq",
-    "shellxquote",
-    "sxq",
-    "shellxescape",
-    "sxe",
-    "makeprg",
-    "mp",
-    "grepprg",
-    "gp",
-    "equalprg",
-    "ep",
-    "formatprg",
-    "fp",
-    "keywordprg",
-    "kp",
-    "langmap",
-    "lmap",
-    "langremap",
-    "lrm",
-    "langnoremap",
-    "lnr",
-];
-
-/// Extract the option name from a `set` token, stripping value delimiters
-/// (`=`, `?`, `!`, etc.) and the `no` or `inv` prefix (`noshell` -> `shell`).
-fn extract_option_name_from_token(token: &str) -> &str {
-    let name = token
-        .split(['=', '?', '!', '+', '-', '^', ':'])
-        .next()
-        .unwrap_or("");
-    name.strip_prefix("no")
-        .or_else(|| name.strip_prefix("inv"))
-        .unwrap_or(name)
-}
-
-/// Whether a `set` token, or an option name, names a blocked option.
-fn is_blocked_option(token: &str) -> bool {
-    let name = extract_option_name_from_token(token);
-    BLOCKED_SET_OPTIONS
-        .iter()
-        .any(|blocked| name.eq_ignore_ascii_case(blocked))
-}
-
 /// Whitelist check for non-mapping lines that are safe to pass through.
-/// Whether a `panelmap` / `panelunmap` line is safe to honour from a
-/// project-level vimrc, which is committed and therefore attacker-supplied.
-///
-/// The parser is the arbiter, not a regex: a line that does not parse is not
-/// safe, because "unparseable" and "harmless" are different claims.
-///
-/// The rule is about the RIGHT-hand side, and it holds because that side is a
-/// **closed vocabulary**:
-///
-/// - `Action(id)` — a registered action id plus integer-only params. It
-///   cannot expand into `:!`, `:source`, or a recursive mapping chain, which
-///   is precisely why this module strips recursive maps unconditionally. An
-///   unregistered id is rejected at load, so the worst case is a dead key.
-/// - `native` — the give-back. Legal at EVERY trust tier because it can only
-///   *reduce* what the plugin consumes; a hostile project can at most hand
-///   keys back to Godot.
-/// - `<Shortcut>(path)` — DENIED here. It invokes an arbitrary Godot editor
-///   command by name: an open vocabulary, and outside anything this plugin
-///   can reason about.
-///
-/// `panelunmap` is always safe — it can only remove a binding.
-fn panel_line_is_safe(trimmed: &str) -> bool {
-    use crate::config::panelmap::{parse_panel_line, PanelLine, TargetSpec};
-    match parse_panel_line(trimmed) {
-        Ok(Some(PanelLine::Unmap { .. })) => true,
-        Ok(Some(PanelLine::Map(ref m))) => {
-            !matches!(m.target, TargetSpec::Shortcut(_))
-                // An `editor.*` surface is live while the VIM ENGINE owns the
-                // keyboard, and the engine is the only route out of Insert
-                // mode. `editor.completion` is the first such surface to carry
-                // rules, and a rule there that accepts consumes the key:
-                // `panelmap editor.completion <Esc> godotvim.completion.trigger`
-                // parses, is admitted by every other clause here, registers,
-                // resolves on every insert-like keystroke because TRIGGER
-                // requires nothing, returns `Handled`, and `Elastic` consumes.
-                // Escape is then dead until the vimrc is edited, which breaks
-                // this module's own invariant that a hostile project can at
-                // worst produce a DEAD KEY.
-                //
-                // Deliberately broader than `<void>`: consumption follows from
-                // acceptance, not from the flag. Deliberately narrower than
-                // "no panel lines": every non-`editor.` surface, and
-                // `panelunmap` on any surface, are unaffected. The user's own
-                // vimrc is not sandboxed and keeps the rope.
-                && !m.surface.starts_with("editor.")
-        }
-        // Anything that fails to parse is stripped rather than trusted.
-        Ok(None) | Err(_) => false,
-    }
-}
-
 fn is_safe_non_mapping_line(trimmed: &str) -> bool {
     if trimmed.is_empty() {
         return true;
@@ -1619,9 +1514,23 @@ fn matches_ex_pattern(text: &str, min: &str, full: &str, tail: Tail) -> bool {
     })
 }
 
+/// For each line of `text`, whether the Sandbox strips it.
+pub(crate) fn stripped_lines(text: &str) -> Vec<bool> {
+    let filtered = sandbox(text);
+    if filtered.stripped == 0 {
+        return vec![false; text.lines().count()];
+    }
+    // One line out for each line in, unchanged when it is kept.
+    text.lines()
+        .zip(filtered.text.lines())
+        .map(|(line, out)| line != out)
+        .collect()
+}
+
 /// Apply the project vimrc security policy. Returns `None` to block loading
 /// entirely (Disabled), or the sanitized content (Sandbox) or unchanged text
 /// (Trusted / user-level).
+#[cfg(test)]
 pub(crate) fn apply_vimrc_policy(
     text: &str,
     is_project_level: bool,
@@ -1650,6 +1559,7 @@ pub(crate) fn apply_vimrc_policy(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::policy::extract_option_name_from_token;
 
     fn sandbox_config_text(text: &str) -> String {
         sandbox(text).text

@@ -133,18 +133,30 @@ pub(crate) enum Loaded {
     /// A project file under Project Vimrc `Disabled`: nothing was sourced.
     Disabled,
     Sourced {
-        /// Lines disabled by the Sandbox policy.
-        stripped: usize,
+        /// Errors other than the Sandbox's refusals.
+        errors: u32,
+        /// Commands the Sandbox policy refused.
+        refused: u32,
         /// `panelmap` lines in a file other than the active config, which
         /// alone builds the panel binding table.
         ignored_panel_lines: usize,
     },
 }
 
-/// The status line after loading `path`. `None` keeps the engine's own
-/// "Config file sourced".
+impl Loaded {
+    /// Sourced, with something the user should hear about.
+    pub(crate) const fn has_problems(self) -> bool {
+        matches!(
+            self,
+            Self::Sourced { errors, refused, ignored_panel_lines }
+                if errors > 0 || refused > 0 || ignored_panel_lines > 0
+        )
+    }
+}
+
+/// The status line after loading `path`.
 pub(crate) fn status(path: &str, loaded: Loaded) -> StatusMessage {
-    let (stripped, ignored) = match loaded {
+    let (errors, refused, ignored) = match loaded {
         Loaded::Missing => {
             return StatusMessage::Error(format_vim!("E484: Can't open file {path}"));
         }
@@ -154,25 +166,40 @@ pub(crate) fn status(path: &str, loaded: Loaded) -> StatusMessage {
             ));
         }
         Loaded::Sourced {
-            stripped,
+            errors,
+            refused,
             ignored_panel_lines,
-        } => (stripped, ignored_panel_lines),
+        } => (errors, refused, ignored_panel_lines),
     };
-    let mut text = VimString::from("Config file sourced");
-    if stripped > 0 {
-        let _ = write!(text, ", {stripped} line(s) skipped by the Sandbox policy");
+    if !loaded.has_problems() {
+        return StatusMessage::Info("Config file sourced".into());
     }
+    let mut counts = Vec::new();
+    if errors > 0 {
+        counts.push(plural(errors, "error", "errors"));
+    }
+    if refused > 0 {
+        counts.push(format!(
+            "{} refused by the Sandbox policy",
+            plural(refused, "command", "commands")
+        ));
+    }
+    let mut text = if counts.is_empty() {
+        VimString::from("Config file sourced")
+    } else {
+        format_vim!("{path}: {}; see Output or :messages", counts.join(", "))
+    };
     if ignored > 0 {
         let _ = write!(
             text,
             ", {ignored} panelmap line(s) ignored: panel keys come from the active config only"
         );
-        StatusMessage::Error(text)
-    } else if stripped > 0 {
-        StatusMessage::Info(text)
-    } else {
-        StatusMessage::None
     }
+    StatusMessage::Error(text)
+}
+
+fn plural(count: u32, one: &str, many: &str) -> String {
+    format!("{count} {}", if count == 1 { one } else { many })
 }
 
 #[cfg(test)]
@@ -371,19 +398,24 @@ mod tests {
     }
 
     #[test]
-    fn a_clean_load_leaves_the_engines_message() {
+    fn a_clean_load_says_so() {
         let clean = Loaded::Sourced {
-            stripped: 0,
+            errors: 0,
+            refused: 0,
             ignored_panel_lines: 0,
         };
-        assert_eq!(status("user://.godot-vimrc", clean), StatusMessage::None);
+        assert_eq!(
+            status("user://.godot-vimrc", clean),
+            StatusMessage::Info("Config file sourced".into())
+        );
     }
 
     #[test]
     fn every_other_outcome_is_named() {
         let path = "res://.godot-vimrc";
-        let sourced = |stripped, ignored_panel_lines| Loaded::Sourced {
-            stripped,
+        let sourced = |errors, refused, ignored_panel_lines| Loaded::Sourced {
+            errors,
+            refused,
             ignored_panel_lines,
         };
         assert_eq!(
@@ -397,13 +429,27 @@ mod tests {
             )
         );
         assert_eq!(
-            status(path, sourced(2, 0)),
-            StatusMessage::Info(
-                "Config file sourced, 2 line(s) skipped by the Sandbox policy".into()
+            status(path, sourced(3, 2, 0)),
+            StatusMessage::Error(
+                "res://.godot-vimrc: 3 errors, 2 commands refused by the Sandbox policy; \
+                 see Output or :messages"
+                    .into()
             )
         );
         assert_eq!(
-            status(path, sourced(0, 1)),
+            status(path, sourced(1, 0, 0)),
+            StatusMessage::Error("res://.godot-vimrc: 1 error; see Output or :messages".into())
+        );
+        assert_eq!(
+            status(path, sourced(0, 1, 0)),
+            StatusMessage::Error(
+                "res://.godot-vimrc: 1 command refused by the Sandbox policy; \
+                 see Output or :messages"
+                    .into()
+            )
+        );
+        assert_eq!(
+            status(path, sourced(0, 0, 1)),
             StatusMessage::Error(
                 "Config file sourced, 1 panelmap line(s) ignored: \
                  panel keys come from the active config only"
@@ -411,10 +457,10 @@ mod tests {
             )
         );
         assert_eq!(
-            status(path, sourced(2, 1)),
+            status(path, sourced(1, 0, 2)),
             StatusMessage::Error(
-                "Config file sourced, 2 line(s) skipped by the Sandbox policy, \
-                 1 panelmap line(s) ignored: panel keys come from the active config only"
+                "res://.godot-vimrc: 1 error; see Output or :messages, \
+                 2 panelmap line(s) ignored: panel keys come from the active config only"
                     .into()
             )
         );

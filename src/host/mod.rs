@@ -33,3 +33,25 @@ pub(crate) fn host_failure(id: HostRequestId, msg: impl Into<VimString>) -> Host
 pub(crate) fn host_success(id: HostRequestId) -> HostResult {
     HostResult::Success { id, message: None }
 }
+
+/// Whether the host runs one of godot-vim's own commands for the command
+/// line `command`, as `GodotHost::handle_request_inner` and
+/// `handle_custom_ex_command` match it.
+pub(crate) fn runs_own_command(command: &str) -> bool {
+    let command = command.trim();
+    custom_commands::list_all_commands().contains(&command)
+        || command == "perf reset"
+        || command.starts_with("vimdebug")
+        || command.starts_with("panelmap ")
+}
+
+/// Whether `command` names one of godot-vim's own commands, with or
+/// without arguments, so an argument form the host adds later is covered.
+pub(crate) fn names_own_command(command: &str) -> bool {
+    let name = command
+        .trim_start()
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .next()
+        .unwrap_or_default();
+    runs_own_command(command) || custom_commands::list_all_commands().contains(&name)
+}

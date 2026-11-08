@@ -692,8 +692,33 @@ pub(crate) fn apply_text(
     provenance: Provenance,
     diagnostics: &mut Vec<PanelDiagnostic>,
 ) {
-    for (offset, line) in text.lines().enumerate() {
-        let lineno = (offset + 1) as u32;
+    let lines = text
+        .lines()
+        .enumerate()
+        .map(|(offset, line)| ((offset + 1) as u32, line));
+    apply_lines(
+        index,
+        registry,
+        lines,
+        owner,
+        source,
+        provenance,
+        diagnostics,
+    );
+}
+
+/// [`apply_text`] for panel lines already taken from a file, each with its
+/// line number.
+pub(crate) fn apply_lines<'t>(
+    index: &mut BindingIndex,
+    registry: &ActionRegistry,
+    lines: impl IntoIterator<Item = (u32, &'t str)>,
+    owner: &MappingOwner,
+    source: &str,
+    provenance: Provenance,
+    diagnostics: &mut Vec<PanelDiagnostic>,
+) {
+    for (lineno, line) in lines {
         let outcome = match parse_panel_line(line) {
             Ok(None) => continue,
             Err(error) => Err(RuleReject::Parse(error)),

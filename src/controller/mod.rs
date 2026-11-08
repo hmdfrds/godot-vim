@@ -30,19 +30,74 @@ use std::collections::HashSet;
 use godot::classes::CodeEdit;
 use godot::prelude::*;
 use vim_core::document::Document;
-use vim_core::execution::{VimEngine, VimHost, VimSession};
+use vim_core::execution::{ConfigText, VimEngine, VimHost, VimSession};
 use vim_core::keymap::KeyEvent;
 use vim_core::primitives::Direction;
 use vim_core::VimString;
 
 use crate::bridge::godot_host::{GodotHost, PendingUiAction};
+use crate::config::policy::{LoadPolicy, Tier};
 use crate::host::SecurityPolicy;
 use crate::settings::{FileAccessScope, ShellExecution};
 use crate::state::ShellState;
 
 const PERF_RING_CAPACITY: usize = 1000;
+
 /// Per-keystroke budget; exceeding this logs a warning with phase breakdown.
 const PERF_BUDGET_US: perf::Microseconds = perf::Microseconds(2000);
+
+/// Editor-idiom multi-cursor bindings, loaded before every vimrc.
+const SEEDED_DEFAULTS: &str = "nmap <C-S-Down> :addcursor below<CR>\n\
+     vmap <C-S-Down> :addcursor below<CR>\n\
+     nmap <C-S-Up> :addcursor above<CR>\n\
+     vmap <C-S-Up> :addcursor above<CR>\n\
+     nmap <C-S-l> :selectall<CR>\n\
+     vmap <C-S-l> :selectall<CR>\n\
+     nmap <leader>mn :addnext<CR>\n\
+     nmap <leader>mN :addprev<CR>\n\
+     nmap <leader>ma :selectall<CR>\n\
+     nmap <leader>ms :cursorsplit<CR>\n\
+     nmap <leader>mx :cursorremove<CR>\n\
+     nmap <leader>mp :cursorprimary next<CR>\n\
+     nmap <leader>mf :cursorfilter \n\
+     nmap <leader>mF :cursorfilter! ";
+
+/// What loading a config showed: each error and refusal where it was
+/// raised, and how many of each.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) struct LoadReport {
+    /// `{file}:{line}: {message}`, as Vim names the place of an error.
+    pub(crate) lines: Vec<String>,
+    /// Errors other than Sandbox refusals.
+    pub(crate) errors: u32,
+    /// Commands the Sandbox refused.
+    pub(crate) refused: u32,
+}
+
+impl LoadReport {
+    fn error(
+        &mut self,
+        error: &vim_core::errors::VimError,
+        source: Option<&vim_core::effects::SourceContext>,
+    ) {
+        let message = error.to_string();
+        if message.starts_with("E48:") {
+            self.refused += 1;
+        } else {
+            self.errors += 1;
+        }
+        self.lines.push(match source {
+            Some(place) => format!("{}:{}: {message}", place.file, place.line),
+            None => message,
+        });
+    }
+
+    fn add(&mut self, other: Self) {
+        self.lines.extend(other.lines);
+        self.errors += other.errors;
+        self.refused += other.refused;
+    }
+}
 
 /// Transient per-cycle / per-keystroke state that must be reset on every
 /// cleanup path (dead editor, panic recovery, tab switch).
@@ -968,72 +1023,57 @@ impl VimController {
 
     // ── Config file sourcing ─────────────────────────────────────────
 
-    /// Clear all user mappings and re-source config text. Clears first so
-    /// that removed lines don't leave stale mapping entries.
-    pub(crate) fn reload_config(&mut self, text: &str) {
-        self.engine_mut().clear_mappings();
-
-        // Seed editor-idiom multi-cursor bindings as defaults.
-        // These are sourced BEFORE the user's .godot-vimrc, so user config
-        // overrides them (later `nmap` on the same key wins).
-        let _ = crate::config::source_text(
-            self.engine_mut(),
-            "nmap <C-S-Down> :addcursor below<CR>\n\
-             vmap <C-S-Down> :addcursor below<CR>\n\
-             nmap <C-S-Up> :addcursor above<CR>\n\
-             vmap <C-S-Up> :addcursor above<CR>\n\
-             nmap <C-S-l> :selectall<CR>\n\
-             vmap <C-S-l> :selectall<CR>\n\
-             nmap <leader>mn :addnext<CR>\n\
-             nmap <leader>mN :addprev<CR>\n\
-             nmap <leader>ma :selectall<CR>\n\
-             nmap <leader>ms :cursorsplit<CR>\n\
-             nmap <leader>mx :cursorremove<CR>\n\
-             nmap <leader>mp :cursorprimary next<CR>\n\
-             nmap <leader>mf :cursorfilter \n\
-             nmap <leader>mF :cursorfilter! ",
-        );
-
-        self.source_config(text);
+    /// Load a config from a clean slate: what a config can define is reset,
+    /// the seeded defaults are loaded, then `text`, if there is one. So a
+    /// line removed from the file leaves nothing behind.
+    pub(crate) fn reload_config(
+        &mut self,
+        text: Option<ConfigText<'_>>,
+        policy: &mut LoadPolicy<'_>,
+    ) -> LoadReport {
+        self.engine_mut().reset_config_state();
+        // Before the user's config, so a later mapping of the same key wins.
+        let seeds = ConfigText::new(crate::config::policy::DEFAULTS_NAME, SEEDED_DEFAULTS)
+            .with_trust(Tier::Builtin.tag());
+        let mut report = self.load_config(seeds, policy);
+        if let Some(text) = text {
+            report.add(self.load_config(text, policy));
+        }
+        report
     }
 
-    /// Source config text on top of the current state, as Vim's `:source`
-    /// does: nothing is cleared first.
+    /// Load a config on top of the current state, as Vim's `:source` does:
+    /// nothing is cleared first.
     ///
     /// The engine currently produces only `ShowMessage`, `ShowError`, and
     /// `ClearHighlights` from config sourcing. The catch-all arm trips a
     /// debug assertion if a new effect type appears.
-    pub(crate) fn source_config(&mut self, text: &str) {
-        // The engine skips `:filetype`, which is the host's to handle.
-        for line in text.lines() {
-            if let Some(cmd) = crate::ftplugin::parse_filetype_command(line) {
-                self.ctx.filetype.apply(cmd);
-            }
+    pub(crate) fn load_config(
+        &mut self,
+        text: ConfigText<'_>,
+        policy: &mut LoadPolicy<'_>,
+    ) -> LoadReport {
+        policy.prepare(text.name, text.text, text.trust);
+        let mut response = self.engine_mut().source_script(text, policy).response;
+        for command in policy.take_filetype() {
+            self.ctx.filetype.apply(command);
         }
-
-        let mut response = crate::config::source_text(self.engine_mut(), text);
-        let mut effects = response.take_effects();
-        effects.push(vim_core::effects::Effect::show_message(
-            "Config file sourced",
-        ));
-        // When detached (no session), config effects are logged but cannot
-        // be routed to shell state. This happens during initial enter_tree
-        // before any editor is attached.
-        for effect in effects {
+        let mut report = LoadReport::default();
+        // When detached (no session), config effects cannot be routed to
+        // shell state. This happens during initial enter_tree before any
+        // editor is attached.
+        for effect in response.take_effects() {
             match effect {
                 vim_core::effects::Effect::ShowInfo { info } => {
                     let msg = format!("{}", info);
                     if let Some(state) = self.host_state_mut() {
                         crate::effects::messages::handle_show_message(state.globals_mut(), &msg);
-                    } else {
-                        log::info!("reload_config (detached): {}", msg);
                     }
                 }
-                vim_core::effects::Effect::ShowError { error, .. } => {
+                vim_core::effects::Effect::ShowError { error, source } => {
+                    report.error(&error, source.as_ref());
                     if let Some(state) = self.host_state_mut() {
                         crate::effects::messages::handle_show_error(state.globals_mut(), &error);
-                    } else {
-                        log::warn!("reload_config (detached): {}", error);
                     }
                 }
                 vim_core::effects::Effect::ClearHighlights => {
@@ -1044,32 +1084,29 @@ impl VimController {
                 other => {
                     debug_assert!(
                         false,
-                        "reload_config: unexpected effect from config sourcing: {:?}. \
+                        "load_config: unexpected effect from config sourcing: {:?}. \
                          Add handling or add to the known-skip list.",
                         other.kind()
                     );
                     log::warn!(
-                        "reload_config: unhandled effect {:?} from config sourcing (skipped)",
+                        "load_config: unhandled effect {:?} from config sourcing (skipped)",
                         other.kind()
                     );
                 }
             }
         }
+        report
     }
 
-    /// Put `message` in the status bar; while detached, in the log.
+    /// Put `message` in the status bar. While detached it waits in the
+    /// shell state, which the first attach takes over.
     pub(crate) fn show_status(&mut self, message: crate::types::StatusMessage) {
         use crate::types::StatusMessage;
-        let Some(state) = self.host_state_mut() else {
-            if let Some(text) = message.text() {
-                log::info!("{text}");
-            }
-            return;
-        };
+        let globals = self.shell_state_mut().globals_mut();
         match message {
             StatusMessage::None => {}
-            StatusMessage::Info(text) => state.globals_mut().set_message(text),
-            StatusMessage::Error(text) => state.globals_mut().set_error(text),
+            StatusMessage::Info(text) => globals.set_message(text),
+            StatusMessage::Error(text) => globals.set_error(text),
         }
     }
 
@@ -1463,7 +1500,19 @@ impl VimController {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::settings::SettingsSnapshot;
+    use crate::settings::{ProjectVimrc, SettingsSnapshot};
+
+    /// Reload `text` as the user's own vimrc.
+    fn reload(c: &mut VimController, text: &str) -> LoadReport {
+        let config = ConfigText::new("user://.godot-vimrc", text).with_trust(Tier::Trusted.tag());
+        c.reload_config(Some(config), &mut LoadPolicy::new(ProjectVimrc::Sandbox))
+    }
+
+    /// Source `text` as a trusted file on top.
+    fn source(c: &mut VimController, text: &str) -> LoadReport {
+        let config = ConfigText::new("user://extra.vim", text).with_trust(Tier::Trusted.tag());
+        c.load_config(config, &mut LoadPolicy::new(ProjectVimrc::Sandbox))
+    }
 
     /// Exhaustive field inventory for [`VimController`], [`ControllerPhase`],
     /// and [`ControllerContext`].
@@ -1531,7 +1580,7 @@ mod tests {
     #[test]
     fn a_vimrc_undolevels_replaces_the_default() {
         let mut c = VimController::new();
-        c.source_config("set undolevels=20000");
+        source(&mut c, "set undolevels=20000");
         assert_eq!(c.engine().options().undolevels(), Some(20_000));
     }
 
@@ -1735,13 +1784,27 @@ mod tests {
     fn reload_mirrors_the_file_and_source_config_adds() {
         let q = vim_core::keymap::KeyEvent::char('Q');
         let mut c = VimController::new();
-        c.reload_config("nnoremap Q x");
-        c.source_config("set tw=40");
+        reload(&mut c, "nnoremap Q x");
+        source(&mut c, "set tw=40");
         assert!(c.could_start_mapping(q));
         assert_eq!(c.engine().options().textwidth(), 40);
-        c.reload_config("");
+        reload(&mut c, "");
         assert!(!c.could_start_mapping(q));
         assert_eq!(c.engine().options().textwidth(), 40);
+    }
+
+    /// The startup load runs before an editor is attached; its status waits
+    /// for the first attach.
+    #[test]
+    fn a_status_shown_while_detached_is_queued() {
+        use crate::types::StatusMessage;
+        let mut c = VimController::new();
+        assert!(!c.is_attached());
+        c.show_status(StatusMessage::Error("vimrc: 1 error".into()));
+        assert_eq!(
+            c.shell_state_mut().globals().message_status(),
+            &StatusMessage::Error("vimrc: 1 error".into())
+        );
     }
 
     /// The old sync wrote the global commentstring from Godot's delimiters
@@ -1750,7 +1813,7 @@ mod tests {
     #[test]
     fn commentstring_comes_from_godot_with_plugins_off() {
         let mut c = VimController::new();
-        c.reload_config("filetype plugin off");
+        reload(&mut c, "filetype plugin off");
         c.setup_filetype(InstanceId::from_i64(1), &gd_signals());
         assert_eq!(effective_str(&c, OptionId::FormatOptions), "tcqj");
         assert_eq!(effective_str(&c, OptionId::CommentString), "# %s");
@@ -1839,7 +1902,7 @@ mod tests {
         let mut c = VimController::new();
         let snap = SettingsSnapshot::for_tests(5, 0, 1000);
         c.apply_settings(&snap);
-        c.reload_config("filetype plugin off");
+        reload(&mut c, "filetype plugin off");
         assert!(!c.ctx.filetype.plugins_run());
 
         let mut unrelated = snap.clone();
@@ -1867,7 +1930,7 @@ mod tests {
         let mut c = VimController::new();
         let snap = SettingsSnapshot::for_tests(5, 20, 1000);
         c.apply_settings(&snap);
-        c.reload_config("filetype off");
+        reload(&mut c, "filetype off");
         assert!(!c.ctx.filetype.plugins_run());
 
         let mut off = snap.clone();
@@ -1894,7 +1957,7 @@ mod tests {
         ] {
             let mut c = VimController::new();
             let tw = c.engine().options().textwidth();
-            c.reload_config(line);
+            reload(&mut c, line);
             assert!(!c.ctx.filetype.plugins_run(), "{line}");
             let expected = if after_bar { 10 } else { tw };
             assert_eq!(c.engine().options().textwidth(), expected, "{line}");
@@ -2020,7 +2083,7 @@ mod tests {
     #[test]
     fn filetype_off_detects_nothing() {
         let mut c = VimController::new();
-        c.reload_config("filetype off");
+        reload(&mut c, "filetype off");
         c.setup_filetype(InstanceId::from_i64(1), &gd_signals());
         assert_eq!(c.engine().filetype(), None);
         assert_eq!(effective_str(&c, OptionId::FormatOptions), "tcqj");
