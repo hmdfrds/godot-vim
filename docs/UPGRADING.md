@@ -17,7 +17,7 @@ session's start. `u` after such a session still leaves its text, until
 vim-core keeps what you type after the command in the session.
 
 **Ctrl+Z after a `u` that changed nothing undoes one step.** After `x`,
-`x`, an Insert that typed nothing (`i<Esc>`) and `u`, Ctrl+Z also undid
+`x`, a `guu` on a line already in lower case and `u`, Ctrl+Z also undid
 the first `x`, often more, and could log an error. Now it undoes the
 second `x` only.
 
