@@ -9,11 +9,12 @@ fresh install.
 GodotVim used to skip without a word now run, or report an error with the
 file and line, in Output (`user://.godot-vimrc:12: E492: Not an editor
 command: Foo`) and in `:messages`. Output shows them with Log Level at its
-default `Off`. The status bar says "Config file sourced" only when nothing
-failed; otherwise it counts the errors and the commands the Sandbox
-refused, and a config loaded at startup shows its count when the first
-script opens. A ported terminal vimrc can report many errors the first
-time: read them in Output and fence what is Vim-only, as below.
+default `Off`, the first 100 of a load and then how many more. The status
+bar says "Config file sourced" only when nothing failed; otherwise it
+counts the errors and the commands the Sandbox refused, and a config
+loaded at startup shows its count when the first script opens. A ported
+terminal vimrc can report many errors the first time: read them in Output
+and fence what is Vim-only, as below.
 
 **Vim commands GodotVim lacks report an error.** `syntax on`,
 `colorscheme`, `autocmd`, `highlight` and `call` give `E319: Sorry, the

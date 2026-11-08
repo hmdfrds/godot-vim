@@ -795,7 +795,7 @@ Two things to know about `:panelmap {keys}`. The command line belongs to the scr
 
 A malformed line costs you that line and nothing else. The rest of your config still loads. `:panelmap` is the primary channel for those rejections and needs no setup at all.
 
-To watch them scroll past as the file loads instead, set **Editor Settings → Plugins → GodotVim → Log Level** to `Debug`. **The default is `Off`**, which is exactly why a rejected binding can otherwise look like a key that simply stopped working: the diagnostic exists, it is just not being printed. `Debug` also reports how many bindings were rebuilt. Every other error in the file, and every command the `Sandbox` policy refused, is printed to Output whatever the Log Level.
+To watch them scroll past as the file loads instead, set **Editor Settings → Plugins → GodotVim → Log Level** to `Debug`. **The default is `Off`**, which is exactly why a rejected binding can otherwise look like a key that simply stopped working: the diagnostic exists, it is just not being printed. `Debug` also reports how many bindings were rebuilt. Every other error in the file, and every command the `Sandbox` policy refused, is printed to Output whatever the Log Level: the first 100 of a load, then a line saying how many more there were.
 
 ### Rebinding is `panelunmap` + `panelmap`
 
