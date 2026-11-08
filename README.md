@@ -227,17 +227,17 @@ GodotVim is a native extension, so it ships restrictive:
 
 - Shell execution is **Disabled**. `:!` is blocked until you turn it on.
 - File access is **ProjectOnly**. `:w`, `:r` and `:e` stay inside `res://` and `user://`.
-- A `.godot-vimrc` committed to the project is **Sandboxed**. Only known-safe
-  constructs pass: comments, most `set` and `setlocal` options (not the
-  `shell*` and `*prg` options, `langmap` or `langremap`), `filetype` lines,
-  `let mapleader`, the `noremap` forms, `panelunmap`, and `panelmap` lines
-  targeting a registered `godotvim.*` action. A line holding several commands
-  separated by `|` passes only when every one of them does, and a mapping does
-  not pass when its command line defines a mapping, an abbreviation, a handler
-  or the leader, or sets one of those options. Everything else, including the
-  recursive `map` forms and raw ex-commands, is commented out with a reason
-  rather than deleted, so nothing changes silently. A `user://.godot-vimrc` is
-  trusted in full.
+- A `.godot-vimrc` committed to the project is **Sandboxed**. Each command is
+  judged as it will run, against an allowlist: most `set` and `setlocal`
+  options (not the `shell*` and `*prg` options, `langmap` or `langremap`),
+  `filetype` lines, `let mapleader`, the `noremap` forms, `unmap`, `echo`,
+  `panelunmap`, and `panelmap` lines targeting a registered `godotvim.*`
+  action. A mapping passes only when everything its keys can run would: no
+  shell, `:source`, `:normal`, register, `<expr>`, write to a named file,
+  editor shortcut or GodotVim command such as `:run`. Everything else,
+  including the recursive `map` forms, is refused and listed in Output with
+  its line and reason; the file is never changed. A `user://.godot-vimrc` is
+  trusted, though no vimrc runs editor commands such as `:w` or `:!`.
 
 All three are settings, and a project cannot change them through its Editor
 Settings overrides. [Security](docs/REFERENCE.md#security)
@@ -265,10 +265,13 @@ panelmap <physical> dock n godotvim.item.next
 **After editing the file by hand, run `:source`.** There is no file watcher.
 Saving in your editor does not reload the config. The `:mappings` dialog is the
 only thing that applies changes on its own. `:source` re-reads the whole file
-from disk, so save it first if it is open in the script editor. Mappings are
-rebuilt from the file, as after a restart: one you deleted is gone, and so is
-one you made with `:map` since. An option you deleted keeps its value until you
-restart or `:set` it back, as in Vim.
+from disk, so save it first if it is open in the script editor. Mappings,
+abbreviations and the leader are rebuilt from the file, as after a restart: one
+you deleted is gone, and so is one you made with `:map` since. An option you
+deleted keeps its value until you restart or `:set` it back, as in Vim. A line
+that fails is listed in Output and `:messages` with its line number, and the
+status bar counts them. Wrap lines meant only for Vim in `if !has('godot')` …
+`endif`.
 
 Exactly one config file is read, and the first one found wins:
 
@@ -320,7 +323,7 @@ Settings live under **Editor Settings > Plugins > GodotVim**.
 | A dock or panel key does nothing | Run `:panelmap` with no argument from the editor. It lists every live binding by surface (`dock`, `dock.filesystem`, `panel`, and so on) plus every config line that was rejected and why. Find [the surface your dock is](docs/REFERENCE.md#surfaces-and-why-deeper-wins) and check the key is bound there. `:` only works in the script editor, because the command line is part of it, so `:panelmap {key}` answers for the script editor, not for the dock. |
 | A `panelmap` line looks ignored | `:panelmap` with no argument lists every live binding plus every config line that was rejected and why. If yours is not listed at all the verb is misspelled: `panelmp` is never claimed as a panel line. Set **Log Level** to `Warn` to watch rejections as the file loads. |
 | `.godot-vimrc` is not loading | Only one file is read. If **Mapping > Config File Path** is set it wins, and your `res://.godot-vimrc` is never seen. If **Security > Project Vimrc** is `Disabled`, a project file is skipped entirely, and `:source` says so. After a hand edit, run `:source`. |
-| Lines in a committed config are silently disabled | Under the default `Sandbox` policy a `res://.godot-vimrc` keeps only known-safe lines, and the recursive `map`, `nmap`, `vmap`, `imap`, `omap` and `cmap` forms are stripped whatever they map to. Use the `noremap` forms, or move the file to `user://.godot-vimrc`. |
+| Lines in a committed config do nothing | Output lists each refused command with its line and reason (`E48: Not allowed in sandbox`). Under the default `Sandbox` policy a `res://.godot-vimrc` runs only commands on its allowlist; the recursive `map`, `nmap`, `vmap`, `imap`, `omap` and `cmap` forms are refused whatever they map to, and so are mappings to GodotVim's own commands such as `:run` or `:save`. Use the `noremap` forms, or put the lines in your own vimrc (Mapping > Config File Path, or `user://.godot-vimrc` when the project has none), or set **Security > Project Vimrc** to `Trusted` for a project you trust. |
 | Lines break by themselves while typing | By default nothing breaks: **Editor > Textwidth** is `0`, as in Vim (filter for `textwidth` in Editor Settings; it shows as **Textwidth** under **Godot Vim > Editor**). With a width set, only comments wrap in GDScript, shaders and C#, with their `#`, `##`, `//` or `///` leader, and code never does; JSON, `.cfg`, YAML and XML values never wrap; Markdown, `.txt` and TOML files wrap as prose, as in Vim, and so does a file with no filetype, such as a `.log`. That comes from the [filetype plugins](docs/REFERENCE.md#filetype-plugins). If code still wraps in one script, it has `t` in its own `formatoptions`: from a `:setlocal fo+=t` or `:set fo+=t` run in it, or from a vimrc `set fo+=t` sourced again (`:source`, or saving key mappings) while it was the current script. `:setlocal fo-=t` fixes that script. Also check whether **Editor > Filetype Plugin** is off. A vimrc `set fo+=t` alone does not make code wrap at startup, because the plugins drop `t` per script. Set Textwidth to `0` to stop all wrapping, or use `:set fo-=t` / `:setlocal fo-=t` the Vim way. `gq` still formats, at 79 columns when the width is `0`. |
 | Clipboard does not sync | Turn on **Editor > Clipboard Enabled**; it is off by default. With it on, plain `y` and `p` use the system clipboard too. `"+y` and `"+p` reach it either way. |
 | The cursor does not render | The overlay uses a GLSL shader. Set **Cursor > Enabled** to `false` to fall back to Godot's native caret. |
