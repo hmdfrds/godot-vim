@@ -13,6 +13,9 @@ mod mock_host;
 mod bridge_tests;
 
 #[cfg(test)]
+mod cmdline_judge_tests;
+
+#[cfg(test)]
 mod history_tests;
 
 #[cfg(test)]

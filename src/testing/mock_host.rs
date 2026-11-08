@@ -56,6 +56,8 @@ struct MockHost {
     auto_brace_eligible: bool,
     engine_auto_pairs_active: bool,
     scrolloff: i32,
+    /// Every request the engine made, in order.
+    requests: Vec<HostRequest>,
 }
 
 impl MockHost {
@@ -75,6 +77,7 @@ impl MockHost {
             auto_brace_eligible: false,
             engine_auto_pairs_active: false,
             scrolloff: 0,
+            requests: Vec::new(),
         }
     }
 
@@ -244,6 +247,11 @@ impl VimHost for MockHost {
     }
 
     fn handle_request(&mut self, request: &HostRequest) -> RequestDisposition {
+        self.requests.push(request.clone());
+        // A no-op in `host::dispatch` too: the command line is read from the engine.
+        if matches!(request, HostRequest::SyncCommandLine { .. }) {
+            return RequestDisposition::Completed(crate::host::host_success(request.id()));
+        }
         RequestDisposition::Completed(HostResult::Failure {
             id: request.id(),
             error: "not modelled by MockHost".into(),
@@ -263,7 +271,11 @@ impl Harness {
     /// A tab-indented buffer in Normal mode with the caret at (0, 0), as
     /// `VimController::new` and `attach_session` set the engine up.
     pub(crate) fn new(text: &str) -> Self {
-        let mut engine = VimEngine::new();
+        Self::with_engine(VimEngine::new(), text)
+    }
+
+    /// The same on `engine`, such as one a controller loaded configs into.
+    pub(crate) fn with_engine(mut engine: VimEngine, text: &str) -> Self {
         engine.set_shadow_execution(true);
         let opts = engine.options_mut();
         opts.set_undolevels(Some(crate::state::undo_store::DEFAULT_UNDOLEVELS));
@@ -490,6 +502,20 @@ impl Harness {
 
     pub(crate) fn orphaned_undo_groups(&self) -> usize {
         self.orphaned_undo_groups
+    }
+
+    pub(crate) fn engine(&self) -> &VimEngine {
+        self.session.engine()
+    }
+
+    /// What the status bar shows.
+    pub(crate) fn status(&self) -> &crate::types::StatusMessage {
+        self.session.host().state.globals().message_status()
+    }
+
+    /// Every request the engine made of the host, in order.
+    pub(crate) fn requests(&self) -> &[HostRequest] {
+        &self.session.host().requests
     }
 }
 

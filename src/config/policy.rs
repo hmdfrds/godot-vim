@@ -14,6 +14,7 @@ use vim_core::grammar::types::{ExCommand, SetAssignment};
 use vim_core::grammar::Reach;
 use vim_core::keymap::MappingKind;
 
+use super::cmdline_judge::SandboxLineJudge;
 use super::source::{SourceEnv, SourceTarget};
 use crate::actions::action::ActionRegistry;
 use crate::ftplugin::FiletypeCommand;
@@ -34,7 +35,7 @@ impl Tier {
     }
 
     /// An unknown tag is judged as the Sandbox.
-    const fn of(tag: TrustTag) -> Self {
+    pub(super) const fn of(tag: TrustTag) -> Self {
         match tag.get() {
             0 => Self::Builtin,
             1 => Self::Trusted,
@@ -116,6 +117,12 @@ impl<'a> LoadPolicy<'a> {
     pub(crate) const fn collecting_panels(mut self) -> Self {
         self.collect_panels = true;
         self
+    }
+
+    /// The judge of the lines Sandbox mappings make when they run, with
+    /// the same action names.
+    pub(crate) fn command_line_judge(&self) -> SandboxLineJudge {
+        SandboxLineJudge::new(self.actions)
     }
 
     pub(crate) fn take_filetype(&mut self) -> Vec<FiletypeCommand> {
@@ -204,49 +211,8 @@ impl<'a> LoadPolicy<'a> {
         let Ok((_, command)) = &reached.parsed else {
             return None;
         };
-        let at = |what: &str| Some(format!("{what}: {}", reached.text));
-        let outside = reached.reach.difference(REACHED_ALLOWED);
-        if !outside.is_empty() {
-            return at(reach_reason(outside));
-        }
-        if reached
-            .reach
-            .contains(Reach::FILE_WRITE | Reach::NAMED_PATH)
-        {
-            return at("writes a named file");
-        }
-        self.command_refusal(command, 0).and_then(at)
-    }
-
-    /// What the flags do not show: the names a command and the commands it
-    /// runs on others use.
-    fn command_refusal(&self, command: &ExCommand, depth: u8) -> Option<&'static str> {
-        match command {
-            ExCommand::Norm { .. } => Some("runs keys"),
-            ExCommand::MkVimrc { .. } => Some("writes a vimrc"),
-            ExCommand::Action { name } if !self.is_action(name) => Some("editor shortcut"),
-            ExCommand::Custom { command } if crate::host::names_own_command(command) => {
-                Some("godot-vim command")
-            }
-            ExCommand::Set { assignments }
-            | ExCommand::SetLocal { assignments }
-            | ExCommand::SetGlobal { assignments } => assignments
-                .iter()
-                .any(set_names_blocked)
-                .then_some("blocked option"),
-            ExCommand::WinDo { command, .. }
-            | ExCommand::BufDo { command, .. }
-            | ExCommand::TabDo { command, .. }
-            | ExCommand::StructuralExtract { command, .. }
-            | ExCommand::StructuralComplement { command, .. } => {
-                // The parser bounds the nesting; this only fails closed.
-                if depth >= MAX_REACHED_NESTING {
-                    return Some("nested too deeply");
-                }
-                self.command_refusal(command, depth + 1)
-            }
-            _ => None,
-        }
+        reached_refusal(command, reached.reach, &|name| self.is_action(name))
+            .map(|what| format!("{what}: {}", reached.text))
     }
 
     fn is_action(&self, name: &str) -> bool {
@@ -386,8 +352,61 @@ fn host_line(name: &str, args: &str, tier: Tier) -> Option<Decision> {
 
 /// Vim's sandbox error (ex_docmd.c `do_one_cmd()`, a command without
 /// `EX_SBOXOK`), with the reason.
-fn sandbox_error(text: &str, reason: &str) -> String {
+pub(super) fn sandbox_error(text: &str, reason: &str) -> String {
     format!("E48: Not allowed in sandbox: {text} ({reason})")
+}
+
+/// Why the Sandbox refuses a command a Sandbox mapping's keys run, that
+/// `reach` describes, if it does. `is_action` says which `<Action>` and
+/// `:action` names are registered.
+pub(crate) fn reached_refusal(
+    command: &ExCommand,
+    reach: Reach,
+    is_action: &dyn Fn(&str) -> bool,
+) -> Option<&'static str> {
+    let outside = reach.difference(REACHED_ALLOWED);
+    if !outside.is_empty() {
+        return Some(reach_reason(outside));
+    }
+    if reach.contains(Reach::FILE_WRITE | Reach::NAMED_PATH) {
+        return Some("writes a named file");
+    }
+    command_refusal(command, is_action, 0)
+}
+
+/// What the flags do not show: the names a command and the commands it
+/// runs on others use.
+fn command_refusal(
+    command: &ExCommand,
+    is_action: &dyn Fn(&str) -> bool,
+    depth: u8,
+) -> Option<&'static str> {
+    match command {
+        ExCommand::Norm { .. } => Some("runs keys"),
+        ExCommand::MkVimrc { .. } => Some("writes a vimrc"),
+        ExCommand::Action { name } if !is_action(name) => Some("editor shortcut"),
+        ExCommand::Custom { command } if crate::host::names_own_command(command) => {
+            Some("godot-vim command")
+        }
+        ExCommand::Set { assignments }
+        | ExCommand::SetLocal { assignments }
+        | ExCommand::SetGlobal { assignments } => assignments
+            .iter()
+            .any(set_names_blocked)
+            .then_some("blocked option"),
+        ExCommand::WinDo { command, .. }
+        | ExCommand::BufDo { command, .. }
+        | ExCommand::TabDo { command, .. }
+        | ExCommand::StructuralExtract { command, .. }
+        | ExCommand::StructuralComplement { command, .. } => {
+            // The parser bounds the nesting; this only fails closed.
+            if depth >= MAX_REACHED_NESTING {
+                return Some("nested too deeply");
+            }
+            command_refusal(command, is_action, depth + 1)
+        }
+        _ => None,
+    }
 }
 
 /// The flags a command a Sandbox mapping reaches may have. A plain `:w`,

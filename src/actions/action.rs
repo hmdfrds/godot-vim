@@ -579,13 +579,7 @@ impl ActionRegistry {
         self.specs.len()
     }
 
-    /// Every registered action. Written for the introspector, which ended up
-    /// enumerating the binding index instead; the registry-completeness tests
-    /// are the callers today.
-    #[allow(
-        dead_code,
-        reason = "the registry-completeness tests enumerate through it"
-    )]
+    /// Every registered action.
     pub(crate) fn iter(&self) -> impl Iterator<Item = (ActionId, &'static ActionSpec)> + '_ {
         self.specs
             .iter()

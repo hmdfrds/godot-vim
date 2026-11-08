@@ -1060,7 +1060,8 @@ impl VimController {
     }
 
     /// Load a config on top of the current state, as Vim's `:source` does:
-    /// nothing is cleared first.
+    /// nothing is cleared first. The policy's judge of the lines Sandbox
+    /// mappings make replaces the one installed.
     ///
     /// The engine currently produces only `ShowMessage`, `ShowError`, and
     /// `ClearHighlights` from config sourcing. The catch-all arm trips a
@@ -1070,6 +1071,8 @@ impl VimController {
         text: ConfigText<'_>,
         policy: &mut LoadPolicy<'_>,
     ) -> LoadReport {
+        self.engine_mut()
+            .set_command_line_judge(Some(Box::new(policy.command_line_judge())));
         let mut response = self.engine_mut().source_script(text, policy).response;
         for command in policy.take_filetype() {
             self.ctx.filetype.apply(command);
